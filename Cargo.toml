@@ -1,0 +1,43 @@
+[package]
+name = "zeichentool"
+version = "1.0.0"
+edition = "2021"
+description = "Modernes Zeichentool in Rust (WebAssembly/PWA) mit S-Pen-Unterstützung"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+miniz_oxide = "0.8"
+png = "0.17"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3"
+features = [
+  "Window", "Document", "Element", "HtmlElement", "Node", "NodeList", "DomTokenList",
+  "CssStyleDeclaration", "EventTarget", "Event", "EventListener", "AddEventListenerOptions",
+  "PointerEvent", "MouseEvent", "WheelEvent", "KeyboardEvent", "UiEvent",
+  "HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData",
+  "HtmlInputElement", "HtmlSelectElement", "HtmlImageElement", "HtmlAnchorElement",
+  "HtmlButtonElement", "SvgElement", "DomRect", "Screen",
+  "Blob", "BlobPropertyBag", "File", "FileList", "Url",
+  "Storage", "Navigator", "ServiceWorkerContainer", "Performance",
+  "IdbFactory", "IdbDatabase", "IdbOpenDbRequest", "IdbRequest", "IdbObjectStore",
+  "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent",
+  "VisibilityState", "DomStringList",
+]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 1

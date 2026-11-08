@@ -1,0 +1,21 @@
+{
+  "name": "Zeichentool",
+  "short_name": "Zeichentool",
+  "description": "Modernes Zeichentool mit S-Pen-Unterstützung – geschrieben in Rust.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#15161b",
+  "theme_color": "#0e0f13",
+  "categories": ["graphics", "productivity", "design"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

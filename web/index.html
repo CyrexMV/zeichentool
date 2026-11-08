@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f13">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Modernes Zeichentool mit S-Pen-Unterstützung – geschrieben in Rust.">
+<title>Zeichentool</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="i-brush" viewBox="0 0 24 24"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></symbol>
+    <symbol id="i-smudge" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+    <symbol id="i-fill" viewBox="0 0 24 24"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></symbol>
+    <symbol id="i-picker" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+    <symbol id="i-shapes" viewBox="0 0 24 24"><path d="M8.3 10a.7.7 0 0 1-.63-1.08L11.4 3a.7.7 0 0 1 1.2-.04l3.7 5.94a.7.7 0 0 1-.57 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+    <symbol id="i-sym" viewBox="0 0 24 24"><path d="M12 2v20" stroke-dasharray="2 2.5"/><path d="M9 6 3 12l6 6Z"/><path d="m15 6 6 6-6 6Z"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.8 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.59 7.59"/><circle cx="11" cy="11" r="2"/></symbol>
+  </defs>
+</svg>
+
+<main id="stage" aria-label="Zeichenfläche">
+  <div id="doc-wrap">
+    <canvas id="doc"></canvas>
+    <svg id="guides" preserveAspectRatio="none"></svg>
+  </div>
+</main>
+<div id="cursor"></div>
+
+<header class="bar bar-left glass">
+  <button id="btn-menu" class="ib" title="Menü"><svg><use href="#i-menu"/></svg></button>
+  <button id="btn-undo" class="ib" title="Rückgängig (Strg+Z · Zwei-Finger-Tipp)"><svg><use href="#i-undo"/></svg></button>
+  <button id="btn-redo" class="ib" title="Wiederholen (Strg+Y · Drei-Finger-Tipp)"><svg><use href="#i-redo"/></svg></button>
+  <button id="btn-zoom" class="pill" title="Ansicht einpassen">100%</button>
+  <button id="btn-symmetry" class="ib" title="Symmetrie"><svg><use href="#i-sym"/></svg></button>
+</header>
+
+<nav class="bar bar-right glass" aria-label="Werkzeuge">
+  <button class="ib tool" data-tool="brush" title="Pinsel (B)"><svg><use href="#i-brush"/></svg></button>
+  <button class="ib tool" data-tool="smudge" title="Wischfinger (S)"><svg><use href="#i-smudge"/></svg></button>
+  <button class="ib tool" data-tool="eraser" title="Radierer (E)"><svg><use href="#i-eraser"/></svg></button>
+  <button class="ib tool" data-tool="fill" title="Füllen (G)"><svg><use href="#i-fill"/></svg></button>
+  <button class="ib tool" data-tool="picker" title="Pipette (I)"><svg><use href="#i-picker"/></svg></button>
+  <button class="ib tool" data-tool="shape" title="Formen (U)"><svg><use href="#i-shapes"/></svg></button>
+  <button class="ib tool" data-tool="move" title="Ebene verschieben (V)"><svg><use href="#i-move"/></svg></button>
+  <span class="sep"></span>
+  <button id="btn-layers" class="ib" title="Ebenen (L)"><svg><use href="#i-layers"/></svg></button>
+  <button id="btn-color" class="color-btn" title="Farbe (C)"><span id="color-dot"></span></button>
+</nav>
+
+<aside id="side" class="glass" aria-label="Größe und Deckkraft">
+  <div class="vslider" id="vs-size" title="Pinselgröße"><div class="vs-fill"></div><div class="vs-thumb"></div></div>
+  <div class="vs-label" id="vs-size-label">10</div>
+  <div class="side-gap"></div>
+  <div class="vslider" id="vs-opacity" title="Deckkraft"><div class="vs-fill"></div><div class="vs-thumb"></div></div>
+  <div class="vs-label" id="vs-opacity-label">100%</div>
+</aside>
+<div id="bubble"></div>
+
+<!-- Pinsel-Bibliothek -->
+<section id="panel-brush" class="panel glass" data-anchor="right">
+  <div class="panel-head"><h3 id="brush-title">Pinsel</h3></div>
+  <div id="brush-list" class="brush-list"></div>
+  <details class="adv">
+    <summary>Pinsel anpassen</summary>
+    <label class="row"><span>Stabilisierung</span><input type="range" id="br-smoothing" min="0" max="95"><output id="br-smoothing-v"></output></label>
+    <label class="row"><span>Härte</span><input type="range" id="br-hardness" min="0" max="100"><output id="br-hardness-v"></output></label>
+    <label class="row"><span>Abstand</span><input type="range" id="br-spacing" min="2" max="100"><output id="br-spacing-v"></output></label>
+    <label class="row"><span>Fluss</span><input type="range" id="br-flow" min="1" max="100"><output id="br-flow-v"></output></label>
+    <label class="row"><span>Druck → Größe</span><input type="range" id="br-psize" min="0" max="100"><output id="br-psize-v"></output></label>
+    <label class="row"><span>Druck → Deckkraft</span><input type="range" id="br-popacity" min="0" max="100"><output id="br-popacity-v"></output></label>
+    <label class="row"><span>Körnung</span><input type="range" id="br-grain" min="0" max="100"><output id="br-grain-v"></output></label>
+    <label class="row"><span>Neigung (S-Pen)</span><input type="range" id="br-tilt" min="0" max="100"><output id="br-tilt-v"></output></label>
+    <button id="br-reset" class="btn ghost">Pinsel zurücksetzen</button>
+  </details>
+</section>
+
+<!-- Farbe -->
+<section id="panel-color" class="panel glass" data-anchor="right">
+  <div id="sv" class="sv"><div class="sv-w"></div><div class="sv-b"></div><div id="sv-knob" class="knob"></div></div>
+  <div id="hue" class="hue"><div id="hue-knob" class="knob"></div></div>
+  <div class="color-row">
+    <div class="cmp"><span id="col-old" title="Vorherige Farbe"></span><span id="col-new"></span></div>
+    <input id="hex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex-Farbe">
+  </div>
+  <h4>Zuletzt verwendet</h4>
+  <div id="recent" class="swatches"></div>
+  <h4>Palette</h4>
+  <div id="palette" class="swatches"></div>
+</section>
+
+<!-- Ebenen -->
+<section id="panel-layers" class="panel glass" data-anchor="right">
+  <div class="panel-head"><h3>Ebenen</h3><button id="ly-add" class="ib small" title="Neue Ebene"><svg><use href="#i-plus"/></svg></button></div>
+  <div id="layers-list"></div>
+  <div class="paper-row">
+    <span>Hintergrund</span>
+    <input type="color" id="paper-color" aria-label="Hintergrundfarbe">
+    <label class="switch" title="Hintergrund anzeigen"><input type="checkbox" id="paper-on"><span></span></label>
+  </div>
+  <div class="layer-props">
+    <label class="row"><span>Deckkraft</span><input type="range" id="ly-opacity" min="0" max="100"><output id="ly-opacity-v"></output></label>
+    <label class="row"><span>Modus</span><select id="ly-blend"></select></label>
+    <label class="row toggle"><span>Transparenz sperren</span><span class="switch"><input type="checkbox" id="ly-alpha"><span></span></span></label>
+    <label class="row toggle"><span>Ebene sperren</span><span class="switch"><input type="checkbox" id="ly-lock"><span></span></span></label>
+  </div>
+  <div class="btn-grid">
+    <button id="ly-up" class="btn">Nach oben</button>
+    <button id="ly-down" class="btn">Nach unten</button>
+    <button id="ly-dup" class="btn">Duplizieren</button>
+    <button id="ly-merge" class="btn">Zusammenfügen</button>
+    <button id="ly-flip-h" class="btn">Horizontal spiegeln</button>
+    <button id="ly-flip-v" class="btn">Vertikal spiegeln</button>
+    <button id="ly-clear" class="btn">Leeren</button>
+    <button id="ly-del" class="btn danger">Löschen</button>
+    <button id="ly-import" class="btn wide">Bild als Ebene importieren …</button>
+  </div>
+</section>
+
+<!-- Formen -->
+<section id="panel-shape" class="panel glass" data-anchor="right">
+  <div class="panel-head"><h3>Formen</h3></div>
+  <div class="seg" id="shape-seg">
+    <button data-shape="line">Linie</button>
+    <button data-shape="rect">Rechteck</button>
+    <button data-shape="ellipse">Ellipse</button>
+    <button data-shape="lasso">Lasso-Füllung</button>
+  </div>
+  <label class="row toggle"><span>Gefüllt</span><span class="switch"><input type="checkbox" id="shape-fill"><span></span></span></label>
+  <p class="hint">Tipp: Beim normalen Zeichnen den Stift am Ende eines Strichs kurz <b>halten</b> – daraus wird automatisch eine gerade Linie oder ein Kreis (QuickShape).</p>
+</section>
+
+<!-- Füllen -->
+<section id="panel-fill" class="panel glass" data-anchor="right">
+  <div class="panel-head"><h3>Füllen</h3></div>
+  <label class="row"><span>Toleranz</span><input type="range" id="fill-tol" min="0" max="100"><output id="fill-tol-v"></output></label>
+  <label class="row toggle"><span>Alle Ebenen berücksichtigen</span><span class="switch"><input type="checkbox" id="fill-all"><span></span></span></label>
+</section>
+
+<!-- Symmetrie -->
+<section id="panel-sym" class="panel glass" data-anchor="left">
+  <div class="panel-head"><h3>Symmetrie</h3></div>
+  <div class="seg" id="sym-seg">
+    <button data-sym="off">Aus</button>
+    <button data-sym="vertical">Vertikal</button>
+    <button data-sym="horizontal">Horizontal</button>
+    <button data-sym="quad">Vierfach</button>
+    <button data-sym="radial">Radial</button>
+  </div>
+  <label class="row"><span>Radial-Segmente</span><input type="range" id="sym-n" min="2" max="24"><output id="sym-n-v"></output></label>
+</section>
+
+<!-- Menü -->
+<section id="panel-menu" class="panel glass menu" data-anchor="left">
+  <button id="m-new" class="mi">Neue Leinwand …</button>
+  <button id="m-open" class="mi">Projekt öffnen …</button>
+  <button id="m-save" class="mi">Projekt speichern (.zeichen)</button>
+  <button id="m-export" class="mi">Als PNG exportieren</button>
+  <button id="m-export-t" class="mi">Als PNG exportieren (transparent)</button>
+  <hr>
+  <button id="m-fit" class="mi">Ansicht einpassen</button>
+  <button id="m-flip" class="mi">Ansicht spiegeln (Kontrolle)</button>
+  <button id="m-fullscreen" class="mi">Vollbild</button>
+  <hr>
+  <button id="m-settings" class="mi">Einstellungen &amp; S-Pen</button>
+  <button id="m-help" class="mi">Gesten &amp; Tastenkürzel</button>
+  <div class="menu-foot">Zeichentool · Rust + WebAssembly · <span id="save-state">gespeichert</span></div>
+</section>
+
+<!-- Einstellungen -->
+<section id="panel-settings" class="panel glass" data-anchor="left">
+  <div class="panel-head"><h3>Einstellungen</h3></div>
+  <h4>S-Pen</h4>
+  <label class="row toggle"><span>Nur mit Stift zeichnen<br><small>Finger zoomen, drehen und verschieben</small></span><span class="switch"><input type="checkbox" id="set-pen-only"><span></span></span></label>
+  <label class="row"><span>Druckkurve<br><small id="set-gamma-desc">normal</small></span><input type="range" id="set-gamma" min="30" max="250"><output id="set-gamma-v"></output></label>
+  <label class="row"><span>S-Pen-Taste</span>
+    <select id="set-pen-button">
+      <option value="eraser">Halten: Radierer</option>
+      <option value="picker">Halten: Pipette</option>
+      <option value="undo">Klick (schwebend): Rückgängig</option>
+      <option value="toggle">Klick (schwebend): Pinsel ↔ Radierer</option>
+    </select>
+  </label>
+  <label class="row toggle"><span>QuickShape (Stift halten = Form)</span><span class="switch"><input type="checkbox" id="set-quickshape"><span></span></span></label>
+  <label class="row toggle"><span>Pinselvorschau beim Schweben</span><span class="switch"><input type="checkbox" id="set-hover"><span></span></span></label>
+  <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf zeichnen …</div></div>
+  <h4>Oberfläche</h4>
+  <label class="row toggle"><span>Regler rechts (Linkshänder: aus)</span><span class="switch"><input type="checkbox" id="set-side-right"><span></span></span></label>
+</section>
+
+<!-- Hilfe -->
+<section id="panel-help" class="panel glass" data-anchor="left">
+  <div class="panel-head"><h3>Gesten &amp; Kürzel</h3></div>
+  <ul class="help">
+    <li><b>S-Pen</b> zeichnet mit Druck &amp; Neigung – Finger werden beim Zeichnen ignoriert (Handballen).</li>
+    <li><b>S-Pen-Taste halten</b> → Radierer (einstellbar).</li>
+    <li><b>Zwei Finger</b> → Zoomen, Drehen, Verschieben.</li>
+    <li><b>Zwei-Finger-Tipp</b> → Rückgängig · <b>Drei-Finger-Tipp</b> → Wiederholen.</li>
+    <li><b>Finger lange halten</b> → Pipette.</li>
+    <li><b>Stift am Strichende halten</b> → gerade Linie / Kreis.</li>
+    <li>Tastatur: B Pinsel · E Radierer · S Wischen · G Füllen · I Pipette · U Formen · V Verschieben · L Ebenen · [ ] Größe · Strg+Z / Strg+Y · 0 Einpassen · Leertaste+Ziehen = Hand.</li>
+  </ul>
+</section>
+
+<!-- Neue Leinwand -->
+<div id="modal-new" class="modal">
+  <div class="modal-card glass">
+    <h3>Neue Leinwand</h3>
+    <div class="preset-grid" id="new-presets">
+      <button data-w="0" data-h="0">Bildschirm</button>
+      <button data-w="2480" data-h="3508">A4 Hoch<br><small>300 dpi</small></button>
+      <button data-w="3508" data-h="2480">A4 Quer<br><small>300 dpi</small></button>
+      <button data-w="2048" data-h="2048">Quadrat<br><small>2048 px</small></button>
+      <button data-w="3840" data-h="2160">4K<br><small>3840×2160</small></button>
+      <button data-w="1080" data-h="1920">Story<br><small>1080×1920</small></button>
+      <button data-w="256" data-h="256">Pixel-Art<br><small>256 px</small></button>
+      <button data-w="4096" data-h="4096">Groß<br><small>4096 px</small></button>
+    </div>
+    <div class="size-row">
+      <label>Breite <input type="number" id="new-w" min="16" max="8192"></label>
+      <span>×</span>
+      <label>Höhe <input type="number" id="new-h" min="16" max="8192"></label>
+    </div>
+    <p class="hint">Die aktuelle Zeichnung wird ersetzt. Speichere sie vorher, falls du sie behalten möchtest.</p>
+    <div class="modal-actions">
+      <button id="new-cancel" class="btn ghost">Abbrechen</button>
+      <button id="new-create" class="btn primary">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span>Zeichentool wird geladen …</span></div>
+<div id="toast"></div>
+<input type="file" id="file-open" accept=".zeichen,application/octet-stream" hidden>
+<input type="file" id="file-import" accept="image/*" hidden>
+
+<script type="module">
+  import init from './pkg/zeichentool.js';
+  init().catch((e) => {
+    document.getElementById('loading').innerHTML =
+      '<span>Fehler beim Laden: ' + e + '</span>';
+  });
+</script>
+</body>
+</html>
