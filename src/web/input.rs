@@ -15,6 +15,8 @@ pub struct TouchPt {
 
 /// Laufende Mehrfinger-Geste.
 pub struct Gesture {
+    /// Ansicht beim ersten Finger – wird wiederhergestellt, falls sich die Geste als Handballen entpuppt
+    pub origin_view: Affine,
     pub start_view: Affine,
     pub anchors: Vec<(i32, f64, f64)>,
     pub max_fingers: usize,
@@ -50,6 +52,9 @@ pub fn bind_input() {
     });
     on(&stage, "pointerleave", |e: PointerEvent| {
         with_app(|a| {
+            if e.pointer_type() == "pen" {
+                a.pen_left();
+            }
             if a.stroke.as_ref().map(|s| s.pointer) != Some(e.pointer_id()) {
                 a.hide_cursor();
             }
@@ -145,6 +150,7 @@ impl App {
         match e.pointer_type().as_str() {
             "pen" => {
                 self.last_pen_time = now();
+                self.pen_barrel = e.buttons() & 2 != 0;
                 if self.stroke.as_ref().map(|s| s.pointer) == Some(id) {
                     let pts = self.input_points(e);
                     self.stroke_move(&pts);
@@ -175,12 +181,20 @@ impl App {
             }
         }
         self.last_pen_time = t;
-        // Handballen: laufende Finger-Aktionen abbrechen
+        self.pen_in_range = true;
+        self.update_pen_badge();
+        // Handballen lag schon auf dem Bildschirm: Finger-Aktionen abbrechen und
+        // eine versehentlich verschobene Ansicht zurücksetzen.
         if self.gesture.is_some() || self.stroke.as_ref().map(|s| s.touch).unwrap_or(false) {
             if self.stroke.as_ref().map(|s| s.touch).unwrap_or(false) {
                 self.cancel_stroke();
             }
-            self.gesture = None;
+            if let Some(g) = self.gesture.take() {
+                if t - g.t0 < 2500.0 && self.view != g.origin_view {
+                    self.view = g.origin_view;
+                    self.apply_view();
+                }
+            }
             self.touches.clear();
         }
         let id = e.pointer_id();
@@ -188,14 +202,16 @@ impl App {
         let contact = buttons & 1 != 0;
         let barrel = buttons & 2 != 0;
         let eraser_tip = buttons & 32 != 0;
-        let is_down = e.type_() == "pointerdown";
         let (sx, sy) = client_xy(e);
 
-        // Taste gedrückt, ohne den Bildschirm zu berühren → Klick-Aktion
-        if is_down && !contact && barrel {
-            self.pen_button_click();
-            return;
+        // S-Pen-Taste: nur beim Herunterdrücken reagieren (egal ob schwebend oder aufgesetzt)
+        if barrel && !self.pen_barrel {
+            self.pen_barrel = true;
+            self.pen_button_pressed(contact);
+        } else if !barrel {
+            self.pen_barrel = false;
         }
+
         let mine = self.stroke.as_ref().map(|s| s.pointer) == Some(id);
         if contact {
             if self.stroke.is_none() {
@@ -203,7 +219,7 @@ impl App {
                     Some(Tool::Eraser)
                 } else if barrel {
                     match self.settings.pen_button {
-                        PenButton::Eraser => Some(Tool::Eraser),
+                        PenButton::Hold => Some(Tool::Eraser),
                         PenButton::Picker => Some(Tool::Picker),
                         _ => None,
                     }
@@ -231,21 +247,69 @@ impl App {
             }
             // Schweben: Pinselvorschau anzeigen
             if self.settings.hover_cursor {
-                let ov = if eraser_tip || (barrel && self.settings.pen_button == PenButton::Eraser) { Some(Tool::Eraser) } else { None };
+                let ov = if eraser_tip || (barrel && self.settings.pen_button == PenButton::Hold) { Some(Tool::Eraser) } else { None };
                 self.show_cursor(sx, sy, ov);
             }
         }
     }
 
-    fn pen_button_click(&mut self) {
+    /// S-Pen-Taste wurde gerade gedrückt.
+    fn pen_button_pressed(&mut self, contact: bool) {
+        let t = now();
+        if t - self.last_barrel_press < 250.0 {
+            return;
+        }
+        self.last_barrel_press = t;
         match self.settings.pen_button {
-            PenButton::Undo => self.undo(),
-            PenButton::Toggle => {
-                let t = if self.tool == Tool::Eraser { Tool::Brush } else { Tool::Eraser };
-                self.set_tool(t);
-                self.toast(t.name_de());
+            PenButton::Select => {
+                if self.stroke.is_some() {
+                    return;
+                }
+                if self.tool == Tool::Eraser {
+                    let back = if self.prev_tool == Tool::Eraser { Tool::Brush } else { self.prev_tool };
+                    self.set_tool(back);
+                    self.toast(back.name_de());
+                } else {
+                    self.prev_tool = self.tool;
+                    self.set_tool(Tool::Eraser);
+                    self.toast("Radierer");
+                }
+                let _ = window().navigator().vibrate_with_duration(8);
             }
+            PenButton::Undo if !contact => self.undo(),
             _ => {}
+        }
+    }
+
+    /// Der Stift hat den Erkennungsbereich über dem Bildschirm verlassen.
+    pub fn pen_left(&mut self) {
+        if self.pen_in_range {
+            self.pen_in_range = false;
+            self.last_pen_time = now();
+            self.pen_barrel = false;
+            self.update_pen_badge();
+            let ms = (self.settings.palm_lock * 1000.0) as i32 + 60;
+            set_timeout(ms, || {
+                with_app(|a| a.update_pen_badge());
+            });
+        }
+    }
+
+    /// Ist die Fläche gerade gegen Finger/Handballen gesperrt?
+    pub fn palm_locked(&self) -> bool {
+        if !self.pen_seen {
+            return false;
+        }
+        let dt = now() - self.last_pen_time;
+        // „im Bereich“ verfällt zur Sicherheit, falls das Verlassen nicht gemeldet wurde
+        (self.pen_in_range && dt < 15_000.0) || dt < self.settings.palm_lock as f64 * 1000.0
+    }
+
+    pub fn update_pen_badge(&mut self) {
+        let on = self.palm_locked();
+        if on != self.badge_on {
+            self.badge_on = on;
+            set_class(&el("pen-badge"), "on", on);
         }
     }
 
@@ -298,8 +362,12 @@ impl App {
 
     fn touch_down(&mut self, e: &PointerEvent) {
         let t = now();
-        // Handballen-Erkennung: während der Stift aktiv ist (oder gerade war), Finger ignorieren
-        if self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false) || (self.pen_seen && t - self.last_pen_time < 150.0) {
+        // Handballen-Erkennung: während der Stift schwebt/zeichnet (und kurz danach) Finger ignorieren
+        if self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false) || self.palm_locked() {
+            return;
+        }
+        // Große Auflagefläche = Handballen
+        if self.settings.ignore_large && (e.width() > 42 || e.height() > 42) {
             return;
         }
         let (x, y) = client_xy(e);
@@ -327,7 +395,9 @@ impl App {
         let start_t = self.gesture.as_ref().map(|g| g.t0).unwrap_or(t);
         let max_f = self.gesture.as_ref().map(|g| g.max_fingers).unwrap_or(0).max(self.touches.len());
         let moved = self.gesture.as_ref().map(|g| g.moved).unwrap_or(0.0);
+        let origin = self.gesture.as_ref().map(|g| g.origin_view).unwrap_or(self.view);
         self.gesture = Some(Gesture {
+            origin_view: origin,
             start_view: self.view,
             anchors: self.touches.iter().map(|p| (p.id, p.x, p.y)).collect(),
             max_fingers: max_f,
@@ -387,6 +457,10 @@ impl App {
 
     fn update_gesture(&mut self) {
         let Some(g) = &self.gesture else { return };
+        // kleine Bewegungen (aufgelegte Hand, Tipp-Gesten) verschieben nichts
+        if g.moved < 10.0 {
+            return;
+        }
         let cur: Vec<(f64, f64, f64, f64)> = g
             .anchors
             .iter()
@@ -396,6 +470,9 @@ impl App {
         let new_view = match cur.len() {
             0 => return,
             1 => {
+                if !self.settings.one_finger_pan {
+                    return;
+                }
                 let (ax, ay, x, y) = cur[0];
                 Affine::translate(x - ax, y - ay).mul(&start)
             }

@@ -6,7 +6,7 @@ mod tools;
 mod ui;
 
 use crate::engine::project::PackCache;
-use crate::engine::{presets, BrushPreset, Color, Document as Doc, History, IRect, Mask, Noise, Overlay, Symmetry};
+use crate::engine::{presets, BrushPreset, Color, Document as Doc, History, IRect, Mask, Noise, Overlay, Symmetry, Template};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
@@ -226,28 +226,31 @@ impl Tool {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PenButton {
-    Eraser,
+    /// Taste drücken = Radierer auswählen, nochmal drücken = zurück
+    Select,
+    /// Taste beim Zeichnen gedrückt halten = radieren
+    Hold,
     Picker,
     Undo,
-    Toggle,
 }
 
 impl PenButton {
     pub fn code(&self) -> &'static str {
         match self {
-            PenButton::Eraser => "eraser",
+            PenButton::Select => "select",
+            PenButton::Hold => "hold",
             PenButton::Picker => "picker",
             PenButton::Undo => "undo",
-            PenButton::Toggle => "toggle",
         }
     }
 
     pub fn from_code(s: &str) -> PenButton {
         match s {
+            "hold" => PenButton::Hold,
             "picker" => PenButton::Picker,
             "undo" => PenButton::Undo,
-            "toggle" => PenButton::Toggle,
-            _ => PenButton::Eraser,
+            // ältere Einstellungen („eraser“, „toggle“) → neues Standardverhalten
+            _ => PenButton::Select,
         }
     }
 }
@@ -285,6 +288,10 @@ pub struct Settings {
     pub gamma: f32,
     pub pen_only: bool,
     pub pen_button: PenButton,
+    /// Sekunden, die Finger nach dem Stift gesperrt bleiben (Handballen)
+    pub palm_lock: f32,
+    pub one_finger_pan: bool,
+    pub ignore_large: bool,
     pub quickshape: bool,
     pub hover_cursor: bool,
     pub side_right: bool,
@@ -294,6 +301,9 @@ pub struct Settings {
     pub fill_all: bool,
     pub shape: ShapeKind,
     pub shape_fill: bool,
+    /// Zuletzt gewählte Vorlage (Vorgabe für neue Leinwände)
+    pub last_template: Template,
+    pub last_paper: Option<Color>,
 }
 
 impl Default for Settings {
@@ -302,7 +312,10 @@ impl Default for Settings {
             smoothing: 0.25,
             gamma: 1.0,
             pen_only: true,
-            pen_button: PenButton::Eraser,
+            pen_button: PenButton::Select,
+            palm_lock: 2.0,
+            one_finger_pan: false,
+            ignore_large: true,
             quickshape: true,
             hover_cursor: true,
             side_right: false,
@@ -312,6 +325,8 @@ impl Default for Settings {
             fill_all: true,
             shape: ShapeKind::Line,
             shape_fill: false,
+            last_template: Template::default(),
+            last_paper: Some(Color::WHITE),
         }
     }
 }
@@ -356,6 +371,11 @@ pub struct App {
     pub gesture: Option<Gesture>,
     pub pen_seen: bool,
     pub last_pen_time: f64,
+    pub pen_in_range: bool,
+    pub pen_barrel: bool,
+    pub last_barrel_press: f64,
+    pub prev_tool: Tool,
+    pub badge_on: bool,
     pub space_down: bool,
     pub mouse_pan: Option<(i32, f64, f64, Affine)>,
 
@@ -378,6 +398,9 @@ pub struct App {
     pub last_ui_refresh: f64,
     pub toast_seq: u32,
     pub props_before: Option<crate::engine::LayerProps>,
+    /// Auswahl im Dialog „Neue Leinwand“
+    pub new_tpl: Template,
+    pub new_paper: Option<Color>,
 }
 
 impl App {
@@ -434,6 +457,11 @@ impl App {
             gesture: None,
             pen_seen: false,
             last_pen_time: -1e9,
+            pen_in_range: false,
+            pen_barrel: false,
+            last_barrel_press: -1e9,
+            prev_tool: Tool::Brush,
+            badge_on: false,
             space_down: false,
             mouse_pan: None,
             canvas,
@@ -454,6 +482,8 @@ impl App {
             last_ui_refresh: 0.0,
             toast_seq: 0,
             props_before: None,
+            new_tpl: Template::default(),
+            new_paper: Some(Color::WHITE),
         }
     }
 
@@ -625,6 +655,9 @@ impl App {
 pub fn start() {
     let mut app = App::new();
     app.load_settings();
+    // Leere Startleinwand mit der zuletzt gewählten Vorlage (wird durch Autospeichern ggf. ersetzt)
+    app.doc.template = app.settings.last_template;
+    app.doc.paper = app.settings.last_paper;
     APP.with(|cell| *cell.borrow_mut() = Some(app));
 
     ui::bind_all();

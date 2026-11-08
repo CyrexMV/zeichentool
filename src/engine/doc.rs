@@ -1,6 +1,7 @@
 use super::color::Color;
 use super::layer::{BlendMode, Layer, LayerProps};
 use super::mask::Mask;
+use super::paper::Template;
 use super::rect::IRect;
 
 /// Was gerade „über“ einer Ebene liegt und live angezeigt werden soll.
@@ -21,6 +22,8 @@ pub struct Document {
     pub active: usize,
     /// Papierfarbe, `None` = transparent.
     pub paper: Option<Color>,
+    /// Papiervorlage (liniert, kariert …), nur sichtbar mit Papierfarbe.
+    pub template: Template,
     pub next_id: u32,
 }
 
@@ -68,7 +71,7 @@ pub fn paint_pixel(p: [f32; 4], c: &Color, m: f32, alpha_lock: bool) -> [f32; 4]
 
 impl Document {
     pub fn new(w: usize, h: usize) -> Self {
-        let mut d = Document { w, h, layers: Vec::new(), active: 0, paper: Some(Color::WHITE), next_id: 1 };
+        let mut d = Document { w, h, layers: Vec::new(), active: 0, paper: Some(Color::WHITE), template: Template::default(), next_id: 1 };
         d.add_layer("Ebene 1", 0);
         d
     }
@@ -215,14 +218,22 @@ impl Document {
         }
         let mut acc = vec![[0f32; 4]; rw];
         let paper = if with_paper { self.paper } else { None };
+        let tpl = paper.and_then(|c| self.template.ctx(self.w, self.h, c));
         for (row, y) in (r.y0..r.y1).enumerate() {
             let base = match paper {
                 Some(c) => [c.r, c.g, c.b, 1.0],
                 None => [0.0; 4],
             };
-            acc.fill(base);
             let rowi = y as usize * self.w;
             let x0 = r.x0 as usize;
+            match &tpl {
+                Some(t) => {
+                    for (cx, a) in acc.iter_mut().enumerate() {
+                        *a = t.shade(x0 + cx, y as usize, base);
+                    }
+                }
+                None => acc.fill(base),
+            }
             for (li, layer) in self.layers.iter().enumerate() {
                 if !layer.props.visible || layer.props.opacity <= 0.0 {
                     continue;

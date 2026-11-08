@@ -51,6 +51,7 @@
   <button id="btn-redo" class="ib" title="Wiederholen (Strg+Y · Drei-Finger-Tipp)"><svg><use href="#i-redo"/></svg></button>
   <button id="btn-zoom" class="pill" title="Ansicht einpassen">100%</button>
   <button id="btn-symmetry" class="ib" title="Symmetrie"><svg><use href="#i-sym"/></svg></button>
+  <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-pen"/></svg></span>
 </header>
 
 <nav class="bar bar-right glass" aria-label="Werkzeuge">
@@ -116,6 +117,7 @@
     <input type="color" id="paper-color" aria-label="Hintergrundfarbe">
     <label class="switch" title="Hintergrund anzeigen"><input type="checkbox" id="paper-on"><span></span></label>
   </div>
+  <button id="ly-paper" class="btn wide-btn">Papier &amp; Vorlage ändern …</button>
   <div class="layer-props">
     <label class="row"><span>Deckkraft</span><input type="range" id="ly-opacity" min="0" max="100"><output id="ly-opacity-v"></output></label>
     <label class="row"><span>Modus</span><select id="ly-blend"></select></label>
@@ -176,6 +178,7 @@
   <button id="m-export" class="mi">Als PNG exportieren</button>
   <button id="m-export-t" class="mi">Als PNG exportieren (transparent)</button>
   <hr>
+  <button id="m-paper" class="mi">Papier &amp; Vorlage …</button>
   <button id="m-fit" class="mi">Ansicht einpassen</button>
   <button id="m-flip" class="mi">Ansicht spiegeln (Kontrolle)</button>
   <button id="m-fullscreen" class="mi">Vollbild</button>
@@ -194,12 +197,17 @@
   <label class="row"><span>Druckkurve<br><small id="set-gamma-desc">normal</small></span><input type="range" id="set-gamma" min="30" max="250"><output id="set-gamma-v"></output></label>
   <label class="row"><span>S-Pen-Taste</span>
     <select id="set-pen-button">
-      <option value="eraser">Halten: Radierer</option>
-      <option value="picker">Halten: Pipette</option>
-      <option value="undo">Klick (schwebend): Rückgängig</option>
-      <option value="toggle">Klick (schwebend): Pinsel ↔ Radierer</option>
+      <option value="select">Drücken: Radierer wählen (nochmal: zurück)</option>
+      <option value="hold">Beim Zeichnen halten: Radierer</option>
+      <option value="picker">Beim Zeichnen halten: Pipette</option>
+      <option value="undo">Drücken (schwebend): Rückgängig</option>
     </select>
   </label>
+  <h4>Handballen</h4>
+  <label class="row"><span>Sperre nach Stift<br><small>Finger/Handballen bewegen nichts, solange der Stift schwebt und so lange danach</small></span><input type="range" id="set-palm" min="0" max="50"><output id="set-palm-v"></output></label>
+  <label class="row toggle"><span>Große Auflageflächen ignorieren<br><small>Handballen wird nie als Finger erkannt</small></span><span class="switch"><input type="checkbox" id="set-ignore-large"><span></span></span></label>
+  <label class="row toggle"><span>Mit einem Finger verschieben<br><small>Aus: nur zwei Finger zoomen/verschieben (empfohlen)</small></span><span class="switch"><input type="checkbox" id="set-one-finger"><span></span></span></label>
+  <h4>Zeichnen</h4>
   <label class="row toggle"><span>QuickShape (Stift halten = Form)</span><span class="switch"><input type="checkbox" id="set-quickshape"><span></span></span></label>
   <label class="row toggle"><span>Pinselvorschau beim Schweben</span><span class="switch"><input type="checkbox" id="set-hover"><span></span></span></label>
   <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf zeichnen …</div></div>
@@ -207,13 +215,46 @@
   <label class="row toggle"><span>Regler rechts (Linkshänder: aus)</span><span class="switch"><input type="checkbox" id="set-side-right"><span></span></span></label>
 </section>
 
+<!-- Papier & Vorlage -->
+<section id="panel-paper" class="panel glass" data-anchor="left">
+  <div class="panel-head"><h3>Papier &amp; Vorlage</h3></div>
+    <h4>Vorlage</h4>
+    <div class="tpl-grid" id="pp-tpl">
+      <button data-tpl="blank"><span class="tpl-prev tpl-blank"></span>Blanko</button>
+      <button data-tpl="lined"><span class="tpl-prev tpl-lined"></span>Liniert</button>
+      <button data-tpl="grid"><span class="tpl-prev tpl-kariert"></span>Kariert</button>
+      <button data-tpl="dots"><span class="tpl-prev tpl-dots"></span>Gepunktet</button>
+      <button data-tpl="cornell"><span class="tpl-prev tpl-cornell"></span>Cornell</button>
+      <button data-tpl="music"><span class="tpl-prev tpl-music"></span>Notenlinien</button>
+    </div>
+    <h4>Linienabstand</h4>
+    <div class="seg" id="pp-sp">
+      <button data-sp="0">Eng</button>
+      <button data-sp="1">Mittel</button>
+      <button data-sp="2">Weit</button>
+    </div>
+    <h4>Papier</h4>
+    <div class="paper-sw" id="pp-col">
+      <button data-paper="#ffffff" style="background:#ffffff" title="Weiß"></button>
+      <button data-paper="#fbf6e9" style="background:#fbf6e9" title="Creme"></button>
+      <button data-paper="#fff8c4" style="background:#fff8c4" title="Notizgelb"></button>
+      <button data-paper="#e9eef5" style="background:#e9eef5" title="Hellblau"></button>
+      <button data-paper="#2a2b31" style="background:#2a2b31" title="Dunkelgrau"></button>
+      <button data-paper="#111214" style="background:#111214" title="Schwarz"></button>
+      <button data-paper="#1f3b2d" style="background:#1f3b2d" title="Tafelgrün"></button>
+      <button data-paper="none" class="transparent" title="Transparent"></button>
+    </div>
+  <p class="hint">Die Linien gehören zum Papier: Sie liegen unter allen Ebenen und werden beim Radieren nicht entfernt. Beim PNG-Export „transparent“ werden sie weggelassen.</p>
+</section>
+
 <!-- Hilfe -->
 <section id="panel-help" class="panel glass" data-anchor="left">
   <div class="panel-head"><h3>Gesten &amp; Kürzel</h3></div>
   <ul class="help">
     <li><b>S-Pen</b> zeichnet mit Druck &amp; Neigung – Finger werden beim Zeichnen ignoriert (Handballen).</li>
-    <li><b>S-Pen-Taste halten</b> → Radierer (einstellbar).</li>
-    <li><b>Zwei Finger</b> → Zoomen, Drehen, Verschieben.</li>
+    <li><b>S-Pen-Taste drücken</b> → Radierer, nochmal drücken → zurück (einstellbar).</li>
+    <li><b>Handballen</b>: Solange der Stift über dem Bildschirm schwebt (Stift-Symbol oben links leuchtet), bewegen Hand und Finger nichts.</li>
+    <li><b>Zwei Finger</b> → Zoomen, Drehen, Verschieben (wenn der Stift weg ist).</li>
     <li><b>Zwei-Finger-Tipp</b> → Rückgängig · <b>Drei-Finger-Tipp</b> → Wiederholen.</li>
     <li><b>Finger lange halten</b> → Pipette.</li>
     <li><b>Stift am Strichende halten</b> → gerade Linie / Kreis.</li>
@@ -225,8 +266,9 @@
 <div id="modal-new" class="modal">
   <div class="modal-card glass">
     <h3>Neue Leinwand</h3>
+    <h4>Format</h4>
     <div class="preset-grid" id="new-presets">
-      <button data-w="0" data-h="0">Bildschirm</button>
+      <button data-w="0" data-h="0">Vollbild<br><small>wie Bildschirm</small></button>
       <button data-w="2480" data-h="3508">A4 Hoch<br><small>300 dpi</small></button>
       <button data-w="3508" data-h="2480">A4 Quer<br><small>300 dpi</small></button>
       <button data-w="2048" data-h="2048">Quadrat<br><small>2048 px</small></button>
@@ -239,6 +281,32 @@
       <label>Breite <input type="number" id="new-w" min="16" max="8192"></label>
       <span>×</span>
       <label>Höhe <input type="number" id="new-h" min="16" max="8192"></label>
+    </div>
+    <h4>Vorlage</h4>
+    <div class="tpl-grid" id="new-tpl">
+      <button data-tpl="blank"><span class="tpl-prev tpl-blank"></span>Blanko</button>
+      <button data-tpl="lined"><span class="tpl-prev tpl-lined"></span>Liniert</button>
+      <button data-tpl="grid"><span class="tpl-prev tpl-kariert"></span>Kariert</button>
+      <button data-tpl="dots"><span class="tpl-prev tpl-dots"></span>Gepunktet</button>
+      <button data-tpl="cornell"><span class="tpl-prev tpl-cornell"></span>Cornell</button>
+      <button data-tpl="music"><span class="tpl-prev tpl-music"></span>Notenlinien</button>
+    </div>
+    <h4>Linienabstand</h4>
+    <div class="seg" id="new-sp">
+      <button data-sp="0">Eng</button>
+      <button data-sp="1">Mittel</button>
+      <button data-sp="2">Weit</button>
+    </div>
+    <h4>Papier</h4>
+    <div class="paper-sw" id="new-col">
+      <button data-paper="#ffffff" style="background:#ffffff" title="Weiß"></button>
+      <button data-paper="#fbf6e9" style="background:#fbf6e9" title="Creme"></button>
+      <button data-paper="#fff8c4" style="background:#fff8c4" title="Notizgelb"></button>
+      <button data-paper="#e9eef5" style="background:#e9eef5" title="Hellblau"></button>
+      <button data-paper="#2a2b31" style="background:#2a2b31" title="Dunkelgrau"></button>
+      <button data-paper="#111214" style="background:#111214" title="Schwarz"></button>
+      <button data-paper="#1f3b2d" style="background:#1f3b2d" title="Tafelgrün"></button>
+      <button data-paper="none" class="transparent" title="Transparent"></button>
     </div>
     <p class="hint">Die aktuelle Zeichnung wird ersetzt. Speichere sie vorher, falls du sie behalten möchtest.</p>
     <div class="modal-actions">

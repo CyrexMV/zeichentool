@@ -3,11 +3,11 @@
 use super::*;
 use crate::engine::brush::render_dab;
 use crate::engine::history::StoredLayer;
-use crate::engine::{Action, BlendMode, InputPoint, StrokeEngine};
+use crate::engine::{Action, BlendMode, InputPoint, StrokeEngine, TemplateKind};
 use web_sys::{HtmlSelectElement, PointerEvent};
 
-const PANELS: [&str; 10] = [
-    "panel-brush", "panel-color", "panel-layers", "panel-shape", "panel-fill", "panel-sym", "panel-menu", "panel-settings", "panel-help", "modal-new",
+const PANELS: [&str; 11] = [
+    "panel-brush", "panel-color", "panel-layers", "panel-shape", "panel-fill", "panel-sym", "panel-menu", "panel-settings", "panel-help", "panel-paper", "modal-new",
 ];
 
 const PALETTE: [&str; 32] = [
@@ -233,6 +233,10 @@ pub fn bind_all() {
     });
     on_click("m-settings", |a| a.toggle_panel("panel-settings"));
     on_click("m-help", |a| a.toggle_panel("panel-help"));
+    on_click("m-paper", |a| a.toggle_panel("panel-paper"));
+    on_click("ly-paper", |a| a.toggle_panel("panel-paper"));
+    bind_paper_controls("pp", false);
+    bind_paper_controls("new", true);
 
     // ----- Einstellungen -----
     bind_check("set-pen-only", |a, v| {
@@ -255,6 +259,19 @@ pub fn bind_all() {
     });
     bind_check("set-quickshape", |a, v| {
         a.settings.quickshape = v;
+        a.save_settings();
+    });
+    bind_range("set-palm", |a, v| {
+        a.settings.palm_lock = v / 10.0;
+        a.refresh_settings_ui();
+        a.save_settings();
+    });
+    bind_check("set-ignore-large", |a, v| {
+        a.settings.ignore_large = v;
+        a.save_settings();
+    });
+    bind_check("set-one-finger", |a, v| {
+        a.settings.one_finger_pan = v;
         a.save_settings();
     });
     bind_check("set-hover", |a, v| {
@@ -312,7 +329,11 @@ pub fn bind_all() {
         }
         a.close_panels();
         let mut d = Doc::new(w, h);
-        d.paper = a.doc.paper;
+        d.paper = a.new_paper;
+        d.template = a.new_tpl;
+        a.settings.last_template = a.new_tpl;
+        a.settings.last_paper = a.new_paper;
+        a.save_settings();
         a.replace_document(d);
         a.mark_unsaved();
         a.toast(&format!("Neue Leinwand {} × {}", w, h));
@@ -545,6 +566,7 @@ impl App {
                 "panel-layers" => self.render_layers(),
                 "panel-color" => self.refresh_color_ui(),
                 "panel-brush" => self.refresh_brush_controls(),
+                "panel-paper" => self.refresh_paper_ui(),
                 _ => {}
             }
         }
@@ -559,6 +581,9 @@ impl App {
 
     fn open_new_dialog(&mut self) {
         self.close_panels();
+        self.new_paper = self.doc.paper;
+        self.new_tpl = self.doc.template;
+        self.refresh_paper_ui();
         input_el("new-w").set_value(&self.doc.w.to_string());
         input_el("new-h").set_value(&self.doc.h.to_string());
         set_class(&el("modal-new"), "open", true);
@@ -577,6 +602,9 @@ impl App {
         input_el("set-pen-only").set_checked(s.pen_only);
         input_el("set-quickshape").set_checked(s.quickshape);
         input_el("set-hover").set_checked(s.hover_cursor);
+        input_el("set-ignore-large").set_checked(s.ignore_large);
+        input_el("set-one-finger").set_checked(s.one_finger_pan);
+        set_range("set-palm", s.palm_lock * 10.0, &format!("{:.1} s", s.palm_lock));
         input_el("set-side-right").set_checked(s.side_right);
         let desc = if s.gamma < 0.8 {
             "weich – wenig Druck reicht"
@@ -1055,5 +1083,91 @@ impl App {
         input_el("ly-lock").set_checked(p.locked);
         input_el("paper-on").set_checked(self.doc.paper.is_some());
         input_el("paper-color").set_value(&self.doc.paper.unwrap_or(Color::WHITE).to_hex());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Papier & Vorlage
+// ---------------------------------------------------------------------------
+
+/// Bindet Vorlagen-, Abstands- und Papierfarb-Auswahl. `for_new` = Dialog „Neue Leinwand“.
+fn bind_paper_controls(prefix: &'static str, for_new: bool) {
+    on(&el(&format!("{}-tpl", prefix)), "click", move |e: Event| {
+        if let Some(code) = closest_attr(&e, "button", "data-tpl") {
+            with_app(|a| {
+                let kind = TemplateKind::from_code(&code);
+                if for_new {
+                    a.new_tpl.kind = kind;
+                    if kind != TemplateKind::Blank && a.new_paper.is_none() {
+                        a.new_paper = Some(Color::WHITE);
+                    }
+                } else {
+                    a.doc.template.kind = kind;
+                    if kind != TemplateKind::Blank && a.doc.paper.is_none() {
+                        a.doc.paper = Some(Color::WHITE);
+                    }
+                    a.paper_changed();
+                }
+                a.refresh_paper_ui();
+            });
+        }
+    });
+    on(&el(&format!("{}-sp", prefix)), "click", move |e: Event| {
+        if let Some(sp) = closest_attr(&e, "button", "data-sp").and_then(|v| v.parse::<u8>().ok()) {
+            with_app(|a| {
+                if for_new {
+                    a.new_tpl.spacing = sp.min(2);
+                } else {
+                    a.doc.template.spacing = sp.min(2);
+                    a.paper_changed();
+                }
+                a.refresh_paper_ui();
+            });
+        }
+    });
+    on(&el(&format!("{}-col", prefix)), "click", move |e: Event| {
+        if let Some(v) = closest_attr(&e, "button", "data-paper") {
+            let col = Color::from_hex(&v);
+            with_app(|a| {
+                if for_new {
+                    a.new_paper = col;
+                } else {
+                    a.doc.paper = col;
+                    a.paper_changed();
+                }
+                a.refresh_paper_ui();
+            });
+        }
+    });
+}
+
+impl App {
+    fn paper_changed(&mut self) {
+        self.settings.last_template = self.doc.template;
+        self.settings.last_paper = self.doc.paper;
+        self.redraw_all();
+        self.mark_unsaved();
+        self.save_settings();
+        if self.open_panel == Some("panel-layers") {
+            self.render_layers();
+        }
+    }
+
+    pub fn refresh_paper_ui(&mut self) {
+        let mark = |sel: &str, attr: &str, val: &str| {
+            let list = dom().query_selector_all(sel).unwrap();
+            for i in 0..list.length() {
+                let b: web_sys::Element = list.get(i).unwrap().unchecked_into();
+                set_class(&b, "active", b.get_attribute(attr).as_deref() == Some(val));
+            }
+        };
+        let paper_code = |p: Option<Color>| p.map(|c| c.to_hex()).unwrap_or_else(|| "none".into());
+        let (dt, np) = (self.doc.template, self.new_tpl);
+        mark("#pp-tpl button", "data-tpl", dt.kind.code());
+        mark("#pp-sp button", "data-sp", &dt.spacing.to_string());
+        mark("#pp-col button", "data-paper", &paper_code(self.doc.paper));
+        mark("#new-tpl button", "data-tpl", np.kind.code());
+        mark("#new-sp button", "data-sp", &np.spacing.to_string());
+        mark("#new-col button", "data-paper", &paper_code(self.new_paper));
     }
 }

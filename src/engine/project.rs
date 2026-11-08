@@ -4,10 +4,11 @@ use super::color::Color;
 use super::doc::{Document, Overlay};
 use super::history::{pack, unpack};
 use super::layer::{BlendMode, Layer, LayerProps};
+use super::paper::{Template, TemplateKind};
 use std::collections::HashMap;
 
 const MAGIC: &[u8; 4] = b"ZTL1";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// Cache bereits komprimierter Ebenen, damit Autospeichern schnell bleibt.
 #[derive(Default)]
@@ -82,6 +83,8 @@ pub fn save(doc: &Document, cache: &mut PackCache) -> Vec<u8> {
             w.f32(1.0);
         }
     }
+    w.u8(doc.template.kind as u8);
+    w.u8(doc.template.spacing);
     w.u32(doc.active as u32);
     w.u32(doc.next_id);
     w.u32(doc.layers.len() as u32);
@@ -121,6 +124,11 @@ pub fn load(bytes: &[u8]) -> Result<Document, String> {
     }
     let has_paper = r.u8()? == 1;
     let paper = Color::rgb(r.f32()?, r.f32()?, r.f32()?);
+    let template = if version >= 2 {
+        Template { kind: TemplateKind::from_u8(r.u8()?), spacing: r.u8()?.min(2) }
+    } else {
+        Template::default()
+    };
     let active = r.u32()? as usize;
     let next_id = r.u32()?;
     let n = r.u32()? as usize;
@@ -147,6 +155,7 @@ pub fn load(bytes: &[u8]) -> Result<Document, String> {
         active: active.min(layers.len() - 1),
         layers,
         paper: if has_paper { Some(paper) } else { None },
+        template,
         next_id,
     })
 }
@@ -179,6 +188,7 @@ mod tests {
         d.layers[1].data[4 * 5 + 3] = 255;
         d.layers[1].props.blend = BlendMode::Multiply;
         d.paper = None;
+        d.template = Template { kind: TemplateKind::Dots, spacing: 2 };
         let mut cache = PackCache::default();
         let bytes = save(&d, &mut cache);
         let l = load(&bytes).unwrap();
@@ -188,6 +198,7 @@ mod tests {
         assert_eq!(l.layers[1].props.blend, BlendMode::Multiply);
         assert_eq!(l.layers[1].data, d.layers[1].data);
         assert!(l.paper.is_none());
+        assert_eq!(l.template, d.template);
         assert!(load(b"nope").is_err());
     }
 

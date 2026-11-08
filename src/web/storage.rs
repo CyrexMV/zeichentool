@@ -26,6 +26,11 @@ impl App {
             format!("gamma={}", s.gamma),
             format!("pen_only={}", s.pen_only),
             format!("pen_button={}", s.pen_button.code()),
+            format!("palm_lock={}", s.palm_lock),
+            format!("tpl={},{}", s.last_template.kind.code(), s.last_template.spacing),
+            format!("paper={}", s.last_paper.map(|c| c.to_hex()).unwrap_or_else(|| "none".into())),
+            format!("one_finger_pan={}", s.one_finger_pan),
+            format!("ignore_large={}", s.ignore_large),
             format!("quickshape={}", s.quickshape),
             format!("hover={}", s.hover_cursor),
             format!("side_right={}", s.side_right),
@@ -68,6 +73,14 @@ impl App {
                 "gamma" => s.gamma = f(v, 1.0).clamp(0.3, 2.5),
                 "pen_only" => s.pen_only = b(v),
                 "pen_button" => s.pen_button = PenButton::from_code(v),
+                "palm_lock" => s.palm_lock = f(v, 2.0).clamp(0.0, 10.0),
+                "tpl" => {
+                    let (k, sp) = v.split_once(',').unwrap_or((v, "1"));
+                    s.last_template = crate::engine::Template { kind: crate::engine::TemplateKind::from_code(k), spacing: sp.parse::<u8>().unwrap_or(1).min(2) };
+                }
+                "paper" => s.last_paper = Color::from_hex(v),
+                "one_finger_pan" => s.one_finger_pan = b(v),
+                "ignore_large" => s.ignore_large = b(v),
                 "quickshape" => s.quickshape = b(v),
                 "hover" => s.hover_cursor = b(v),
                 "side_right" => s.side_right = b(v),

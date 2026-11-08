@@ -9,11 +9,15 @@ und die gesamte Eingabe‑ und Oberflächenlogik laufen in Rust. HTML/CSS liefer
 ## Funktionen
 
 **S‑Pen**
+- **S‑Pen‑Taste drücken → Radierer** (nochmal drücken → zurück zum vorherigen Werkzeug);
+  alternativ: Taste beim Zeichnen halten = Radierer/Pipette oder Klick = Rückgängig
+- **Handballen‑Sperre wie in GoodNotes**: Sobald der Stift über dem Bildschirm schwebt
+  (Stift‑Symbol oben links leuchtet), verschieben Hand und Finger nichts – auch noch 2 s danach
+  (einstellbar). Große Auflageflächen werden ignoriert; hat die Hand die Ansicht schon verschoben,
+  bevor der Stift kommt, wird das zurückgesetzt. Verschieben nur mit zwei Fingern.
 - Druckempfindlichkeit mit einstellbarer Druckkurve (weich / normal / hart)
 - Neigung: Bleistift und Kohle schattieren breiter, wenn der Stift schräg gehalten wird
 - Schweben (Hover): Pinselgröße wird als Kreis angezeigt, bevor der Stift aufsetzt
-- S‑Pen‑Taste: halten = Radierer (oder Pipette); alternativ Klick = Rückgängig bzw. Pinsel ↔ Radierer
-- Handballen‑Erkennung: Finger werden ignoriert, während der Stift zeichnet
 - Alle Zwischenpunkte des Stifts (bis 240 Hz) werden verarbeitet, Low‑Latency‑Canvas
 - S‑Pen‑Testfeld in den Einstellungen (Druck, Neigung, Taste live anzeigen)
 
@@ -28,6 +32,12 @@ und die gesamte Eingabe‑ und Oberflächenlogik laufen in Rust. HTML/CSS liefer
 - **QuickShape**: Stift am Strichende halten → perfekte Linie bzw. Kreis/Ellipse
 - **Symmetrie**: vertikal, horizontal, vierfach, radial (2–24 Segmente)
 - Pipette (auch: Finger lange halten)
+
+**Papier & Vorlagen** (wie in Notiz‑Apps)
+- Blanko, Liniert, Kariert, Gepunktet, Cornell, Notenlinien – Linienabstand eng/mittel/weit
+- Papierfarben (Weiß, Creme, Notizgelb, Hellblau, Dunkel, Schwarz, Tafelgrün, transparent)
+- Formate: Vollbild (Bildschirmgröße), A4 hoch/quer, Quadrat, 4K, Story, Pixel‑Art, eigene Größe
+- Linien gehören zum Papier: liegen unter allen Ebenen, werden nicht wegradiert
 
 **Ebenen**
 - Bis zu 48 Ebenen, Deckkraft, 9 Mischmodi, Transparenz sperren, Ebene sperren
