@@ -36,7 +36,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Android SDK prüfen (auf GitHub-Runnern vorinstalliert)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" | tail -n 20
       - name: APK bauen
         working-directory: android
         env:
