@@ -48,11 +48,9 @@ und die gesamte Eingabe‑ und Oberflächenlogik laufen in Rust. HTML/CSS liefer
 
 ## Auf das Galaxy Tab installieren
 
-1. Die App muss einmal über HTTPS erreichbar sein. Am einfachsten mit **GitHub Pages**:
-   - Im Repository unter *Settings → Pages* als Quelle **GitHub Actions** wählen.
-   - Den Code nach `main` bringen (z. B. Pull Request mergen). Der Workflow
-     `.github/workflows/pages.yml` baut die App automatisch und veröffentlicht sie unter
-     `https://<benutzername>.github.io/zeichentool/`.
+1. Die App ist über **GitHub Pages** veröffentlicht: **https://cyrexmv.github.io/zeichentool/**
+   - Ausgeliefert wird der Branch `gh-pages` (*Settings → Pages → Deploy from a branch → gh-pages / root*).
+   - Jeder Push nach `main` baut die App über `.github/workflows/pages.yml` neu und aktualisiert `gh-pages`.
 2. Die Adresse auf dem Tablet in **Samsung Internet** oder **Chrome** öffnen.
 3. Menü → **„Seite hinzufügen zu → Startbildschirm“** (Samsung Internet) bzw.
    **„App installieren“** (Chrome).
