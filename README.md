@@ -59,6 +59,36 @@ und die gesamte Eingabe‑ und Oberflächenlogik laufen in Rust. HTML/CSS liefer
 Optional kann aus der veröffentlichten Adresse mit [PWABuilder](https://www.pwabuilder.com/)
 eine echte Android‑APK erzeugt werden.
 
+## Als Android-App (APK) installieren
+
+Die App gibt es auch als eigene APK. Sie bringt die komplette Rust/WebAssembly-App mit,
+läuft ohne Internet im Vollbild und speichert Exporte direkt in die Galerie
+(*Bilder/Zeichentool*) bzw. Projekte nach *Download/Zeichentool*.
+
+1. Auf dem Tablet **https://cyrexmv.github.io/zeichentool/zeichentool.apk** öffnen
+   (oder im Zeichentool: Menü → „Android-App (APK) herunterladen“).
+2. Beim ersten Mal die Installation aus dieser Quelle erlauben
+   (*Einstellungen → Apps → Spezieller Zugriff → Unbekannte Apps installieren*).
+3. APK öffnen → **Installieren**.
+
+Jeder Push baut über `.github/workflows/pages.yml` eine neue APK mit höherer Versionsnummer.
+
+**Signatur (wichtig für Updates):** Android installiert ein Update nur, wenn es mit demselben
+Schlüssel signiert ist. Ohne eigene Secrets signiert die CI mit einem *temporären* Schlüssel –
+die APK funktioniert, aber für ein Update muss die alte App vorher deinstalliert werden
+(vorher die Zeichnung über Menü → „Projekt speichern“ sichern). Für dauerhafte Updates einmalig
+einen Schlüssel erzeugen und in GitHub unter *Settings → Secrets and variables → Actions* hinterlegen:
+
+```bash
+keytool -genkeypair -keystore zeichentool.jks -alias zeichentool -keyalg RSA -keysize 4096 -validity 36500
+base64 -w0 zeichentool.jks   # Ausgabe als Secret ZT_KEYSTORE_B64
+```
+
+Secrets: `ZT_KEYSTORE_B64`, `ZT_KEYSTORE_PASSWORD`, `ZT_KEY_ALIAS` (= `zeichentool`), `ZT_KEY_PASSWORD`.
+Die `.jks`-Datei sicher aufbewahren und **nicht** ins Repository legen.
+
+APK lokal bauen (Android SDK + JDK 17 nötig): `./build.sh && cd android && ./gradlew assembleRelease`
+
 ## Selbst bauen
 
 ```bash
@@ -87,4 +117,5 @@ src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   ui.rs         Oberfläche
   storage.rs    Autospeichern, Dateien, Service Worker
 web/          index.html, style.css, Manifest, Icons, Service Worker
+android/      Android-Hülle (WebView) – packt web/ in die APK, S-Pen-Events gehen direkt an Rust
 ```

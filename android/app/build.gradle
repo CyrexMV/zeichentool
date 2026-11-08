@@ -1,0 +1,65 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Versionsnummer steigt mit jedem CI-Lauf, damit Updates über die alte App installiert werden können.
+def buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+
+android {
+    namespace 'de.zeichentool.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'de.zeichentool.app'
+        minSdk 29
+        targetSdk 35
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    // Signatur: eigener Schlüssel über Umgebungsvariablen (in CI aus GitHub-Secrets),
+    // sonst der automatisch erzeugte Debug-Schlüssel von Android.
+    def keystorePath = System.getenv("ZT_KEYSTORE")
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ZT_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ZT_KEY_ALIAS")
+                keyPassword System.getenv("ZT_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += [layout.buildDirectory.dir("generated/webassets").get().asFile]
+        }
+    }
+}
+
+// Die gebaute Web-App (../../web, vorher ./build.sh ausführen) wird in die APK gepackt.
+def copyWebAssets = tasks.register('copyWebAssets', Sync) {
+    from("${rootDir}/../web") {
+        exclude 'sw.js', 'zeichentool.apk', '.nojekyll'
+    }
+    into(layout.buildDirectory.dir("generated/webassets/www"))
+    doFirst {
+        if (!file("${rootDir}/../web/pkg/zeichentool_bg.wasm").exists()) {
+            throw new GradleException("web/pkg fehlt – zuerst ./build.sh ausführen")
+        }
+    }
+}
+preBuild.dependsOn copyWebAssets

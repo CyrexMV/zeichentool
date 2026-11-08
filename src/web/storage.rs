@@ -226,7 +226,45 @@ fn file_stamp() -> String {
     )
 }
 
+/// Brücke der Android-App (`ZeichentoolAndroid`), falls die App als APK läuft.
+pub fn android_bridge() -> Option<js_sys::Object> {
+    let v = js_sys::Reflect::get(&window(), &"ZeichentoolAndroid".into()).ok()?;
+    if v.is_undefined() || v.is_null() {
+        None
+    } else {
+        Some(v.unchecked_into())
+    }
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
 fn download(bytes: &[u8], mime: &str, name: &str) {
+    // In der Android-App: direkt in Galerie / Downloads speichern
+    if let Some(bridge) = android_bridge() {
+        if let Ok(f) = js_sys::Reflect::get(&bridge, &"saveFile".into()) {
+            if let Some(f) = f.dyn_ref::<js_sys::Function>() {
+                let ok = f
+                    .call3(&bridge, &name.into(), &mime.into(), &base64(bytes).into())
+                    .map(|v| v.as_bool().unwrap_or(false))
+                    .unwrap_or(false);
+                if !ok {
+                    with_app(|a| a.toast("Speichern fehlgeschlagen"));
+                }
+                return;
+            }
+        }
+    }
     let parts = Array::new();
     parts.push(&Uint8Array::from(bytes));
     let opts = BlobPropertyBag::new();
@@ -372,6 +410,15 @@ pub fn init_storage() {
 }
 
 pub fn register_service_worker() {
+    if android_bridge().is_some() {
+        // Als APK: Dateien liegen lokal in der App, Service Worker unnötig.
+        for id in ["m-apk", "m-fullscreen"] {
+            if let Some(e) = dom().get_element_by_id(id) {
+                let _ = e.set_attribute("hidden", "");
+            }
+        }
+        return;
+    }
     let nav = window().navigator();
     let has = js_sys::Reflect::get(&nav, &"serviceWorker".into()).map(|v| !v.is_undefined()).unwrap_or(false);
     if has {

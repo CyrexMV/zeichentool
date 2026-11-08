@@ -312,7 +312,8 @@ input[type="color"] { width: 40px; height: 32px; border: 0; padding: 0; backgrou
 
 /* Menü */
 .menu { width: 300px; padding: 8px; }
-.mi { display: block; width: 100%; text-align: left; padding: 12px 14px; border-radius: 11px; font-weight: 520; }
+.mi { display: block; color: inherit; text-decoration: none; box-sizing: border-box; width: 100%; text-align: left; padding: 12px 14px; border-radius: 11px; font-weight: 520; }
+[hidden] { display: none !important; }
 .mi:hover { background: rgba(255,255,255,.07); }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .menu-foot { padding: 10px 14px 6px; color: var(--muted); font-size: 12px; }

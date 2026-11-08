@@ -390,6 +390,7 @@ impl App {
 
         let canvas: HtmlCanvasElement = el("doc").unchecked_into();
         let opts = js_sys::Object::new();
+        // Niedrige Latenz für den S-Pen
         let _ = js_sys::Reflect::set(&opts, &"desynchronized".into(), &true.into());
         let _ = js_sys::Reflect::set(&opts, &"alpha".into(), &true.into());
         let ctx: CanvasRenderingContext2d = canvas

@@ -1,10 +1,11 @@
-name: Zeichentool bauen & auf GitHub Pages veröffentlichen
+name: Zeichentool bauen (Web + APK) & veröffentlichen
 
-# Baut die Rust/WebAssembly-App und legt das Ergebnis auf den Branch `gh-pages`,
-# den GitHub Pages ausliefert (Settings → Pages → Deploy from a branch → gh-pages / root).
+# 1. Baut die Rust/WebAssembly-App
+# 2. Packt sie in eine Android-APK (android/)
+# 3. Legt Web-App + zeichentool.apk auf den Branch `gh-pages` (GitHub Pages)
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
   workflow_dispatch:
 
 permissions:
@@ -15,10 +16,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -27,8 +29,39 @@ jobs:
         run: cargo install wasm-bindgen-cli --version 0.2.130 --locked
       - name: Tests
         run: cargo test
-      - name: Bauen
+      - name: Web-App bauen
         run: ./build.sh
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: APK bauen
+        working-directory: android
+        env:
+          # Optional: eigener Signaturschlüssel über Repository-Secrets
+          ZT_KEYSTORE_B64: ${{ secrets.ZT_KEYSTORE_B64 }}
+          ZT_KEYSTORE_PASSWORD: ${{ secrets.ZT_KEYSTORE_PASSWORD }}
+          ZT_KEY_ALIAS: ${{ secrets.ZT_KEY_ALIAS }}
+          ZT_KEY_PASSWORD: ${{ secrets.ZT_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ZT_KEYSTORE_B64" ]; then
+            echo "$ZT_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export ZT_KEYSTORE="$RUNNER_TEMP/release.jks"
+          else
+            echo "::warning::Kein Signatur-Secret (ZT_KEYSTORE_B64) gesetzt – APK wird mit temporärem Debug-Schlüssel signiert. Updates erfordern dann eine Neuinstallation."
+          fi
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../web/zeichentool.apk
+          ls -la ../web/zeichentool.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeichentool-apk
+          path: web/zeichentool.apk
+
       - name: Auf gh-pages veröffentlichen
         run: |
           cd web

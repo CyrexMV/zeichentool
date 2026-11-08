@@ -1,3 +1,10 @@
 /target
 /web/pkg
 *.bak
+/android/*.jks
+*.keystore
+/web/zeichentool.apk
+/android/.gradle
+/android/build
+/android/app/build
+/android/local.properties
