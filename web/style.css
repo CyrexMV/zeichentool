@@ -507,7 +507,8 @@ body.picking #live { cursor: crosshair !important; }
 .cover-lock svg { width: 16px; height: 16px; }
 .folder-card.trash .folder-ico { background: rgba(229,72,77,.12); color: var(--danger); }
 .card.trashed .cover { filter: grayscale(.7) opacity(.75); }
-.lib-crumb #lib-trash-empty { margin-left: auto; color: var(--danger); }
+.lib-crumb #lib-trash-empty { margin-left: auto; color: var(--danger); background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.3); box-shadow: none; }
+.lib-crumb #lib-trash-empty:hover { background: rgba(229,72,77,.2); }
 .lib-crumb #lib-trash-empty svg { width: 16px; height: 16px; }
 .dialog .bio { margin: -4px auto 14px; display: flex; }
 .dialog .bio svg { width: 18px; height: 18px; }

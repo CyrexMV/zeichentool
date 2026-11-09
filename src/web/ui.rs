@@ -685,7 +685,14 @@ impl App {
         let pw = pop.offset_width() as f64;
         let left = (r.left() + r.width() * 0.5 - pw * 0.5).clamp(12.0, (vw - pw - 12.0).max(12.0));
         style(&pop, "left", &format!("{}px", left));
-        style(&pop, "top", &format!("{}px", r.bottom() + 10.0));
+        // unten kein Platz → über dem Knopf öffnen bzw. in den Bildschirm schieben
+        let vh = window().inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(800.0);
+        let ph = pop.offset_height() as f64;
+        let mut top = r.bottom() + 10.0;
+        if top + ph > vh - 12.0 {
+            top = if r.top() - 10.0 - ph >= 12.0 { r.top() - 10.0 - ph } else { (vh - ph - 12.0).max(12.0) };
+        }
+        style(&pop, "top", &format!("{}px", top));
         self.open_pop = Some(id);
     }
 

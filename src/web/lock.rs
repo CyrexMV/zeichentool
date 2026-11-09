@@ -258,7 +258,7 @@ impl App {
             return;
         }
         let visual = "<div class=\"dlg-icon danger\"><svg><use href=\"#i-trash\"/></svg></div>";
-        self.open_dialog(visual, "Papierkorb leeren?", &format!("{} {} werden endgültig gelöscht.", n, if n == 1 { "Notizbuch" } else { "Notizbücher" }), "Leeren", true, None, Pending::EmptyTrash);
+        self.open_dialog(visual, "Papierkorb leeren?", &format!("{} endgültig gelöscht. Das kann nicht rückgängig gemacht werden.", if n == 1 { "1 Eintrag wird".to_string() } else { format!("{} Einträge werden", n) }), "Papierkorb leeren", true, None, Pending::EmptyTrash);
     }
 
     pub fn empty_trash(&mut self) {
