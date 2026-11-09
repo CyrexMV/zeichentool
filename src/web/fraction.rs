@@ -110,7 +110,7 @@ impl App {
                     .into_iter()
                     .filter_map(|p| match p {
                         Part::Text { x, y, size, text, w } => {
-                            (!text.trim().is_empty()).then(|| Content::Text(TextBox { x, y, w: w + size * 0.3, size, color, bold: false, text }))
+                            (!text.trim().is_empty()).then_some(Content::Text(TextBox { x, y, w: w + size * 0.3, size, color, bold: false, text }))
                         }
                         Part::Bar { x0, x1, y, width } => Some(Content::Stroke(Stroke { pen: PenKind::Ball, color, width, pts: vec![Pt::new(x0, y, 1.0), Pt::new(x1, y, 1.0)] })),
                     })
