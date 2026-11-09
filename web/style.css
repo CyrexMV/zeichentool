@@ -568,3 +568,8 @@ b.due { color: #ff7a1a; }
 .zw-tools button[data-act=zw-close] { color: var(--danger); font-size: 18px; }
 #editor.zw-open .page-pill { display: none; }
 .stats-bars .bar.empty > span { background: var(--line); }
+.deck-stack .card-more { position: absolute; top: 8px; right: 8px; z-index: 2; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: rgba(0,0,0,.18); color: #fff; }
+.deck-stack .card-more svg { width: 18px; height: 18px; }
+.deck-face .cover-lock { top: 10px; left: 10px; right: auto; }
+.deck-face .due-badge { right: 48px; }
+.pop-card .mi.hidden, #pop-card .mi.hidden { display: none; }

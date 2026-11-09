@@ -10,7 +10,7 @@ use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 struct W(Vec<u8>);
 
@@ -97,6 +97,7 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
     w.u8(nb.is_template as u8);
     w.str(&nb.lock);
     w.f64(nb.trashed);
+    w.u8(nb.is_deck as u8);
     w.u32(nb.pages.len() as u32);
     for p in &nb.pages {
         w.u32(p.id);
@@ -218,6 +219,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
     let next_id = r.u32()?;
     let (folder, is_template) = if version >= 3 { (r.str()?, r.u8()? != 0) } else { (String::new(), false) };
     let (lock, trashed) = if version >= 4 { (r.str()?, r.f64()?) } else { (String::new(), 0.0) };
+    let is_deck_flag = if version >= 5 { Some(r.u8()? != 0) } else { None };
     let np = r.u32()? as usize;
     let mut pages = Vec::with_capacity(np.min(10_000));
     let mut max_id = 0;
@@ -316,7 +318,9 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
             cards.push(Card { id: cid, front, back, level, right, wrong, due });
         }
     }
-    let mut nb = Notebook { id, title, cover, favorite, created, modified, format, pages, next_id: next_id.max(max_id + 1), folder, is_template, cards, lock, trashed };
+    let mut nb = Notebook { id, title, cover, favorite, created, modified, format, pages, next_id: next_id.max(max_id + 1), folder, is_template, cards, lock, trashed, is_deck: false };
+    // ältere Dateien: Lernkarten-Sets am Kartenformat erkennen
+    nb.is_deck = is_deck_flag.unwrap_or_else(|| looks_like_deck(nb.format.w, nb.format.h, nb.pages.iter().all(|p| p.template.kind == TemplateKind::Flashcard)));
     nb.prune_cards();
     Ok(nb)
 }
@@ -352,6 +356,13 @@ pub struct NoteMeta {
     pub lock: String,
     /// Im Papierkorb seit (ms), 0 = nicht gelöscht
     pub trashed: f64,
+    /// Lernkarten-Set (nicht bei den Notizbüchern anzeigen)
+    pub is_deck: bool,
+}
+
+/// Lernkarten-Sets vor Version 5: Kartenformat (420 × 595) und nur Lernkarten-Seiten.
+fn looks_like_deck(w: f32, h: f32, all_cards: bool) -> bool {
+    all_cards && (w - 420.0).abs() < 0.5 && (h - 595.0).abs() < 0.5
 }
 
 impl NoteMeta {
@@ -382,6 +393,7 @@ impl NoteMeta {
             dues: nb.study_cards().iter().map(|c| (c.due / 60_000.0).max(0.0) as u32).collect(),
             lock: nb.lock.clone(),
             trashed: nb.trashed,
+            is_deck: nb.is_deck,
         }
     }
 
@@ -398,7 +410,7 @@ fn clean(s: &str) -> String {
 
 pub fn save_library(list: &[NoteMeta]) -> String {
     list.iter()
-        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h, clean(&m.folder), m.is_template as u8, m.cards, m.learned, m.deck as u8, m.progress, m.dues.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(","), clean(&m.lock), m.trashed))
+        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h, clean(&m.folder), m.is_template as u8, m.cards, m.learned, m.deck as u8, m.progress, m.dues.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(","), clean(&m.lock), m.trashed, m.is_deck as u8))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -429,6 +441,10 @@ pub fn load_library(s: &str) -> Vec<NoteMeta> {
                 dues: f.get(15).map(|x| x.split(',').filter_map(|v| v.parse().ok()).collect()).unwrap_or_default(),
                 lock: f.get(16).map(|x| x.to_string()).unwrap_or_default(),
                 trashed: f.get(17).and_then(|x| x.parse().ok()).unwrap_or(0.0),
+                is_deck: match f.get(18) {
+                    Some(v) => *v == "1",
+                    None => looks_like_deck(f[7].parse().unwrap_or(0.0), f[8].parse().unwrap_or(0.0), f.get(13) == Some(&"1")),
+                },
             })
         })
         .collect()
@@ -555,6 +571,7 @@ mod tests {
         nb.pages[0].title = "Kapitel 1".into();
         nb.folder = "Schule".into();
         nb.lock = "salz$abc".into();
+        nb.is_deck = true;
         nb.trashed = 99.0;
         nb.pages[0].template = Template::planner(TemplateKind::WeekPlan, 2027, 12);
         let bgp = encode_png(1, 1, &[1, 2, 3, 255]);
@@ -572,7 +589,7 @@ mod tests {
 
     #[test]
     fn library_roundtrip() {
-        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0, folder: "Schule".into(), is_template: true, cards: 7, learned: 2, deck: true, progress: 40, dues: vec![5, 9], lock: "s$h".into(), trashed: 7.0 };
+        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0, folder: "Schule".into(), is_template: true, cards: 7, learned: 2, deck: true, progress: 40, dues: vec![5, 9], lock: "s$h".into(), trashed: 7.0, is_deck: true };
         let back = load_library(&save_library(&[m.clone()]));
         assert_eq!(back[0].title, "Ti tel");
         assert_eq!(back[0].pages, 3);
@@ -583,6 +600,10 @@ mod tests {
         assert_eq!(back[0].dues, vec![5, 9]);
         assert_eq!(back[0].due_count(6.0 * 60_000.0), 1);
         assert_eq!((back[0].lock.as_str(), back[0].trashed), ("s$h", 7.0));
+        assert!(back[0].is_deck);
+        // ältere Bibliothekszeile eines Lernkarten-Sets wird erkannt
+        let old_deck = load_library("d\tVokabeln\t0\t0\t1\t2\t3\t420\t595\t\t0\t3\t0\t1\t0");
+        assert!(old_deck[0].is_deck);
         // alte Zeilen ohne Ordner bleiben lesbar
         let old = load_library("x\tAlt\t0\t0\t1\t2\t1\t595\t842");
         assert_eq!(old[0].folder, "");

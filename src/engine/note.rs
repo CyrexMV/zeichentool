@@ -299,11 +299,13 @@ pub struct Notebook {
     pub lock: String,
     /// Im Papierkorb seit (ms), 0 = nicht gelöscht
     pub trashed: f64,
+    /// Lernkarten-Set (erscheint nur bei den Lernkarten, nicht bei den Notizbüchern)
+    pub is_deck: bool,
 }
 
 impl Notebook {
     pub fn new(id: String, title: &str, cover: u8, format: Format, template: Template, paper: Color, now: f64) -> Notebook {
-        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new(), lock: String::new(), trashed: 0.0 };
+        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new(), lock: String::new(), trashed: 0.0, is_deck: false };
         let pid = nb.alloc_id();
         nb.pages.push(Page::new(pid, template, paper));
         nb

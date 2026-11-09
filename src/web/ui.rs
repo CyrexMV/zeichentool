@@ -151,6 +151,11 @@ impl App {
                 let fav = self.library.iter().find(|m| m.id == arg).map(|m| m.favorite).unwrap_or(false);
                 set_text("card-fav-label", if fav { "Aus Favoriten entfernen" } else { "Zu Favoriten" });
                 let locked = self.library.iter().find(|m| m.id == arg).map(|m| !m.lock.is_empty()).unwrap_or(false);
+                let deck = self.library.iter().find(|m| m.id == arg).map(|m| m.is_deck).unwrap_or(false);
+                // Ordner und Notizbuchvorlagen gibt es nur für Notizbücher
+                show_el_sel("#pop-card [data-act=card-folder]", !deck);
+                show_el_sel("#pop-card [data-act=card-template]", !deck);
+                set_text("card-delete-label", if deck { "Lernkarten-Set löschen" } else { "Löschen" });
                 set_text("card-lock-label", if locked { "PIN-Sperre entfernen …" } else { "Mit PIN sperren …" });
                 self.open_popover("pop-card", src);
             }
@@ -1159,5 +1164,12 @@ impl App {
     pub fn refresh_lib_controls(&mut self) {
         Self::mark_seg("#lib-sort", &self.lib_sort.clone());
         set_class(&el("lib-fav"), "active", self.lib_fav);
+    }
+}
+
+/// Element per CSS-Selektor ein-/ausblenden.
+fn show_el_sel(sel: &str, on: bool) {
+    if let Ok(Some(e)) = dom().query_selector(sel) {
+        set_class(&e, "hidden", !on);
     }
 }

@@ -36,6 +36,11 @@ impl NoteMeta {
         !self.is_template && self.trashed == 0.0
     }
 
+    /// Normales Notizbuch (keine Vorlage, kein Lernkarten-Set, nicht im Papierkorb).
+    pub fn is_notebook(&self) -> bool {
+        self.visible() && !self.is_deck
+    }
+
     pub fn locked(&self) -> bool {
         !self.lock.is_empty()
     }
