@@ -329,6 +329,11 @@ impl App {
                 self.close_popovers();
                 set_timeout(0, || input_el("file-pdf").click());
             }
+            "lasso-mode" => {
+                self.prefs.lasso_mode = (n as u8).min(2);
+                self.refresh_tool_popover();
+                self.save_settings();
+            }
             "shape-fill" => {
                 self.prefs.shape_fill = (n as u8).min(2);
                 self.refresh_tool_popover();
@@ -940,10 +945,20 @@ impl App {
                 h.push_str(&toggle("pop-er-back", "Danach zurück zum Stift", p.er_auto_back));
             }
             Tool::Lasso => {
+                let m = p.lasso_mode;
+                let a = |k: u8| if m == k { "active" } else { "" };
+                h.push_str(&format!(
+                    "<div class=\"seg lasso-modes\"><button class=\"{}\" data-act=\"lasso-mode\" data-arg=\"0\">Lasso</button><button class=\"{}\" data-act=\"lasso-mode\" data-arg=\"1\">Linie</button><button class=\"{}\" data-act=\"lasso-mode\" data-arg=\"2\">Rechteck</button></div>",
+                    a(0), a(1), a(2)
+                ));
                 h.push_str(&toggle("pop-lasso-ink", "Handschrift auswählen", p.lasso_ink));
                 h.push_str(&toggle("pop-lasso-text", "Text auswählen", p.lasso_text));
                 h.push_str(&toggle("pop-lasso-img", "Bilder auswählen", p.lasso_img));
-                h.push_str("<p class=\"hint\">Einkreisen zum Auswählen. Danach ziehen = verschieben, runder Griff = skalieren. Kurz tippen = Einfügen.</p>");
+                h.push_str(match m {
+                    1 => "<p class=\"hint\">Linie ziehen: alles, was die Linie berührt, wird ausgewählt. Danach ziehen = verschieben, runder Griff = skalieren. Kurz tippen = Einfügen.</p>",
+                    2 => "<p class=\"hint\">Rechteck aufziehen: alles darin wird ausgewählt (bei PDFs auch der Ausschnitt). Danach ziehen = verschieben. Kurz tippen = Einfügen.</p>",
+                    _ => "<p class=\"hint\">Einkreisen zum Auswählen. Danach ziehen = verschieben, runder Griff = skalieren. Kurz tippen = Einfügen.</p>",
+                });
             }
             Tool::Text => {
                 h.push_str(&slider(8.0, 48.0, 1.0, p.text_size, "Größe"));

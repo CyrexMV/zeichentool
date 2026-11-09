@@ -77,6 +77,7 @@ impl App {
             format!("text_size={}", p.text_size),
             format!("text_bold={}", p.text_bold),
             format!("lasso={},{},{}", p.lasso_ink, p.lasso_text, p.lasso_img),
+            format!("lasso_mode={}", p.lasso_mode),
             format!("laser={}", c4(p.laser_color)),
             format!("shape_fill={}", p.shape_fill),
             format!("new={},{},{},{},{}", self.new_nb.cover, self.new_nb.template.kind.code(), self.new_nb.template.spacing, self.new_nb.paper.to_hex(), self.new_nb.format),
@@ -152,6 +153,7 @@ impl App {
                 "text_sel" => p.text_ci = pair(v).0,
                 "text_size" => p.text_size = f(v, 16.0).clamp(8.0, 48.0),
                 "text_bold" => p.text_bold = b(v),
+                "lasso_mode" => p.lasso_mode = v.parse::<u8>().unwrap_or(0).min(2),
                 "lasso" => {
                     let l: Vec<bool> = v.split(',').map(b).collect();
                     if l.len() == 3 {

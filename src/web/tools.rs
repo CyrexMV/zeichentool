@@ -126,7 +126,7 @@ impl App {
                 show("sel-menu", false);
                 if let Some((i, x, y)) = ed.hit_page(sx, sy, 40.0) {
                     let page = ed.nb.pages[i].id;
-                    ed.op = Some(Op::Lasso { page, pointer, pts: vec![(x, y)] });
+                    ed.op = Some(Op::Lasso { page, pointer, pts: vec![(x, y)], mode: self.prefs.lasso_mode });
                 }
                 ed.dirty = true;
             }
@@ -387,7 +387,7 @@ impl App {
                 ed.dirty = true;
                 auto_back = true;
             }
-            Op::Lasso { page, pts, .. } => {
+            Op::Lasso { page, pts, mode, .. } => {
                 let len: f32 = pts.windows(2).map(|w| dist(w[0].0, w[0].1, w[1].0, w[1].1)).sum();
                 let link = ed.nb.page_mut(page).and_then(|p| p.link_at(pts[0].0, pts[0].1).map(|l| l.target.clone()));
                 if let (true, Some(t)) = (len * (ed.view.s() as f32) < 12.0, link) {
@@ -399,7 +399,18 @@ impl App {
                         ed.paste_at = Some((page, pts[0].0, pts[0].1));
                     }
                 } else {
-                    ed.select_in(page, &pts, (self.prefs.lasso_ink, self.prefs.lasso_text, self.prefs.lasso_img));
+                    let kinds = (self.prefs.lasso_ink, self.prefs.lasso_text, self.prefs.lasso_img);
+                    match mode {
+                        // Linie: alles, was die gezogene Linie berührt
+                        1 => ed.select_touching(page, &pts, kinds, (7.0 / ed.view.s() as f32).max(2.0)),
+                        // Rechteck vom Start- bis zum Endpunkt
+                        2 => {
+                            let (a, b) = (pts[0], *pts.last().unwrap());
+                            let rect = [(a.0, a.1), (b.0, a.1), (b.0, b.1), (a.0, b.1)];
+                            ed.select_in(page, &rect, kinds);
+                        }
+                        _ => ed.select_in(page, &pts, kinds),
+                    }
                 }
                 ed.dirty = true;
             }
@@ -818,6 +829,56 @@ impl Editor {
             return;
         }
         self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox, poly: poly.to_vec() }) };
+    }
+
+    /// Auswahl per Linie: alle Elemente, die die gezogene Linie berührt (`r` = Fangabstand in pt).
+    pub fn select_touching(&mut self, page: u32, line: &[(f32, f32)], kinds: (bool, bool, bool), r: f32) {
+        let Some(pi) = self.page_index(page) else { return };
+        // Linie fein abtasten (für Rechteck-Treffer bei Text, Bildern, Blasen)
+        let mut samples = Vec::new();
+        for w in line.windows(2) {
+            let n = (dist(w[0].0, w[0].1, w[1].0, w[1].1) / 2.0).ceil().max(1.0) as usize;
+            for k in 0..n {
+                let t = k as f32 / n as f32;
+                samples.push((w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t));
+            }
+        }
+        if let Some(&l) = line.last() {
+            samples.push(l);
+        }
+        let (mut ids, mut pins) = (Vec::new(), Vec::new());
+        let (mut bbox, mut pbox) = (Rect::EMPTY, Rect::EMPTY);
+        for it in &self.nb.pages[pi].items {
+            let take = match &it.content {
+                Content::Stroke(s) if kinds.0 => {
+                    if line.len() < 2 {
+                        line.first().is_some_and(|&p| s.hit(p, p, r))
+                    } else {
+                        line.windows(2).any(|w| s.hit(w[0], w[1], r))
+                    }
+                }
+                Content::Node(_) if kinds.0 || kinds.1 => {
+                    let b = it.bbox().expand(r);
+                    samples.iter().any(|&(x, y)| b.contains(x, y))
+                }
+                Content::Text(_) | Content::Image(_) if (kinds.1 && matches!(it.content, Content::Text(_))) || (kinds.2 && matches!(it.content, Content::Image(_))) => {
+                    let b = it.bbox().expand(r);
+                    samples.iter().any(|&(x, y)| b.contains(x, y))
+                }
+                _ => false,
+            };
+            if take && it.pinned {
+                pins.push(it.id);
+                pbox = pbox.union(&it.bbox());
+            } else if take {
+                ids.push(it.id);
+                bbox = bbox.union(&it.bbox());
+            }
+        }
+        if ids.is_empty() {
+            (ids, bbox) = (pins, pbox);
+        }
+        self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox, poly: Vec::new() }) };
     }
 
     /// Enthält die Auswahl fixierte Elemente?

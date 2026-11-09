@@ -769,19 +769,41 @@ impl Editor {
                 let _ = ctx.set_global_composite_operation("source-over");
                 ctx.restore();
             }
-            Some(Op::Lasso { page, pts, .. }) => {
+            Some(Op::Lasso { page, pts, mode, .. }) => {
                 let Some(i) = self.page_index(*page) else { return };
                 self.live_xf(i);
                 if pts.len() > 1 {
                     let s = self.view.s();
                     ctx.begin_path();
-                    ctx.move_to(pts[0].0 as f64, pts[0].1 as f64);
-                    for p in &pts[1..] {
-                        ctx.line_to(p.0 as f64, p.1 as f64);
+                    match mode {
+                        // Linie: offener, gut sichtbarer Strich
+                        1 => {
+                            ctx.move_to(pts[0].0 as f64, pts[0].1 as f64);
+                            for p in &pts[1..] {
+                                ctx.line_to(p.0 as f64, p.1 as f64);
+                            }
+                            ctx.set_line_cap("round");
+                            ctx.set_line_join("round");
+                            ctx.set_stroke_style_str("rgba(109,92,255,.28)");
+                            ctx.set_line_width(14.0 / s);
+                            ctx.stroke();
+                        }
+                        2 => {
+                            let (a, b) = (pts[0], pts[pts.len() - 1]);
+                            ctx.rect(a.0.min(b.0) as f64, a.1.min(b.1) as f64, (b.0 - a.0).abs() as f64, (b.1 - a.1).abs() as f64);
+                            ctx.set_fill_style_str("rgba(109,92,255,.08)");
+                            ctx.fill();
+                        }
+                        _ => {
+                            ctx.move_to(pts[0].0 as f64, pts[0].1 as f64);
+                            for p in &pts[1..] {
+                                ctx.line_to(p.0 as f64, p.1 as f64);
+                            }
+                            ctx.close_path();
+                            ctx.set_fill_style_str("rgba(109,92,255,.08)");
+                            ctx.fill();
+                        }
                     }
-                    ctx.close_path();
-                    ctx.set_fill_style_str("rgba(109,92,255,.08)");
-                    ctx.fill();
                     ctx.set_stroke_style_str("#6d5cff");
                     ctx.set_line_width(1.6 / s);
                     let dash = js_sys::Array::of2(&(6.0 / s).into(), &(5.0 / s).into());

@@ -55,6 +55,8 @@ pub enum Op {
         page: u32,
         pointer: i32,
         pts: Vec<(f32, f32)>,
+        /// 0 = Lasso (einkreisen), 1 = Linie (alles Berührte), 2 = Rechteck
+        mode: u8,
     },
     MoveSel {
         pointer: i32,

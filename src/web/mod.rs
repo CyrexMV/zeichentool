@@ -299,6 +299,8 @@ pub struct Prefs {
     pub text_size: f32,
     pub text_bold: bool,
     pub lasso_ink: bool,
+    /// Auswahlart: 0 Lasso, 1 Linie, 2 Rechteck
+    pub lasso_mode: u8,
     pub lasso_text: bool,
     pub lasso_img: bool,
     pub laser_color: [u8; 4],
@@ -329,6 +331,7 @@ impl Default for Prefs {
             text_size: 16.0,
             text_bold: false,
             lasso_ink: true,
+            lasso_mode: 0,
             lasso_text: true,
             lasso_img: true,
             laser_color: [255, 50, 60, 255],
