@@ -14,6 +14,7 @@ mod pensets;
 mod render;
 mod ruler;
 mod scrubber;
+mod stickers;
 mod stats;
 mod study;
 mod storage;

@@ -742,3 +742,15 @@ b.due { color: #ff7a1a; }
 .scrub-label { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); white-space: nowrap; padding: 8px 12px; border-radius: 12px; background: var(--glass-strong); box-shadow: var(--shadow); font-size: 13px; font-weight: 700; color: var(--text); opacity: 0; pointer-events: none; transition: opacity .15s; }
 .scrubber.dragging .scrub-label { opacity: 1; }
 #editor.presenting .scrubber { display: none !important; }
+
+/* Sticker & Stempel */
+.sticker-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.sticker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.sticker-grid .sticker { aspect-ratio: 1; border-radius: 16px; background: var(--hover); display: grid; place-items: center; padding: 8px; transition: transform .12s, background .12s; }
+.sticker-grid .sticker img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.stamp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.stamp-grid .stamp { height: 64px; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px var(--line) inset; display: grid; place-items: center; padding: 8px 10px; transition: transform .12s; }
+.stamp-grid .stamp { overflow: hidden; }
+.stamp-grid .stamp img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; min-height: 0; }
+.sticker-grid .sticker:hover, .stamp-grid .stamp:hover { transform: scale(1.06); }
+.sticker-grid .sticker:active, .stamp-grid .stamp:active { transform: scale(.95); }

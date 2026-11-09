@@ -13,7 +13,7 @@ thread_local! {
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
 const POPS: [&str; 10] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
-const MODALS: [&str; 11] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
+const MODALS: [&str; 12] = ["modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -372,6 +372,8 @@ impl App {
             "insert-menu" => self.open_popover("pop-insert", src),
             "insert-table" => self.open_table_dialog(),
             "insert-plot" => self.open_plot_dialog(),
+            "sticker-menu" => self.open_sticker_dialog(),
+            "sticker" => self.insert_sticker(arg),
             "insert-date" => {
                 self.close_popovers();
                 self.insert_date(arg == "short");

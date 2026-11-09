@@ -79,8 +79,21 @@ impl App {
         let (pw, ph) = ed.nb.page_size(i);
         let (cx, cy) = ed.to_nb(ed.vw * 0.5, ed.vh * 0.45);
         let (cx, cy) = ed.nb_to_page(i, cx, cy);
-        let x0 = (cx as f32 - w * 0.5).clamp(0.0, (pw - w).max(0.0));
-        let y0 = (cy as f32 - h * 0.5).clamp(0.0, (ph - h).max(0.0));
+        let (mut x0, mut y0) = (cx as f32 - w * 0.5, cy as f32 - h * 0.5);
+        // Liegt dort schon ein gerade Eingefügtes, versetzt daneben (Kaskade statt Stapel)
+        for _ in 0..12 {
+            let taken = ed.nb.pages[i].items.iter().any(|it| {
+                let (mx, my) = it.bbox().center();
+                (mx - (x0 + w * 0.5)).abs() < 10.0 && (my - (y0 + h * 0.5)).abs() < 10.0
+            });
+            if !taken {
+                break;
+            }
+            x0 += 26.0;
+            y0 += 26.0;
+        }
+        let x0 = x0.clamp(0.0, (pw - w).max(0.0));
+        let y0 = y0.clamp(0.0, (ph - h).max(0.0));
         let xf = crate::engine::Xf::translate(x0, y0);
         let base = ed.nb.pages[i].max_order();
         let mut items = Vec::new();
