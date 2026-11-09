@@ -103,6 +103,11 @@ fn pct(v: f32) -> String {
 impl App {
     /// Zentrale Aktionsverteilung.
     pub fn action(&mut self, act: &str, arg: &str, src: &web_sys::Element) {
+        self.action_inner(act, arg, src);
+        self.sync_ui_rects();
+    }
+
+    fn action_inner(&mut self, act: &str, arg: &str, src: &web_sys::Element) {
         let n = arg.parse::<usize>().unwrap_or(0);
         match act {
             // ----- Bibliothek -----

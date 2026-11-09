@@ -71,6 +71,8 @@ public class MainActivity extends Activity {
     private final Set<Integer> forwarded = new HashSet<>();
     /** Zeiger (Finger/Handballen), die verworfen werden. */
     private final Set<Integer> blocked = new HashSet<>();
+    /** Bedienflächen (Leisten, Menüs) in CSS-Pixeln: x, y, w, h, … – dort werden Finger nie blockiert. */
+    private volatile float[] uiRects = new float[0];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -176,6 +178,20 @@ public class MainActivity extends Activity {
         return penInRange || penTouching || SystemClock.uptimeMillis() - penLastSeen < palmLockMs;
     }
 
+    /** Liegt der Punkt (Fensterpixel) auf einer Bedienfläche? */
+    private boolean onUi(MotionEvent e, int i) {
+        float d = getResources().getDisplayMetrics().density;
+        float x = e.getX(i) / d;
+        float y = e.getY(i) / d;
+        float[] r = uiRects;
+        for (int k = 0; k + 3 < r.length; k += 4) {
+            if (x >= r[k] && x <= r[k] + r[k + 2] && y >= r[k + 1] && y <= r[k + 1] + r[k + 3]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Sehr große Auflagefläche = Handballen. */
     private boolean isPalm(MotionEvent e, int i) {
         float density = getResources().getDisplayMetrics().density;
@@ -225,7 +241,7 @@ public class MainActivity extends Activity {
                     // Handballen/Finger lagen schon auf → in der WebView abbrechen
                     cancelForwarded(e, ai);
                 }
-            } else if (palmLocked() || isPalm(e, ai)) {
+            } else if (!onUi(e, ai) && (palmLocked() || isPalm(e, ai))) {
                 blocked.add(e.getPointerId(ai));
             }
         }
@@ -633,6 +649,32 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setPalmLock(double seconds) {
             palmLockMs = (long) Math.max(0, Math.min(10_000, seconds * 1000));
+        }
+
+        /** Bedienflächen der Oberfläche: "x,y,w,h;x,y,w,h…" in CSS-Pixeln. */
+        @JavascriptInterface
+        public void setUiRects(String spec) {
+            List<Float> v = new ArrayList<>();
+            if (spec != null) {
+                for (String part : spec.split(";")) {
+                    String[] n = part.split(",");
+                    if (n.length != 4) {
+                        continue;
+                    }
+                    try {
+                        for (String x : n) {
+                            v.add(Float.parseFloat(x));
+                        }
+                    } catch (NumberFormatException ignored) {
+                        return;
+                    }
+                }
+            }
+            float[] r = new float[v.size()];
+            for (int i = 0; i < r.length; i++) {
+                r[i] = v.get(i);
+            }
+            uiRects = r;
         }
 
         @JavascriptInterface

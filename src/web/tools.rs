@@ -377,11 +377,12 @@ impl App {
             "sel-delete" => ed.delete_selection(),
             "sel-copy" => {
                 ed.copy_selection();
-                self.toast("Kopiert");
+                self.toast("Kopiert – mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
             }
             "sel-cut" => {
                 ed.copy_selection();
                 ed.delete_selection();
+                self.toast("Ausgeschnitten – mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
             }
             "sel-dup" => ed.duplicate_selection(),
             "sel-color" => {

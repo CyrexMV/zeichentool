@@ -169,6 +169,40 @@ impl App {
         }
     }
 
+    /// Meldet der Android-App alle Bedienflächen (Leisten, Menüs, Dialoge), damit der
+    /// Handballen-Filter Finger dort nie blockiert. Format: "x,y,w,h;…" in CSS-Pixeln.
+    pub fn sync_ui_rects(&mut self) {
+        let Some(bridge) = android_bridge() else { return };
+        let mut parts: Vec<String> = Vec::new();
+        let vw = window().inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(4000.0);
+        let vh = window().inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(4000.0);
+        let full = self.screen != Screen::Editor
+            || dom().query_selector(".modal:not(.hidden), .popover:not(.hidden)").ok().flatten().is_some()
+            || self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false);
+        if full {
+            parts.push(format!("0,0,{},{}", vw, vh));
+        } else if let Ok(list) = dom().query_selector_all(".ed-left, .toolbar, .ed-right, .page-pill, #sel-menu:not(.hidden), #paste-btn:not(.hidden), #navigator.open") {
+            for i in 0..list.length() {
+                let Some(n) = list.get(i) else { continue };
+                let el: web_sys::Element = n.unchecked_into();
+                let r = el.get_bounding_client_rect();
+                if r.width() > 0.0 && r.height() > 0.0 {
+                    parts.push(format!("{:.0},{:.0},{:.0},{:.0}", r.left() - 6.0, r.top() - 6.0, r.width() + 12.0, r.height() + 12.0));
+                }
+            }
+        }
+        let s = parts.join(";");
+        if s == self.last_ui_rects {
+            return;
+        }
+        self.last_ui_rects = s.clone();
+        if let Ok(f) = js_sys::Reflect::get(&bridge, &"setUiRects".into()) {
+            if let Some(f) = f.dyn_ref::<js_sys::Function>() {
+                let _ = f.call1(&bridge, &JsValue::from_str(&s));
+            }
+        }
+    }
+
     pub fn sync_native_settings(&self) {
         if let Some(bridge) = android_bridge() {
             if let Ok(f) = js_sys::Reflect::get(&bridge, &"setPalmLock".into()) {

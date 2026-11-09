@@ -371,6 +371,7 @@ pub struct App {
     pub unsaved: bool,
     pub last_change: f64,
     pub dark: bool,
+    pub last_ui_rects: String,
 }
 
 impl App {
@@ -411,6 +412,7 @@ impl App {
             unsaved: false,
             last_change: 0.0,
             dark: false,
+            last_ui_rects: String::new(),
         }
     }
 
@@ -459,6 +461,7 @@ impl App {
             self.position_overlays();
             self.update_pill();
         }
+        self.sync_ui_rects();
         if again {
             self.request_frame();
         }

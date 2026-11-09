@@ -70,7 +70,8 @@ pub fn bind_input() {
         with_app(|a| a.pointer_down(&e));
     });
     on(&stage, "pointermove", |e: PointerEvent| {
-        if !is_canvas_target(&e) && e.buttons() == 0 {
+        // Bewegungen über Leisten/Menüs nur für laufende Aktionen (Zeigerfang) auswerten
+        if !is_canvas_target(&e) && !is_captured(&e) {
             return;
         }
         with_app(|a| a.pointer_move(&e));
@@ -134,6 +135,14 @@ pub fn bind_input() {
     });
     let _ = js_sys::Reflect::set(&w, &"zeichentoolPenState".into(), state.as_ref());
     state.forget();
+}
+
+/// Ereignis eines Zeigers, den die Zeichenfläche gerade „gefangen“ hat (laufender Strich)?
+fn is_captured(e: &PointerEvent) -> bool {
+    e.target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+        .map(|el| el.id() == "editor")
+        .unwrap_or(false)
 }
 
 /// Nur Ereignisse auf der Zeichenfläche (nicht auf Leisten/Menüs) steuern das Zeichnen.
@@ -231,6 +240,10 @@ impl App {
         let mine = self.op_pointer() == Some(id);
         if contact {
             if self.op_pointer().is_none() {
+                // Tippen auf Knöpfe/Menüs (Stift zittert leicht) darf keinen Strich beginnen
+                if !is_canvas_target(e) {
+                    return;
+                }
                 let _ = el("editor").set_pointer_capture(id);
                 self.hide_cursor();
                 self.begin_op(id, sx, sy, e.pressure());
