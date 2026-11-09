@@ -34,27 +34,38 @@
       doc.destroy();
       return r;
     },
-    /** Rendert alle Seiten (längste Kante `maxPx`) als JPEG; `progress(i, n)` nach jeder Seite. */
+    /** Rendert alle Seiten (längste Kante `maxPx`) als JPEG; `progress(i, n)` nach jeder Seite.
+     *  Mehrere Seiten laufen gleichzeitig: während eine Seite gezeichnet wird, werden andere schon
+     *  im Hintergrund zu JPEG kodiert bzw. vom PDF-Worker vorbereitet. */
     async render(bytes, maxPx, progress) {
       const lib = await loadPdfJs();
       const doc = await lib.getDocument({ data: bytes.slice() }).promise;
-      const out = [];
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const vp1 = page.getViewport({ scale: 1 });
-        const scale = maxPx / Math.max(vp1.width, vp1.height);
-        const vp = page.getViewport({ scale });
-        canvas.width = Math.round(vp.width);
-        canvas.height = Math.round(vp.height);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        out.push({ w: vp1.width, h: vp1.height, jpeg: await canvasJpeg(canvas, 0.86) });
-        page.cleanup();
-        if (progress) progress(i, doc.numPages);
+      const n = doc.numPages;
+      const out = new Array(n);
+      const cores = navigator.hardwareConcurrency || 4;
+      const lanes = Math.max(2, Math.min(4, cores - 1, n));
+      let next = 1, done = 0;
+      async function lane() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        while (next <= n) {
+          const i = next++;
+          const page = await doc.getPage(i);
+          const vp1 = page.getViewport({ scale: 1 });
+          const scale = maxPx / Math.max(vp1.width, vp1.height);
+          const vp = page.getViewport({ scale });
+          canvas.width = Math.round(vp.width);
+          canvas.height = Math.round(vp.height);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
+          out[i - 1] = { w: vp1.width, h: vp1.height, jpeg: await canvasJpeg(canvas, 0.8) };
+          page.cleanup();
+          done++;
+          if (progress) progress(done, n);
+        }
       }
+      await Promise.all(Array.from({ length: lanes }, lane));
       doc.destroy();
       return out;
     },

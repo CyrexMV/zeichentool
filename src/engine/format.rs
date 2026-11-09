@@ -10,9 +10,10 @@ use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 7;
+const VERSION: u32 = 8;
 
-struct W(Vec<u8>);
+/// Schreiber: Hauptteil (wird komprimiert) und Bilddaten (bleiben roh – JPEG/PNG sind schon komprimiert).
+struct W(Vec<u8>, Vec<u8>);
 
 impl W {
     fn u8(&mut self, v: u8) {
@@ -33,6 +34,11 @@ impl W {
     }
     fn str(&mut self, s: &str) {
         self.bytes(s.as_bytes());
+    }
+    /// Bilddaten: Länge im Hauptteil, Inhalt im unkomprimierten Bildbereich.
+    fn blob(&mut self, b: &[u8]) {
+        self.u32(b.len() as u32);
+        self.1.extend_from_slice(b);
     }
     fn rgba(&mut self, c: [u8; 4]) {
         self.0.extend_from_slice(&c);
@@ -83,7 +89,7 @@ impl<'a> R<'a> {
 }
 
 pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
-    let mut w = W(Vec::new());
+    let mut w = W(Vec::new(), Vec::new());
     w.str(&nb.id);
     w.str(&nb.title);
     w.u8(nb.cover);
@@ -115,7 +121,7 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
         match &p.bg {
             Some(i) => {
                 w.u8(if p.bg_paper { 2 } else { 1 });
-                w.bytes(&i.png);
+                w.blob(&i.png);
             }
             None => w.u8(0),
         }
@@ -180,7 +186,7 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
                     w.f32(i.y);
                     w.f32(i.w);
                     w.f32(i.h);
-                    w.bytes(&i.png);
+                    w.blob(&i.png);
                 }
                 Content::Node(n) => {
                     w.f32(n.x);
@@ -209,10 +215,14 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
         w.u32(c.wrong);
         w.f64(c.due);
     }
-    let mut out = Vec::with_capacity(w.0.len() / 3 + 16);
+    // v8: [MAGIC][Version][Länge Hauptteil][Hauptteil komprimiert][Bilddaten roh]
+    let body = compress_to_vec(&w.0, 3);
+    let mut out = Vec::with_capacity(body.len() + w.1.len() + 16);
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&VERSION.to_le_bytes());
-    out.extend_from_slice(&compress_to_vec(&w.0, 3));
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&body);
+    out.extend_from_slice(&w.1);
     out
 }
 
@@ -224,8 +234,26 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
     if version > VERSION {
         return Err("Notizbuch stammt aus einer neueren Version".into());
     }
-    let body = decompress_to_vec(&bytes[8..]).map_err(|_| BROKEN.to_string())?;
+    let (body, blobs) = if version >= 8 {
+        let n = bytes.get(8..12).map(|b| u32::from_le_bytes(b.try_into().unwrap()) as usize).ok_or(BROKEN)?;
+        let end = 12usize.checked_add(n).filter(|e| *e <= bytes.len()).ok_or(BROKEN)?;
+        (decompress_to_vec(&bytes[12..end]).map_err(|_| BROKEN.to_string())?, &bytes[end..])
+    } else {
+        (decompress_to_vec(&bytes[8..]).map_err(|_| BROKEN.to_string())?, &bytes[..0])
+    };
     let mut r = R::new(&body);
+    let mut blob_pos = 0usize;
+    // Bilddaten: ab v8 aus dem rohen Bildbereich, vorher aus dem Hauptteil
+    let mut read_blob = |r: &mut R| -> Result<Vec<u8>, String> {
+        if version < 8 {
+            return Ok(r.bytes()?.to_vec());
+        }
+        let n = r.u32()? as usize;
+        let end = blob_pos.checked_add(n).filter(|e| *e <= blobs.len()).ok_or(BROKEN)?;
+        let v = blobs[blob_pos..end].to_vec();
+        blob_pos = end;
+        Ok(v)
+    };
     let id = r.str()?;
     let title = r.str()?;
     let cover = r.u8()?;
@@ -267,7 +295,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
             let kind = r.u8()?;
             if kind >= 1 {
                 bg_paper = kind == 2;
-                let png = r.bytes()?.to_vec();
+                let png = read_blob(&mut r)?;
                 let key = hash_bytes(&png);
                 bg = Some(ImageItem { x: 0.0, y: 0.0, w: format.w, h: format.h, png: Rc::new(png), key });
             }
@@ -319,7 +347,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                 1 => Content::Text(TextBox { x: r.f32()?, y: r.f32()?, w: r.f32()?, size: r.f32()?, color: r.rgba()?, bold: r.u8()? != 0, text: r.str()? }),
                 2 => {
                     let (x, y, w, h) = (r.f32()?, r.f32()?, r.f32()?, r.f32()?);
-                    let png = r.bytes()?.to_vec();
+                    let png = read_blob(&mut r)?;
                     let key = hash_bytes(&png);
                     Content::Image(ImageItem { x, y, w, h, png: Rc::new(png), key })
                 }
@@ -507,7 +535,7 @@ pub fn is_backup(bytes: &[u8]) -> bool {
 }
 
 pub fn save_backup(b: &Backup) -> Vec<u8> {
-    let mut w = W(Vec::new());
+    let mut w = W(Vec::new(), Vec::new());
     w.0.extend_from_slice(BACKUP_MAGIC);
     w.u32(1);
     w.f64(b.created);
