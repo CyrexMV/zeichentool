@@ -276,6 +276,18 @@ impl Editor {
         self.dirty = true;
     }
 
+    /// Doppeltipp: Ist hineingezoomt, wird auf Seitenbreite eingepasst (der getippte Punkt
+    /// bleibt an seiner Stelle). Bei Seitenbreite wird die getippte Seite ganz eingepasst.
+    pub fn fit_at(&mut self, px: f64, py: f64) {
+        if (self.view.zoom - 1.0).abs() > 0.02 {
+            self.bmps.clear();
+            self.zoom_about(1.0, px, py);
+        } else {
+            let i = self.hit_page(px, py, GAP).map(|h| h.0).unwrap_or(self.cur_page);
+            self.fit_page(i);
+        }
+    }
+
     pub fn goto_page(&mut self, i: usize) {
         let s = self.view.s();
         self.view.sy = self.page_top(i.min(self.nb.pages.len() - 1)) - self.top_pad / s;

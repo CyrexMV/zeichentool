@@ -1,5 +1,5 @@
 // Service Worker: macht das Zeichentool offline nutzbar (installierte App).
-const VERSION = 'dev';
+const VERSION = '20261109194936';
 const CACHE = 'zeichentool-' + VERSION;
 const FILES = [
   './',

@@ -675,7 +675,21 @@ impl App {
                     match g.max_fingers {
                         1 => {
                             let (x, y) = client_xy(e);
-                            self.tap_link(x, y);
+                            let t = now();
+                            let double = self
+                                .last_tap
+                                .take()
+                                .is_some_and(|(t0, x0, y0)| t - t0 < 380.0 && (x - x0).hypot(y - y0) < 48.0);
+                            if self.tap_link(x, y) {
+                                // Link gefolgt – kein Doppeltipp.
+                            } else if double {
+                                if let Some(ed) = &mut self.ed {
+                                    ed.fit_at(x, y);
+                                }
+                                self.after_view_change();
+                            } else {
+                                self.last_tap = Some((t, x, y));
+                            }
                         }
                         2 => self.undo(),
                         3 => self.redo(),

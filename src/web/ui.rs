@@ -372,6 +372,10 @@ impl App {
             "insert-menu" => self.open_popover("pop-insert", src),
             "insert-table" => self.open_table_dialog(),
             "insert-plot" => self.open_plot_dialog(),
+            "insert-date" => {
+                self.close_popovers();
+                self.insert_date(arg == "short");
+            }
             "plot-insert" => self.insert_plot(),
             a if a.starts_with("tbl-") => self.table_action(a, arg),
             "image" => {

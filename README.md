@@ -65,6 +65,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Zirkel** (Lineal-Menü): Mitte verschieben, an der Spitze den Radius aufziehen; am Kreis entlang zeichnet der Stift exakt
 - **Einfügen-Menü**: Bild, **Tabelle** (Spalten/Zeilen, farbige Kopfzeile) und **Funktionsgraph** (z. B. `x^2 - 2; 2sin(x)`,
   automatischer y-Bereich, Gitternetz) – als normale Elemente, mit dem Lasso verschieb- und skalierbar
+- **Datum einfügen** (Einfügen-Menü): heutiges Datum als Text, lang („Montag, 9. November 2026“) oder kurz („09.11.2026“)
+- **Doppeltipp zum Einpassen**: mit einem Finger doppelt tippen → zurück auf Seitenbreite; bei 100 % wird die getippte Seite ganz eingepasst
 - **Mindmap-Werkzeug**: Blasen anlegen, Äste hinzufügen, Text und Farbe ändern; beim Verschieben wandern die Verbindungen mit
 - **Tabs**: zuletzt geöffnete Notizbücher als Reiter, jede Ansicht bleibt erhalten
 - **Präsentationsmodus** (⋯ → „Präsentieren“): Vollbild, ganze Seite, wischen/tippen zum Blättern, Stift = Laserpointer

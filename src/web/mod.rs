@@ -417,6 +417,8 @@ pub struct App {
     pub momentum: Option<Momentum>,
     pub pen_in_range: bool,
     pub last_pen_time: f64,
+    /// Letzter Ein-Finger-Tipp (Zeit, x, y) für Doppeltipp zum Einpassen.
+    pub last_tap: Option<(f64, f64, f64)>,
     pub pen_barrel: bool,
     pub last_barrel_press: f64,
     pub badge_on: bool,
@@ -504,6 +506,7 @@ impl App {
             momentum: None,
             pen_in_range: false,
             last_pen_time: -1e9,
+            last_tap: None,
             pen_barrel: false,
             last_barrel_press: -1e9,
             badge_on: false,

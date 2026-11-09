@@ -101,6 +101,27 @@ impl App {
 
     // ---------------- Tabelle ----------------
 
+    /// Heutiges Datum als Textfeld einfügen – lang („Montag, 9. November 2026“) oder kurz („09.11.2026“).
+    pub fn insert_date(&mut self, short: bool) {
+        if self.ed.is_none() {
+            return;
+        }
+        let d = js_sys::Date::new_0();
+        let (y, m, day) = (d.get_full_year(), d.get_month() as usize, d.get_date());
+        let text = if short {
+            format!("{day:02}.{:02}.{y}", m + 1)
+        } else {
+            const DAYS: [&str; 7] = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+            format!("{}, {day}. {} {y}", DAYS[d.get_day() as usize % 7], crate::engine::cal::MONTHS[m % 12])
+        };
+        let size = self.prefs.text_size.max(10.0);
+        let w = (text.chars().count() as f32 * size * 0.54 + 14.0).min(560.0);
+        let h = size * 1.5;
+        let color = self.ink_color();
+        let tb = crate::engine::TextBox { x: 0.0, y: 0.0, w, size, color, bold: false, text };
+        self.insert_contents(vec![Content::Text(tb)], w, h);
+    }
+
     pub fn open_table_dialog(&mut self) {
         self.open_modal("modal-table");
         self.refresh_table_dialog();
