@@ -5,6 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Versionsstempel (wird in den Einstellungen angezeigt)
+ZT_BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo dev) · $(date -u +%d.%m.%Y)"
+export ZT_BUILD
 cargo build --release --target wasm32-unknown-unknown
 wasm-bindgen --target web --no-typescript --out-dir web/pkg \
   target/wasm32-unknown-unknown/release/zeichentool.wasm

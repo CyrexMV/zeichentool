@@ -1240,6 +1240,13 @@ impl App {
     }
 
     pub fn refresh_settings(&mut self) {
+        let mut v = option_env!("ZT_BUILD").unwrap_or("Entwicklung").to_string();
+        if let Some(b) = super::storage::android_bridge() {
+            if let Some(n) = js_sys::Reflect::get(&b, &"version".into()).ok().and_then(|f| f.dyn_into::<js_sys::Function>().ok()).and_then(|f| f.call0(&b).ok()).and_then(|x| x.as_string()) {
+                v = format!("{} · App {}", v, n);
+            }
+        }
+        set_text("set-version", &v);
         let s = &self.settings;
         Self::mark_seg("#set-theme", s.theme.code());
         input_el("set-pressure").set_checked(s.pressure);
