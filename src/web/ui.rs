@@ -13,7 +13,7 @@ thread_local! {
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
 const POPS: [&str; 6] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash"];
-const MODALS: [&str; 7] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats"];
+const MODALS: [&str; 8] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -218,6 +218,17 @@ impl App {
                 }
             }
             "sel-card" => self.selection_to_card(),
+            "color-custom" => self.open_color_picker(),
+            "cp-ok" => {
+                self.cp_ok();
+                self.save_settings();
+            }
+            "cp-recent" => self.cp_pick(arg),
+            "cp-reset" => {
+                let c = self.cp_old;
+                self.cp = c.to_hsv();
+                self.cp_refresh(true);
+            }
             "ed-cover" => {
                 self.close_popovers();
                 if let Some(ed) = &self.ed {
@@ -541,6 +552,10 @@ impl App {
                     self.save_settings();
                 }
             }
+            "cp-hex" => {
+                self.cp_hex_input(value);
+                return;
+            }
             "pop-custom" => {
                 if let Some(c) = Color::from_hex(value) {
                     self.set_active_color(c);
@@ -765,7 +780,7 @@ impl App {
                 let active = c.eq_ignore_ascii_case(&hex4(cur));
                 s.push_str(&format!("<button class=\"sw{}\" data-act=\"pop-color\" data-arg=\"{c}\" style=\"background:{c}\"></button>", if active { " active" } else { "" }, c = c));
             }
-            s.push_str(&format!("<label class=\"sw custom\" title=\"Eigene Farbe\"><input type=\"color\" data-input=\"pop-custom\" value=\"{}\"></label><button class=\"sw pipette\" data-act=\"pipette\" title=\"Pipette – Farbe von der Seite übernehmen\"><svg><use href=\"#i-pipette\"/></svg></button></div>", hex4(cur)));
+            s.push_str(&format!("<button class=\"sw custom\" data-act=\"color-custom\" title=\"Eigene Farbe\" data-cur=\"{}\"></button><button class=\"sw pipette\" data-act=\"pipette\" title=\"Pipette – Farbe von der Seite übernehmen\"><svg><use href=\"#i-pipette\"/></svg></button></div>", hex4(cur)));
             s
         };
         let slider = |min: f32, max: f32, step: f32, v: f32, label: &str| -> String {

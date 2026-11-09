@@ -1,5 +1,6 @@
 //! Browser-Anbindung: Bibliothek, Editor, S-Pen/Touch-Eingabe, Rendering, Speicherung.
 
+mod colorpick;
 mod docs;
 mod editor;
 mod input;
@@ -441,6 +442,11 @@ pub struct App {
     pub stats: Vec<stats::Day>,
     /// Zoom-Rahmen wird mit dem Finger gezogen: (Zeiger, Start x, Start y, (Rahmen x, y, Seite))
     pub zw_drag: Option<ZwDrag>,
+    /// Farbwähler: Farbton, Sättigung, Helligkeit + Ausgangsfarbe
+    pub cp: (f32, f32, f32),
+    pub cp_old: Color,
+    /// zuletzt gewählte eigene Farben
+    pub recent_colors: Vec<String>,
     /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
     pub study_from_lib: bool,
 }
@@ -497,6 +503,9 @@ impl App {
             show_trash: false,
             stats: Vec::new(),
             zw_drag: None,
+            cp: (0.0, 0.0, 0.0),
+            cp_old: Color::WHITE,
+            recent_colors: Vec::new(),
             study_from_lib: false,
         }
     }
@@ -600,6 +609,7 @@ pub fn start() {
     APP.with(|cell| *cell.borrow_mut() = Some(app));
     ui::bind_ui();
     input::bind_input();
+    colorpick::bind_color_picker();
     with_app(|a| {
         a.apply_theme();
         a.refresh_toolbar();

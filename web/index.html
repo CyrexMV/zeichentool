@@ -405,6 +405,24 @@
   </div>
 </section>
 
+<!-- Farbwähler -->
+<div id="modal-color" class="modal hidden">
+  <div class="modal-card glass color-card">
+    <div class="modal-head"><h2>Eigene Farbe</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div id="cp-sv" class="cp-sv"><span id="cp-sv-knob" class="cp-knob"></span></div>
+    <div id="cp-hue" class="cp-hue"><span id="cp-hue-knob" class="cp-knob"></span></div>
+    <div class="cp-row">
+      <button class="cp-preview" data-act="cp-reset" title="Zurück zur bisherigen Farbe"><i id="cp-old"></i><i id="cp-new"></i></button>
+      <label class="cp-hex"><span>#</span><input id="cp-hex" data-input="cp-hex" maxlength="7" autocomplete="off" spellcheck="false" inputmode="text"></label>
+    </div>
+    <div id="cp-recent-wrap"><h4>Zuletzt verwendet</h4><div id="cp-recent" class="cp-recent"></div></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="cp-ok">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Statistik -->
 <div id="modal-stats" class="modal hidden">
   <div class="modal-card glass narrow stats">
