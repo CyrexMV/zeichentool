@@ -264,6 +264,7 @@ impl App {
         if let Some(ed) = &mut self.ed {
             ed.nav_open = nav_open;
         }
+        self.restore_clipboard();
         self.layout_panes();
         if let Some(ed) = &mut self.ed {
             ed.fit_page(0);

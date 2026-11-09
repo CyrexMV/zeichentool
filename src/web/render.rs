@@ -610,14 +610,32 @@ impl Editor {
                 ctx.set_line_width(1.5);
                 let dash = js_sys::Array::of2(&6.0.into(), &5.0.into());
                 let _ = ctx.set_line_dash(&dash);
-                ctx.stroke_rect(x0 - 6.0, y0 - 6.0, x1 - x0 + 12.0, y1 - y0 + 12.0);
-                let _ = ctx.set_line_dash(&js_sys::Array::new());
-                ctx.set_fill_style_str("#ffffff");
-                ctx.begin_path();
-                let _ = ctx.arc(x1 + 6.0, y1 + 6.0, 9.0, 0.0, std::f64::consts::TAU);
-                ctx.fill();
-                ctx.set_line_width(2.5);
-                ctx.stroke();
+                if sel.is_region() && sel.poly.len() > 2 {
+                    // Bereich (z. B. PDF): eingekreiste Form zeigen, kein Griff zum Skalieren
+                    ctx.set_fill_style_str("rgba(109,92,255,.07)");
+                    ctx.begin_path();
+                    for (k, &(px, py)) in sel.poly.iter().enumerate() {
+                        let (sx, sy) = self.page_to_screen(i, px, py);
+                        if k == 0 {
+                            ctx.move_to(sx, sy);
+                        } else {
+                            ctx.line_to(sx, sy);
+                        }
+                    }
+                    ctx.close_path();
+                    ctx.fill();
+                    ctx.stroke();
+                    let _ = ctx.set_line_dash(&js_sys::Array::new());
+                } else {
+                    ctx.stroke_rect(x0 - 6.0, y0 - 6.0, x1 - x0 + 12.0, y1 - y0 + 12.0);
+                    let _ = ctx.set_line_dash(&js_sys::Array::new());
+                    ctx.set_fill_style_str("#ffffff");
+                    ctx.begin_path();
+                    let _ = ctx.arc(x1 + 6.0, y1 + 6.0, 9.0, 0.0, std::f64::consts::TAU);
+                    ctx.fill();
+                    ctx.set_line_width(2.5);
+                    ctx.stroke();
+                }
                 ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
             }
         }

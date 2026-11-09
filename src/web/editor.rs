@@ -81,6 +81,15 @@ pub struct Selection {
     pub page: u32,
     pub ids: Vec<u32>,
     pub bbox: Rect,
+    /// Lasso-Umriss (Seitenkoordinaten); leer, wenn nicht mit dem Lasso ausgewählt
+    pub poly: Vec<(f32, f32)>,
+}
+
+impl Selection {
+    /// Nur ein Bereich (z. B. aus einem importierten PDF), keine Elemente.
+    pub fn is_region(&self) -> bool {
+        self.ids.is_empty()
+    }
 }
 
 pub struct TextEdit {

@@ -863,3 +863,6 @@ b.due { color: #ff7a1a; }
 .folder-card.drop-over, #lib-crumb .drop-over { transform: scale(1.06); background: rgba(109,92,255,.16) !important; outline: 2px solid var(--accent) !important; }
 #lib-trash-btn.drop-over { transform: scale(1.08); background: color-mix(in srgb, var(--danger) 18%, var(--surface)) !important; color: var(--danger); }
 #lib-grid .card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Lasso-Bereich ohne Elemente (z. B. PDF): nur Kopieren, Duplizieren, Lernkarte, Link */
+.sel-menu.region .sel-colors, .sel-menu.region .sep, .sel-menu.region [data-act=sel-align], .sel-menu.region [data-act=sel-pin], .sel-menu.region [data-act=sel-fill], .sel-menu.region [data-act=sel-cut], .sel-menu.region [data-act=sel-delete], .sel-menu.region [data-act=sel-copy-img] { display: none; }

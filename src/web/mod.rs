@@ -1,5 +1,6 @@
 //! Browser-Anbindung: Bibliothek, Editor, S-Pen/Touch-Eingabe, Rendering, Speicherung.
 
+mod clip;
 mod colorpick;
 mod docs;
 mod editor;
@@ -419,6 +420,8 @@ pub struct App {
     pub ed: Option<Editor>,
     /// zweiter (inaktiver) Bereich der Split-Ansicht
     pub ed2: Option<Editor>,
+    /// Zwischenablage für alle Notizbücher
+    pub clip: Vec<crate::engine::Item>,
     /// aktiver Bereich ist der linke
     pub active_left: bool,
     /// Seitenleiste angedockt lassen (gemerkt)
@@ -523,6 +526,7 @@ impl App {
             hold_eraser: false,
             ed: None,
             ed2: None,
+            clip: Vec::new(),
             active_left: true,
             nav_pinned: true,
             images: HashMap::new(),

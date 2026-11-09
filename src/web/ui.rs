@@ -446,7 +446,7 @@ impl App {
                 }
                 self.after_view_change();
             }
-            "sel-copy" | "sel-cut" | "sel-dup" | "sel-delete" | "sel-color" | "sel-fill" | "paste" => self.selection_action(act, arg),
+            "sel-copy" | "sel-cut" | "sel-dup" | "sel-delete" | "sel-color" | "sel-fill" | "paste" | "sel-copy-img" => self.selection_action(act, arg),
 
             // ----- Mehr-Menü -----
             "export-pdf" => {

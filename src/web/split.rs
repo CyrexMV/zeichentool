@@ -107,8 +107,10 @@ impl App {
             ed.dirty = true;
         }
         self.save_now();
+        self.remember_clipboard();
         let nav_open = self.ed.as_ref().is_some_and(|e| e.nav_open);
         std::mem::swap(&mut self.ed, &mut self.ed2);
+        self.restore_clipboard();
         self.active_left = !self.active_left;
         if let Some(ed) = &mut self.ed {
             ed.nav_open = nav_open;

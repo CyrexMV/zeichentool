@@ -106,7 +106,7 @@ impl App {
         let bbox = items.iter().fold(Rect::EMPTY, |r, it| r.union(&it.bbox()));
         ed.nb.pages[i].insert(items.clone());
         ed.push(Action::Items { page, removed: vec![], added: items });
-        ed.selection = Some(super::editor::Selection { page, ids, bbox });
+        ed.selection = Some(super::editor::Selection { page, ids, bbox, poly: Vec::new() });
         self.tool = Tool::Lasso;
         self.refresh_toolbar();
         self.after_edit();

@@ -91,6 +91,9 @@ impl App {
             Tool::Lasso => {
                 // Auswahl verschieben/skalieren?
                 let pinned = ed.sel_pinned();
+                if ed.selection.as_ref().is_some_and(|s| s.is_region()) {
+                    ed.selection = None;
+                }
                 if let Some(sel) = &ed.selection {
                     if let Some(i) = ed.page_index(sel.page) {
                         let b = sel.bbox;
@@ -472,17 +475,38 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn selection_action(&mut self, act: &str, arg: &str) {
+        let region = self.ed.as_ref().and_then(|e| e.selection.as_ref()).is_some_and(|s| s.is_region());
+        // Bereich ohne Elemente (z. B. aus einem PDF) bzw. „Als Bild kopieren“: Ausschnitt als Bild
+        if act == "sel-copy-img" || (region && matches!(act, "sel-copy" | "sel-cut" | "sel-dup")) {
+            if !self.copy_region_image() {
+                self.toast("Ausschnitt konnte nicht kopiert werden");
+                return;
+            }
+            if act == "sel-dup" {
+                if let Some(ed) = &mut self.ed {
+                    if let Some((page, x, y)) = ed.selection.as_ref().map(|s| (s.page, s.bbox.x0 + 16.0, s.bbox.y0 + 16.0)) {
+                        ed.paste(page, x, y);
+                    }
+                }
+            } else {
+                self.toast("Ausschnitt als Bild kopiert – auch in einem anderen Notizbuch mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
+            }
+            self.after_edit();
+            return;
+        }
         let Some(ed) = &mut self.ed else { return };
         match act {
             "sel-delete" => ed.delete_selection(),
             "sel-copy" => {
                 ed.copy_selection();
-                self.toast("Kopiert – mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
+                self.remember_clipboard();
+                self.toast("Kopiert – auch in einem anderen Notizbuch mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
             }
             "sel-cut" => {
                 ed.copy_selection();
                 ed.delete_selection();
-                self.toast("Ausgeschnitten – mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
+                self.remember_clipboard();
+                self.toast("Ausgeschnitten – auch in einem anderen Notizbuch mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
             }
             "sel-dup" => ed.duplicate_selection(),
             "sel-fill" => {
@@ -526,6 +550,15 @@ impl App {
     pub fn position_overlays(&mut self) {
         self.position_mind_menu();
         self.refresh_pin_button();
+        // Bereich ohne Elemente: nur passende Knöpfe; „Als Bild kopieren“ nur bei Seiten mit Hintergrund
+        if let Some(ed) = &self.ed {
+            let (region, has_bg) = match &ed.selection {
+                Some(s) => (s.is_region(), ed.page_index(s.page).is_some_and(|i| ed.nb.pages[i].bg.is_some())),
+                None => (false, false),
+            };
+            set_class(&el("sel-menu"), "region", region);
+            show("sel-copy-img", has_bg && !region);
+        }
         let Some(ed) = &self.ed else { return };
         let menu = el("sel-menu");
         match (&ed.selection, &ed.op) {
@@ -659,7 +692,7 @@ impl App {
         page.insert([item.clone()]);
         let pid = page.id;
         ed.push(Action::Items { page: pid, removed: vec![], added: vec![item.clone()] });
-        ed.selection = Some(Selection { page: pid, ids: vec![id], bbox: item.bbox() });
+        ed.selection = Some(Selection { page: pid, ids: vec![id], bbox: item.bbox(), poly: Vec::new() });
         self.tool = Tool::Lasso;
         self.refresh_toolbar();
         self.after_edit();
@@ -772,7 +805,19 @@ impl Editor {
         if ids.is_empty() {
             (ids, bbox) = (pins, pbox);
         }
-        self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox }) };
+        // Nichts erfasst, aber die Seite hat einen Hintergrund (importiertes PDF, eigenes Papier):
+        // den eingekreisten Bereich selbst auswählen – zum Kopieren als Bild, als Lernkarte oder Link.
+        if ids.is_empty() && self.nb.pages[pi].bg.is_some() && poly.len() > 2 {
+            let mut r = Rect::EMPTY;
+            for &(x, y) in poly {
+                r.add(x, y);
+            }
+            let (pw, ph) = self.nb.page_size(pi);
+            let r = Rect::new(r.x0.max(0.0), r.y0.max(0.0), r.x1.min(pw), r.y1.min(ph));
+            self.selection = (r.w() > 4.0 && r.h() > 4.0).then(|| Selection { page, ids, bbox: r, poly: poly.to_vec() });
+            return;
+        }
+        self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox, poly: poly.to_vec() }) };
     }
 
     /// Enthält die Auswahl fixierte Elemente?
@@ -895,7 +940,7 @@ impl Editor {
         for i in &items {
             bbox = bbox.union(&i.bbox());
         }
-        self.selection = Some(Selection { page, ids: items.iter().map(|i| i.id).collect(), bbox });
+        self.selection = Some(Selection { page, ids: items.iter().map(|i| i.id).collect(), bbox, poly: Vec::new() });
         self.push(Action::Items { page, removed: vec![], added: items });
     }
 }

@@ -71,6 +71,9 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Seite drehen** (⋯ → „Seite drehen“): einzelne Seiten ins Querformat und zurück, der Inhalt dreht mit;
   auch im PDF-Export im Querformat
 - **Winkel messen** am Geodreieck: am Nullpunkt ansetzen und zeichnen – Winkel und Gegenwinkel werden live angezeigt
+- **Lasso in PDFs**: einen Bereich eines importierten PDFs einkreisen → als Bild kopieren (in Lasso-Form), als Lernkarte
+  oder Link nutzen; „Als Bild kopieren“ nimmt auch Handschrift samt PDF-Hintergrund mit
+- **Zwischenablage für alle Notizbücher**: Kopiertes lässt sich in jedem Notizbuch (auch in der Split-Ansicht) einfügen
 - **Notizbücher in Ordner ziehen** (Startbildschirm): Karte mit Stift/Maus ziehen bzw. mit dem Finger kurz halten und ziehen –
   auf einen Ordner, auf „Alle Notizbücher“ (heraus aus dem Ordner) oder auf den Papierkorb
 - **Seitenleiste links** (wie in einem PDF-Programm): Vorschaubilder aller Seiten, angedockt neben der Seite –
