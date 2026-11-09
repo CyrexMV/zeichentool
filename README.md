@@ -21,7 +21,10 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Jahresplaner** (Neues Notizbuch → „Jahresplaner 2026/2027“): Jahresübersicht, 12 Monate und alle Wochen mit echten
   Daten; Monats-Reiter, Mini-Monate, Kalenderwochen und ‹ › sind verlinkt – auch im exportierten PDF
 - **Gesperrte Notizbücher**: ⋯ → „Mit PIN sperren“; in der APK auch per Fingerabdruck entsperrbar
-- **Papierkorb**: Gelöschtes bleibt 30 Tage wiederherstellbar, danach wird es automatisch entfernt
+- **Papierkorb** (Knopf unten links): Gelöschtes bleibt 30 Tage wiederherstellbar, danach wird es automatisch entfernt
+- **Komplett-Backup** (Einstellungen → Daten & Backup): alle Notizbücher, Sets, Vorlagen, Ordner, Statistik und
+  Einstellungen in einer `.zbackup`-Datei – speichern, teilen (z. B. Google Drive) und zusammenführend wiederherstellen
+- **Teilen** (⋯ → „Teilen“): Seite als Bild/PDF, Notizbuch als PDF oder .znote direkt an WhatsApp, Mail, Drive …
 
 **Notizbuch**
 - Mehrere Seiten, vertikal durchscrollen (mit Schwung), Seitenübersicht mit Vorschaubildern, Lesezeichen
@@ -44,6 +47,9 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Formen**: Werkzeug oder Stift am Strichende halten → Linie, Kreis, Ellipse, Dreieck, Rechteck, Vieleck;
   **Formen füllen** (hell oder voll) beim Zeichnen oder nachträglich per Lasso → Füllen
 - **Pipette**: Farbe von der Seite übernehmen (Werkzeug-Optionen → Pipette)
+- **Stift-Sets**: Stiftart, Farbe und Stärke als Set speichern und mit einem Tipp wechseln
+- **Lasso → Ausrichten**: links/Mitte/rechts, oben/mittig/unten, gleichmäßig verteilen (Zusammenhängendes bleibt zusammen)
+- **Seiten-Schieberegler** am rechten Rand: durch das Notizbuch ziehen, mit Seitenanzeige
 - **Zoom-Fenster**: vergrößerter Schreibstreifen unten, der Rahmen rückt am rechten Rand weiter (↵ = neue Zeile)
 - **Lasso**: einkreisen → verschieben, skalieren, umfärben, kopieren, ausschneiden, duplizieren, löschen, einfügen
 - **Text**-Felder (Größe, Farbe, fett), **Bilder** einfügen, **Laserpointer** zum Präsentieren
@@ -145,6 +151,8 @@ src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   tabs.rs       Tabs und Präsentationsmodus
   marks.rs      Seitenmarkierungen und Schlagwörter
   colorpick.rs  eigener Farbwähler
+  pensets.rs    Stift-Sets
+  scrubber.rs   Seiten-Schieberegler
 web/          index.html, style.css, Manifest, Icons, Service Worker
 web/vendor/pdfjs/  pdf.js von Mozilla (Apache-2.0, siehe LICENSE) für den PDF-Import
 android/      Android-Hülle (WebView) mit nativem S-Pen-/Handballen-Filter

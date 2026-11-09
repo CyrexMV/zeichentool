@@ -478,6 +478,60 @@ pub fn load_library(s: &str) -> Vec<NoteMeta> {
 }
 
 // ---------------------------------------------------------------------------
+// Komplett-Backup
+// ---------------------------------------------------------------------------
+
+const BACKUP_MAGIC: &[u8; 4] = b"ZBK1";
+
+/// Komplett-Backup: alle Notizbücher (als .znote-Daten) + Ordner, Lernstatistik, Einstellungen.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Backup {
+    pub created: f64,
+    pub notebooks: Vec<Vec<u8>>,
+    pub folders: Vec<String>,
+    pub stats: String,
+    pub settings: String,
+}
+
+pub fn is_backup(bytes: &[u8]) -> bool {
+    bytes.starts_with(BACKUP_MAGIC)
+}
+
+pub fn save_backup(b: &Backup) -> Vec<u8> {
+    let mut w = W(Vec::new());
+    w.0.extend_from_slice(BACKUP_MAGIC);
+    w.u32(1);
+    w.f64(b.created);
+    w.u32(b.notebooks.len() as u32);
+    for nb in &b.notebooks {
+        w.bytes(nb);
+    }
+    w.str(&b.folders.join("\n"));
+    w.str(&b.stats);
+    w.str(&b.settings);
+    w.0
+}
+
+pub fn load_backup(bytes: &[u8]) -> Result<Backup, String> {
+    if !is_backup(bytes) {
+        return Err("Keine Backup-Datei".into());
+    }
+    let mut r = R::new(&bytes[4..]);
+    let version = r.u32()?;
+    if version > 1 {
+        return Err("Backup stammt aus einer neueren Version".into());
+    }
+    let created = r.f64()?;
+    let n = r.u32()? as usize;
+    let mut notebooks = Vec::with_capacity(n.min(100_000));
+    for _ in 0..n {
+        notebooks.push(r.bytes()?.to_vec());
+    }
+    let folders = r.str()?.lines().filter(|l| !l.trim().is_empty()).map(|l| l.to_string()).collect();
+    Ok(Backup { created, notebooks, folders, stats: r.str()?, settings: r.str()? })
+}
+
+// ---------------------------------------------------------------------------
 // PNG
 // ---------------------------------------------------------------------------
 
@@ -616,6 +670,16 @@ mod tests {
         back.pages[0].version = nb.pages[0].version;
         assert_eq!(back, nb);
         assert!(load_notebook(b"nope").is_err());
+    }
+
+    #[test]
+    fn backup_roundtrip() {
+        let nb = Notebook::new("a".into(), "A", 0, Format::A4_PORTRAIT, Template::default(), Color::WHITE, 1.0);
+        let b = Backup { created: 5.0, notebooks: vec![save_notebook(&nb), vec![1, 2, 3]], folders: vec!["Schule".into(), "Privat".into()], stats: "1\t2\t3".into(), settings: "theme=dark".into() };
+        let back = load_backup(&save_backup(&b)).unwrap();
+        assert_eq!(back, b);
+        assert_eq!(load_notebook(&back.notebooks[0]).unwrap().title, "A");
+        assert!(load_backup(b"ZNB1xxxx").is_err());
     }
 
     #[test]

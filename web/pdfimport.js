@@ -80,3 +80,20 @@
     },
   };
 })();
+
+// Teilen im Browser (Web Share API mit Dateien); liefert true, wenn geteilt wurde.
+window.notionShare = async function (b64, mime, name) {
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const file = new File([bytes], name, { type: mime });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: name });
+      return true;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return true;
+  }
+  return false;
+};

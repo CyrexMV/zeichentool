@@ -12,7 +12,7 @@ thread_local! {
 
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
-const POPS: [&str; 7] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert"];
+const POPS: [&str; 10] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
 const MODALS: [&str; 11] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
@@ -220,6 +220,36 @@ impl App {
                 }
             }
             "sel-card" => self.selection_to_card(),
+            "sel-align" => self.open_popover("pop-align", src),
+            a if a.starts_with("align-") => {
+                self.close_popovers();
+                let mode = a.trim_start_matches("align-").to_string();
+                let n = self.ed.as_mut().map(|e| e.align_selection(&mode)).unwrap_or(0);
+                if n == 0 {
+                    self.toast("Wähle mit dem Lasso mindestens zwei getrennte Objekte aus");
+                }
+                self.after_edit();
+            }
+            "pen-sets" => self.open_pen_sets(src),
+            "set-save" | "set-del" | "set-apply" => self.pen_set_action(act, arg),
+            "backup-save" => self.create_backup(false),
+            "backup-share" => self.create_backup(true),
+            "backup-restore" => {
+                self.close_modals();
+                set_timeout(0, || input_el("file-import").click());
+            }
+            "share-menu" => self.open_popover("pop-share", src),
+            "share-png" | "share-page-pdf" | "share-pdf" | "share-znote" => {
+                self.close_popovers();
+                super::storage::share_next();
+                match act {
+                    "share-png" => self.export_png(),
+                    "share-page-pdf" => self.export_pdf(true),
+                    "share-pdf" => self.export_pdf(false),
+                    _ => self.export_znote(None),
+                }
+            }
+
             "marks" => self.open_marks_dialog(),
             "mark-set" | "tag-add" | "tag-del" | "tag-new" => self.marks_action(act, arg),
             "nav-mark" => self.nav_mark_filter(arg),
@@ -929,6 +959,7 @@ impl App {
     }
 
     pub fn update_pill(&mut self) {
+        self.update_scrubber();
         let Some(ed) = &self.ed else { return };
         let title = &ed.nb.pages[ed.cur_page].title;
         let label = if title.is_empty() {

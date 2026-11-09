@@ -294,7 +294,7 @@ impl App {
     pub fn card_action(&mut self, act: &str, n: usize) {
         self.close_popovers();
         let Some(id) = self.ctx_target.clone() else { return };
-        if matches!(act, "card-dup" | "card-template" | "card-pdf" | "card-znote") && self.needs_unlock(&id, super::lock::Then::Card(act.to_string())) {
+        if matches!(act, "card-dup" | "card-template" | "card-pdf" | "card-znote" | "card-share") && self.needs_unlock(&id, super::lock::Then::Card(act.to_string())) {
             return;
         }
         match act {
@@ -339,6 +339,10 @@ impl App {
                 self.open_dialog(&visual, "Als Vorlage speichern", "Neue Notizbücher können dann mit diesen Seiten, Vorlagen und Lernkarten starten. Name der Vorlage:", "Speichern", false, Some(&cur), Pending::SaveTemplate(Some(id)));
             }
             "card-pdf" => self.with_stored(id, |a, nb| a.export_notebook_pdf(&nb, None)),
+            "card-share" => self.with_stored(id, |a, nb| {
+                super::storage::share_next();
+                a.export_notebook_pdf(&nb, None);
+            }),
             "card-znote" => self.with_stored(id, |a, nb| a.export_znote(Some(&nb))),
             "card-delete" => {
                 let meta = self.library.iter().find(|m| m.id == id).cloned();
@@ -414,6 +418,7 @@ impl App {
                 self.toast("Endgültig gelöscht");
             }
             Some(Pending::EmptyTrash) => self.empty_trash(),
+            Some(Pending::RestoreBackup) => self.restore_backup(),
             Some(Pending::NewDeck) => {
                 let t: String = value.trim().chars().take(80).collect();
                 let title = if t.is_empty() { "Lernkarten".to_string() } else { t };

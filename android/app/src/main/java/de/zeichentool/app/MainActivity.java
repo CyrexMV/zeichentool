@@ -729,6 +729,41 @@ public class MainActivity extends Activity {
             uiRects = r;
         }
 
+        /** Datei über das Android-Teilen-Menü an andere Apps schicken (WhatsApp, Mail, Drive …). */
+        @JavascriptInterface
+        public boolean shareFile(String name, String mime, String base64) {
+            try {
+                byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                java.io.File dir = ShareProvider.dir(MainActivity.this);
+                // alte geteilte Dateien aufräumen
+                java.io.File[] old = dir.listFiles();
+                if (old != null) {
+                    for (java.io.File f : old) {
+                        //noinspection ResultOfMethodCallIgnored
+                        f.delete();
+                    }
+                }
+                String safe = name.replaceAll("[^A-Za-z0-9ÄÖÜäöüß ._-]", "_");
+                java.io.File f = new java.io.File(dir, safe);
+                try (java.io.FileOutputStream os = new java.io.FileOutputStream(f)) {
+                    os.write(data);
+                }
+                Uri uri = new Uri.Builder().scheme("content").authority(ShareProvider.AUTHORITY).appendPath(safe).build();
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType(mime == null || mime.isEmpty() ? "application/octet-stream" : mime);
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.putExtra(Intent.EXTRA_SUBJECT, safe);
+                send.setClipData(android.content.ClipData.newRawUri(safe, uri));
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent chooser = Intent.createChooser(send, "Teilen");
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                runOnUiThread(() -> startActivity(chooser));
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
         @JavascriptInterface
         public String version() {
             try {

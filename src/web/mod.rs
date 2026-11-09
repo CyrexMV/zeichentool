@@ -10,8 +10,10 @@ mod links;
 mod marks;
 mod mind;
 mod lock;
+mod pensets;
 mod render;
 mod ruler;
+mod scrubber;
 mod stats;
 mod study;
 mod storage;
@@ -362,6 +364,8 @@ pub enum Pending {
     MoveToFolder(String),
     PageTo(usize),
     NewDeck,
+    /// Komplett-Backup einspielen (Daten in `App::pending_backup`)
+    RestoreBackup,
     /// Link setzen: Seite + Rechteck (x0, y0, x1, y1)
     Link(u32, f32, f32, f32, f32),
     /// Text einer Mindmap-Blase (Seite, ID)
@@ -464,6 +468,12 @@ pub struct App {
     pub tabs: Vec<tabs::Tab>,
     /// Präsentationsmodus: (vorheriges Werkzeug, vorherige Ansicht)
     pub present: Option<(Tool, (f64, f64, f64))>,
+    /// gewähltes Backup, wartet auf Bestätigung
+    pub pending_backup: Option<Vec<u8>>,
+    /// gespeicherte Stift-Sets
+    pub pen_sets: Vec<pensets::PenSet>,
+    /// Seiten-Schieberegler wird gezogen
+    pub scrub_active: bool,
     /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
     pub study_from_lib: bool,
 }
@@ -527,6 +537,9 @@ impl App {
             mind_sel: None,
             tabs: Vec::new(),
             present: None,
+            pending_backup: None,
+            pen_sets: Vec::new(),
+            scrub_active: false,
             study_from_lib: false,
         }
     }
@@ -636,6 +649,7 @@ pub fn start() {
     ui::bind_ui();
     input::bind_input();
     colorpick::bind_color_picker();
+    scrubber::bind_scrubber();
     with_app(|a| {
         a.apply_theme();
         a.refresh_toolbar();

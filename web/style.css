@@ -703,3 +703,38 @@ b.due { color: #ff7a1a; }
 .lib-trash-btn b:empty { display: none; }
 .lib-trash-btn.active { color: var(--danger); box-shadow: 0 0 0 2px var(--danger), var(--shadow); }
 #library { padding-bottom: calc(var(--safe-bottom) + 84px); }
+.backup-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.backup-row .btn svg { width: 16px; height: 16px; }
+
+/* Stift-Sets */
+#pop-sets { width: 300px; }
+.set-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 12px; }
+.set-item { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 10px; border-radius: 12px; background: var(--hover); cursor: pointer; }
+.set-item:hover { background: rgba(109,92,255,.12); }
+.set-prev { width: 64px; height: 24px; flex: none; background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--line) inset; }
+.set-prev svg { width: 100%; height: 100%; display: block; }
+.set-label { flex: 1; font-size: 13.5px; font-weight: 600; }
+.set-del { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+.set-del:hover { background: var(--hover); color: var(--danger); }
+.set-del svg { width: 14px; height: 14px; }
+.set-save { width: 100%; justify-content: center; }
+.set-save svg { width: 16px; height: 16px; }
+
+/* Ausrichten */
+#pop-align { width: 300px; }
+.align-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.align-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; border-radius: 12px; background: var(--hover); font-size: 11.5px; font-weight: 600; color: var(--text); }
+.align-grid button:hover { background: rgba(109,92,255,.12); color: var(--accent); }
+.align-grid button svg { width: 22px; height: 22px; }
+.align-grid button:nth-child(7), .align-grid button:nth-child(8) { grid-column: span 1; }
+
+/* Seiten-Schieberegler */
+.scrubber { position: absolute; right: 4px; top: calc(var(--safe-top) + 130px); bottom: calc(var(--safe-bottom) + 90px); width: 30px; z-index: 8; touch-action: none; cursor: ns-resize; }
+.scrubber.hidden { display: none; }
+.scrub-track { position: absolute; left: 50%; top: 24px; bottom: 24px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--line2); opacity: .55; transition: opacity .2s; }
+.scrub-thumb { position: absolute; left: 50%; width: 10px; height: 44px; margin: -22px 0 0 -5px; border-radius: 6px; background: var(--muted); opacity: .55; transition: opacity .2s, width .15s, margin .15s, background .15s; }
+.scrubber:hover .scrub-track, .scrubber.dragging .scrub-track { opacity: 1; }
+.scrubber:hover .scrub-thumb, .scrubber.dragging .scrub-thumb { opacity: 1; width: 14px; margin-left: -7px; background: var(--accent); }
+.scrub-label { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); white-space: nowrap; padding: 8px 12px; border-radius: 12px; background: var(--glass-strong); box-shadow: var(--shadow); font-size: 13px; font-weight: 700; color: var(--text); opacity: 0; pointer-events: none; transition: opacity .15s; }
+.scrubber.dragging .scrub-label { opacity: 1; }
+#editor.presenting .scrubber { display: none !important; }

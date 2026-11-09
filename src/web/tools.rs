@@ -918,3 +918,103 @@ impl App {
         self.toast(&format!("Farbe {} übernommen", c.to_hex()));
     }
 }
+
+impl Editor {
+    /// Ausgewählte Objekte ausrichten. Sich berührende Elemente (z. B. ein handgeschriebenes Wort,
+    /// eine Tabelle) bleiben dabei zusammen. `mode`: left, hcenter, right, top, vcenter, bottom, dist-h, dist-v.
+    /// Liefert die Anzahl der bewegten Objekte.
+    pub fn align_selection(&mut self, mode: &str) -> usize {
+        let items = self.selected_items();
+        if items.len() < 2 {
+            return 0;
+        }
+        // Gruppen aus sich berührenden Elementen (Union-Find)
+        let boxes: Vec<Rect> = items.iter().map(|i| i.bbox().expand(1.5)).collect();
+        let mut parent: Vec<usize> = (0..items.len()).collect();
+        fn root(p: &mut [usize], mut i: usize) -> usize {
+            while p[i] != i {
+                p[i] = p[p[i]];
+                i = p[i];
+            }
+            i
+        }
+        if items.len() <= 1500 {
+            for a in 0..items.len() {
+                for b in a + 1..items.len() {
+                    if boxes[a].intersects(&boxes[b]) {
+                        let (ra, rb) = (root(&mut parent, a), root(&mut parent, b));
+                        if ra != rb {
+                            parent[ra] = rb;
+                        }
+                    }
+                }
+            }
+        }
+        let roots: Vec<usize> = (0..items.len()).map(|i| root(&mut parent, i)).collect();
+        let mut groups: Vec<(Rect, Vec<usize>)> = Vec::new();
+        let mut group_of: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        for (i, r) in roots.iter().enumerate() {
+            let k = *group_of.entry(*r).or_insert_with(|| {
+                groups.push((Rect::EMPTY, Vec::new()));
+                groups.len() - 1
+            });
+            groups[k].0 = groups[k].0.union(&items[i].bbox());
+            groups[k].1.push(i);
+        }
+        if groups.len() < 2 {
+            return 0;
+        }
+        let all = groups.iter().fold(Rect::EMPTY, |r, g| r.union(&g.0));
+        let mut shift: Vec<(f32, f32)> = vec![(0.0, 0.0); groups.len()];
+        match mode {
+            "left" => groups.iter().enumerate().for_each(|(k, g)| shift[k].0 = all.x0 - g.0.x0),
+            "right" => groups.iter().enumerate().for_each(|(k, g)| shift[k].0 = all.x1 - g.0.x1),
+            "hcenter" => groups.iter().enumerate().for_each(|(k, g)| shift[k].0 = (all.x0 + all.x1) * 0.5 - (g.0.x0 + g.0.x1) * 0.5),
+            "top" => groups.iter().enumerate().for_each(|(k, g)| shift[k].1 = all.y0 - g.0.y0),
+            "bottom" => groups.iter().enumerate().for_each(|(k, g)| shift[k].1 = all.y1 - g.0.y1),
+            "vcenter" => groups.iter().enumerate().for_each(|(k, g)| shift[k].1 = (all.y0 + all.y1) * 0.5 - (g.0.y0 + g.0.y1) * 0.5),
+            "dist-h" | "dist-v" => {
+                let h = mode == "dist-h";
+                let mut order: Vec<usize> = (0..groups.len()).collect();
+                order.sort_by(|&a, &b| {
+                    let ca = if h { groups[a].0.x0 + groups[a].0.x1 } else { groups[a].0.y0 + groups[a].0.y1 };
+                    let cb = if h { groups[b].0.x0 + groups[b].0.x1 } else { groups[b].0.y0 + groups[b].0.y1 };
+                    ca.partial_cmp(&cb).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                let size = |r: &Rect| if h { r.w() } else { r.h() };
+                let total: f32 = groups.iter().map(|g| size(&g.0)).sum();
+                let span = if h { all.w() } else { all.h() };
+                let gap = ((span - total) / (groups.len() - 1) as f32).max(0.0);
+                let mut pos = if h { all.x0 } else { all.y0 };
+                for &k in &order {
+                    let r = groups[k].0;
+                    if h {
+                        shift[k].0 = pos - r.x0;
+                    } else {
+                        shift[k].1 = pos - r.y0;
+                    }
+                    pos += size(&r) + gap;
+                }
+            }
+            _ => return 0,
+        }
+        let mut moved = 0;
+        let mut new_items = items.clone();
+        for (k, g) in groups.iter().enumerate() {
+            let (dx, dy) = shift[k];
+            if dx.abs() < 0.01 && dy.abs() < 0.01 {
+                continue;
+            }
+            moved += 1;
+            let xf = Xf::translate(dx, dy);
+            for &i in &g.1 {
+                new_items[i] = items[i].transformed(&xf);
+            }
+        }
+        if moved > 0 {
+            self.replace_selected(new_items);
+            self.dirty = true;
+        }
+        moved
+    }
+}

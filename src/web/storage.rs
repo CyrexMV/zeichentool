@@ -82,6 +82,7 @@ impl App {
             format!("new={},{},{},{},{}", self.new_nb.cover, self.new_nb.template.kind.code(), self.new_nb.template.spacing, self.new_nb.paper.to_hex(), self.new_nb.format),
             format!("new_cover_page={}", self.new_nb.cover_page),
             format!("recent_colors={}", self.recent_colors.join(",")),
+            format!("pen_sets={}", self.pen_sets.iter().map(|s| s.encode()).collect::<Vec<_>>().join(";")),
             format!("tabs={}", self.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(",")),
             format!("tool={}", self.tool.code()),
         ];
@@ -162,6 +163,7 @@ impl App {
                 }
                 "new_cover_page" => self.new_nb.cover_page = b(v),
                 "tabs" => self.tabs = v.split(',').filter(|s| !s.is_empty()).take(8).map(|s| super::tabs::Tab { id: s.to_string(), view: None }).collect(),
+                "pen_sets" => self.pen_sets = v.split(';').filter_map(super::pensets::PenSet::decode).take(12).collect(),
                 "recent_colors" => self.recent_colors = v.split(',').filter(|h| Color::from_hex(h).is_some()).map(|h| h.to_string()).take(12).collect(),
                 "new" => {
                     let l: Vec<&str> = v.split(',').collect();
@@ -191,7 +193,7 @@ impl App {
             || self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false);
         if full {
             parts.push(format!("0,0,{},{}", vw, vh));
-        } else if let Ok(list) = dom().query_selector_all(".ed-left, .toolbar, .ed-right, .page-pill, #sel-menu:not(.hidden), #paste-btn:not(.hidden), #navigator.open, #zoomwin:not(.hidden) .zw-tools") {
+        } else if let Ok(list) = dom().query_selector_all(".ed-left, .toolbar, .ed-right, .page-pill, #sel-menu:not(.hidden), #paste-btn:not(.hidden), #navigator.open, #zoomwin:not(.hidden) .zw-tools, #scrubber:not(.hidden)") {
             for i in 0..list.length() {
                 let Some(n) = list.get(i) else { continue };
                 let el: web_sys::Element = n.unchecked_into();
@@ -394,7 +396,124 @@ impl App {
     // Import
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // Komplett-Backup
+    // -----------------------------------------------------------------------
+
+    /// Alle Notizbücher (auch Vorlagen und Papierkorb), Ordner, Statistik und Einstellungen in eine Datei.
+    pub fn create_backup(&mut self, share: bool) {
+        self.close_modals();
+        self.save_now();
+        self.save_settings();
+        let Some(db) = self.db.clone() else { return };
+        let ids: Vec<String> = self.library.iter().map(|m| m.id.clone()).collect();
+        let folders = self.folders.clone();
+        let stats: Vec<String> = self.stats.iter().map(|d| format!("{}\t{}\t{}", d.0, d.1, d.2)).collect();
+        let settings = window().local_storage().ok().flatten().and_then(|ls| ls.get_item(SETTINGS_KEY).ok().flatten()).unwrap_or_default();
+        show("busy", true);
+        set_text("busy-text", "Backup wird erstellt …");
+        spawn_local(async move {
+            let mut notebooks = Vec::new();
+            for id in &ids {
+                if let Some(v) = idb_get(&db, NOTEBOOKS, id).await {
+                    notebooks.push(Uint8Array::new(&v).to_vec());
+                }
+            }
+            let n = notebooks.len();
+            let b = crate::engine::format::Backup { created: wall_clock(), notebooks, folders, stats: stats.join("\n"), settings };
+            let bytes = crate::engine::format::save_backup(&b);
+            let d = js_sys::Date::new_0();
+            let name = format!("Notion-Backup-{}-{:02}-{:02}.zbackup", d.get_full_year(), d.get_month() + 1, d.get_date());
+            show("busy", false);
+            if share {
+                share_next();
+            }
+            save_file(&bytes, "application/octet-stream", &name);
+            let mb = bytes.len() as f64 / 1_048_576.0;
+            with_app(|a| a.toast(&format!("Backup mit {} {} erstellt ({:.1} MB)", n, if n == 1 { "Notizbuch" } else { "Notizbüchern" }, mb)));
+        });
+    }
+
+    /// Backup-Datei gewählt: erst nachfragen.
+    fn ask_restore(&mut self, bytes: Vec<u8>) {
+        match crate::engine::format::load_backup(&bytes) {
+            Ok(b) => {
+                let d = js_sys::Date::new(&JsValue::from_f64(b.created));
+                let text = format!(
+                    "Das Backup vom <b>{:02}.{:02}.{}</b> enthält <b>{} {}</b>. Fehlende Notizbücher werden ergänzt; gibt es eines schon, bleibt die neuere Fassung. Nichts wird gelöscht.",
+                    d.get_date(),
+                    d.get_month() + 1,
+                    d.get_full_year(),
+                    b.notebooks.len(),
+                    if b.notebooks.len() == 1 { "Notizbuch" } else { "Notizbücher" }
+                );
+                self.pending_backup = Some(bytes);
+                let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-restore\"/></svg></div>";
+                self.open_dialog(visual, "Backup wiederherstellen?", &text, "Wiederherstellen", false, None, Pending::RestoreBackup);
+            }
+            Err(e) => self.toast(&e),
+        }
+    }
+
+    /// Backup zusammenführen.
+    pub fn restore_backup(&mut self) {
+        let Some(bytes) = self.pending_backup.take() else { return };
+        let Ok(b) = crate::engine::format::load_backup(&bytes) else { return };
+        let was_empty = self.library.is_empty();
+        let (mut added, mut updated, mut kept) = (0, 0, 0);
+        for raw in &b.notebooks {
+            let Ok(mut nb) = load_notebook(raw) else { continue };
+            nb.sync_template_cards();
+            match self.library.iter().find(|m| m.id == nb.id) {
+                Some(m) if m.modified >= nb.modified => {
+                    kept += 1;
+                    continue;
+                }
+                Some(_) => updated += 1,
+                None => added += 1,
+            }
+            self.library.retain(|m| m.id != nb.id);
+            self.library.push(NoteMeta::of(&nb));
+            self.persist_notebook(&nb);
+        }
+        self.persist_library();
+        for f in b.folders {
+            if !self.folders.contains(&f) {
+                self.folders.push(f);
+            }
+        }
+        self.folders.sort_by_key(|x| x.to_lowercase());
+        self.persist_folders();
+        // Lernstatistik: je Tag den größeren Wert behalten
+        for d in super::stats::parse_stats(&b.stats) {
+            match self.stats.iter_mut().find(|x| x.0 == d.0) {
+                Some(x) => {
+                    if d.1 > x.1 {
+                        *x = d;
+                    }
+                }
+                None => self.stats.push(d),
+            }
+        }
+        self.stats.sort_by_key(|d| d.0);
+        self.persist_stats();
+        // Einstellungen nur auf einem leeren (neuen) Gerät übernehmen
+        if was_empty && !b.settings.is_empty() {
+            if let Ok(Some(ls)) = window().local_storage() {
+                let _ = ls.set_item(SETTINGS_KEY, &b.settings);
+            }
+            self.load_settings();
+            self.apply_theme();
+        }
+        self.render_library();
+        self.toast(&format!("Backup wiederhergestellt: {} neu, {} aktualisiert, {} unverändert", added, updated, kept));
+    }
+
     fn import_bytes(&mut self, name: &str, bytes: Vec<u8>) {
+        if crate::engine::format::is_backup(&bytes) {
+            self.ask_restore(bytes);
+            return;
+        }
         if bytes.starts_with(b"ZNB1") {
             match load_notebook(&bytes) {
                 Ok(mut nb) => {
@@ -476,7 +595,60 @@ fn bridge_save(b64: &str, mime: &str, name: &str) -> Option<bool> {
     Some(f.call3(&bridge, &name.into(), &mime.into(), &b64.into()).map(|v| v.as_bool().unwrap_or(false)).unwrap_or(false))
 }
 
+thread_local! {
+    /// nächste Ausgabe teilen statt speichern
+    static SHARE_NEXT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Die nächste Export-Datei über das Teilen-Menü weitergeben.
+pub fn share_next() {
+    SHARE_NEXT.with(|s| s.set(true));
+}
+
+fn take_share() -> bool {
+    SHARE_NEXT.with(|s| s.replace(false))
+}
+
+/// Datei teilen: Android-Teilen-Menü, im Browser Web Share – sonst herunterladen.
+fn share_b64(b64: String, mime: String, name: String) {
+    if let Some(bridge) = android_bridge() {
+        let ok = js_sys::Reflect::get(&bridge, &"shareFile".into())
+            .ok()
+            .and_then(|f| f.dyn_into::<js_sys::Function>().ok())
+            .and_then(|f| f.call3(&bridge, &name.clone().into(), &mime.clone().into(), &b64.clone().into()).ok())
+            .and_then(|v| v.as_bool());
+        match ok {
+            Some(true) => return,
+            Some(false) => {
+                with_app(|a| a.toast("Teilen fehlgeschlagen"));
+                return;
+            }
+            // ältere App ohne Teilen: speichern
+            None => {
+                let _ = bridge_save(&b64, &mime, &name);
+                return;
+            }
+        }
+    }
+    spawn_local(async move {
+        let f = js_sys::Reflect::get(&window(), &"notionShare".into()).ok().and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+        let shared = match f.and_then(|f| f.call3(&JsValue::NULL, &b64.clone().into(), &mime.clone().into(), &name.clone().into()).ok()) {
+            Some(p) => JsFuture::from(Promise::from(p)).await.ok().and_then(|v| v.as_bool()).unwrap_or(false),
+            None => false,
+        };
+        if !shared {
+            // Browser ohne Datei-Teilen: herunterladen
+            click_download(&format!("data:{};base64,{}", mime, b64), &name);
+            with_app(|a| a.toast("Teilen wird hier nicht unterstützt – die Datei wurde heruntergeladen"));
+        }
+    });
+}
+
 fn save_b64(b64: &str, mime: &str, name: &str, data_url: &str) {
+    if take_share() {
+        share_b64(b64.to_string(), mime.to_string(), name.to_string());
+        return;
+    }
     match bridge_save(b64, mime, name) {
         Some(true) => {}
         Some(false) => {
@@ -487,6 +659,10 @@ fn save_b64(b64: &str, mime: &str, name: &str, data_url: &str) {
 }
 
 pub fn save_file(bytes: &[u8], mime: &str, name: &str) {
+    if take_share() {
+        share_b64(base64(bytes), mime.to_string(), name.to_string());
+        return;
+    }
     if android_bridge().is_some() {
         if !bridge_save(&base64(bytes), mime, name).unwrap_or(false) {
             with_app(|a| a.toast("Speichern fehlgeschlagen"));

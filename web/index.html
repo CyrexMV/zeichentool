@@ -64,6 +64,17 @@
     <symbol id="i-zoomwin" viewBox="0 0 24 24"><rect x="2" y="13" width="20" height="8" rx="2"/><rect x="6" y="3" width="8" height="5" rx="1"/><path d="M10 8v5"/></symbol>
     <symbol id="i-paper" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="2"/><path d="m20 17-3-3-6 6"/></symbol>
     <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2a1.5 1.5 0 0 1 0 3H8v-5M14 11v5M14 11h2"/></symbol>
+    <symbol id="i-pensets" viewBox="0 0 24 24"><path d="M4 20l3-1 9-9-2-2-9 9z"/><path d="M13 7l2-2 4 4-2 2"/><path d="M15 21h6M18 18v6" transform="translate(0 -3)"/></symbol>
+    <symbol id="i-align" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-left" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-hc" viewBox="0 0 24 24"><path d="M12 3v18"/><rect x="5" y="5" width="14" height="5" rx="1.5"/><rect x="8" y="14" width="8" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-right" viewBox="0 0 24 24"><path d="M20 3v18"/><rect x="5" y="5" width="12" height="5" rx="1.5"/><rect x="10" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-top" viewBox="0 0 24 24"><path d="M3 4h18"/><rect x="5" y="7" width="5" height="12" rx="1.5"/><rect x="14" y="7" width="5" height="7" rx="1.5"/></symbol>
+    <symbol id="i-al-vc" viewBox="0 0 24 24"><path d="M3 12h18"/><rect x="5" y="5" width="5" height="14" rx="1.5"/><rect x="14" y="8" width="5" height="8" rx="1.5"/></symbol>
+    <symbol id="i-al-bottom" viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="5" y="5" width="5" height="12" rx="1.5"/><rect x="14" y="10" width="5" height="7" rx="1.5"/></symbol>
+    <symbol id="i-al-dh" viewBox="0 0 24 24"><path d="M3 4v16M21 4v16"/><rect x="7" y="8" width="4" height="8" rx="1.2"/><rect x="13" y="8" width="4" height="8" rx="1.2"/></symbol>
+    <symbol id="i-al-dv" viewBox="0 0 24 24"><path d="M4 3h16M4 21h16"/><rect x="8" y="7" width="8" height="4" rx="1.2"/><rect x="8" y="13" width="8" height="4" rx="1.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
     <symbol id="i-insert" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></symbol>
     <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14.5h18M9 4v16M15 4v16"/></symbol>
     <symbol id="i-plot" viewBox="0 0 24 24"><path d="M3 12h18M12 3v18"/><path d="M4 19c4-1 5-13 8-13s4 12 8 13"/></symbol>
@@ -142,6 +153,7 @@
       <button class="tb" id="btn-zoomwin" data-act="zoomwin" title="Zoom-Fenster"><svg><use href="#i-zoomwin"/></svg></button>
       <span class="sep" id="fav-sep"></span>
       <div id="favs" class="favs"></div>
+      <button class="tb" id="btn-sets" data-act="pen-sets" title="Stift-Sets"><svg><use href="#i-pensets"/></svg></button>
     </div>
     <div id="ed-tabs" class="ed-tabs hidden"></div>
     <div class="ed-right glass">
@@ -175,6 +187,7 @@
   <div id="sel-menu" class="sel-menu glass hidden">
     <div class="sel-colors" id="sel-colors"></div>
     <span class="sep"></span>
+    <button data-act="sel-align" title="Ausrichten"><svg><use href="#i-align"/></svg></button>
     <button data-act="sel-fill" title="Form füllen (Stiftfarbe)"><svg><use href="#i-fill"/></svg></button>
     <button data-act="sel-link" id="sel-link" title="Link setzen"><svg><use href="#i-link"/></svg></button>
     <button data-act="sel-card" id="sel-card" title="Als Lernkarte"><svg><use href="#i-cards"/></svg></button>
@@ -182,6 +195,10 @@
     <button data-act="sel-cut" title="Ausschneiden"><svg><use href="#i-cut"/></svg></button>
     <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
     <button data-act="sel-delete" class="danger" title="Löschen"><svg><use href="#i-trash"/></svg></button>
+  </div>
+  <div id="scrubber" class="scrubber hidden" title="Ziehen zum Blättern">
+    <div class="scrub-track"></div>
+    <div id="scrub-thumb" class="scrub-thumb"><span id="scrub-label" class="scrub-label"></span></div>
   </div>
   <div id="present-bar" class="present-bar">
     <button data-act="present-prev" title="Vorherige Seite">‹</button>
@@ -219,6 +236,7 @@
 
 <!-- Mehr-Menü -->
 <div id="pop-more" class="popover menu glass hidden">
+  <button class="mi" data-act="share-menu"><svg><use href="#i-share"/></svg>Teilen …</button>
   <button class="mi" data-act="export-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
   <button class="mi" data-act="export-page-pdf"><svg><use href="#i-export"/></svg>Diese Seite als PDF</button>
   <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
@@ -239,6 +257,34 @@
   <button class="mi" data-act="study"><svg><use href="#i-cards"/></svg>Lernkarten</button>
   <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Notizbuchvorlage speichern …</button>
   <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+</div>
+
+<!-- Ausrichten -->
+<div id="pop-align" class="popover glass hidden">
+  <div class="pop-title">Ausrichten</div>
+  <div class="align-grid">
+    <button data-act="align-left" title="Links"><svg><use href="#i-al-left"/></svg><span>Links</span></button>
+    <button data-act="align-hcenter" title="Mitte"><svg><use href="#i-al-hc"/></svg><span>Mitte</span></button>
+    <button data-act="align-right" title="Rechts"><svg><use href="#i-al-right"/></svg><span>Rechts</span></button>
+    <button data-act="align-top" title="Oben"><svg><use href="#i-al-top"/></svg><span>Oben</span></button>
+    <button data-act="align-vcenter" title="Mittig"><svg><use href="#i-al-vc"/></svg><span>Mittig</span></button>
+    <button data-act="align-bottom" title="Unten"><svg><use href="#i-al-bottom"/></svg><span>Unten</span></button>
+    <button data-act="align-dist-h" title="Waagerecht verteilen"><svg><use href="#i-al-dh"/></svg><span>Verteilen ↔</span></button>
+    <button data-act="align-dist-v" title="Senkrecht verteilen"><svg><use href="#i-al-dv"/></svg><span>Verteilen ↕</span></button>
+  </div>
+  <p class="hint">Was sich berührt (z. B. ein Wort oder eine Tabelle), bleibt zusammen.</p>
+</div>
+
+<!-- Stift-Sets -->
+<div id="pop-sets" class="popover glass hidden"></div>
+
+<!-- Teilen-Menü -->
+<div id="pop-share" class="popover menu glass hidden">
+  <button class="mi" data-act="share-png"><svg><use href="#i-image"/></svg>Diese Seite als Bild</button>
+  <button class="mi" data-act="share-page-pdf"><svg><use href="#i-pdf"/></svg>Diese Seite als PDF</button>
+  <button class="mi" data-act="share-pdf"><svg><use href="#i-export"/></svg>Ganzes Notizbuch als PDF</button>
+  <button class="mi" data-act="share-znote"><svg><use href="#i-copy"/></svg>Notizbuch-Datei (.znote)</button>
+  <p class="hint menu-hint">Öffnet das Teilen-Menü – z. B. WhatsApp, Mail, Google Drive.</p>
 </div>
 
 <!-- Einfügen-Menü -->
@@ -275,6 +321,7 @@
   <button class="mi" data-act="card-dup"><svg><use href="#i-dup"/></svg>Duplizieren</button>
   <button class="mi" data-act="card-lock"><svg><use href="#i-lock"/></svg><span id="card-lock-label">Mit PIN sperren …</span></button>
   <button class="mi" data-act="card-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
+  <button class="mi" data-act="card-share"><svg><use href="#i-share"/></svg>Als PDF teilen …</button>
   <button class="mi" data-act="card-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
   <button class="mi" data-act="card-znote"><svg><use href="#i-copy"/></svg>Backup speichern</button>
   <hr>
@@ -552,6 +599,13 @@
     <label class="row toggle"><span>Mit einem Finger scrollen</span><span class="switch"><input type="checkbox" id="set-scroll" data-input="set-scroll"><span></span></span></label>
     <label class="row toggle"><span>Mit dem Finger schreiben<br><small>Aus: nur der S-Pen schreibt (empfohlen)</small></span><span class="switch"><input type="checkbox" id="set-finger" data-input="set-finger"><span></span></span></label>
     <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf schreiben …</div><div id="pen-native"></div></div>
+    <h4>Daten &amp; Backup</h4>
+    <div class="backup-row">
+      <button class="btn small" data-act="backup-save"><svg><use href="#i-export"/></svg>Komplett-Backup speichern</button>
+      <button class="btn small" data-act="backup-share"><svg><use href="#i-share"/></svg>Backup teilen (z. B. Google Drive)</button>
+      <button class="btn small" data-act="backup-restore"><svg><use href="#i-restore"/></svg>Backup wiederherstellen</button>
+    </div>
+    <p class="hint">Sichert alle Notizbücher, Lernkarten-Sets, Vorlagen, Ordner, Lernstatistik und Einstellungen in einer Datei (.zbackup). Beim Wiederherstellen geht nichts verloren – es wird ergänzt.</p>
     <h4>Gesten</h4>
     <ul class="help">
       <li><b>Zwei Finger</b>: zoomen und verschieben · <b>Zwei-Finger-Tipp</b>: rückgängig · <b>Drei-Finger-Tipp</b>: wiederholen</li>
@@ -567,7 +621,7 @@
 <div id="toast"></div>
 <div id="busy" class="busy hidden"><div class="busy-card glass"><div class="spinner"></div><span id="busy-text">Bitte warten …</span></div></div>
 <input type="file" id="file-image" accept="image/*" hidden>
-<input type="file" id="file-import" accept=".znote,.zeichen,.pdf,application/pdf,image/*,application/octet-stream" hidden>
+<input type="file" id="file-import" accept=".znote,.zbackup,.zeichen,.pdf,application/pdf,image/*,application/octet-stream" hidden>
 <input type="file" id="file-paper" accept="image/*" hidden>
 <input type="file" id="file-pdf" accept=".pdf,application/pdf" hidden>
 <script src="pdfimport.js"></script>

@@ -27,5 +27,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Dateien zum Teilen (PDF/Bild/Backup) an andere Apps übergeben -->
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="de.zeichentool.app.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>
