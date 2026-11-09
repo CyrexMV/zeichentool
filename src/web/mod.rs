@@ -336,6 +336,7 @@ pub enum Pending {
     DeleteTemplate(String),
     MoveToFolder(String),
     PageTo(usize),
+    NewDeck,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -403,6 +404,8 @@ pub struct App {
     pub new_from: Option<String>,
     /// Modus im Auswahldialog: Seite kopieren statt verschieben
     pub pick_copy: bool,
+    /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
+    pub study_from_lib: bool,
 }
 
 impl App {
@@ -451,6 +454,7 @@ impl App {
             folders: Vec::new(),
             new_from: None,
             pick_copy: true,
+            study_from_lib: false,
         }
     }
 

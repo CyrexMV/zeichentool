@@ -3,7 +3,7 @@
 use super::format::decode_png;
 use super::ink::PenKind;
 use super::note::{Content, Notebook, Page, TextBox};
-use super::paper::{line_colors, planner_label_pos, Prim, TemplateKind};
+use super::paper::{line_colors, Prim, TemplateKind};
 use miniz_oxide::deflate::compress_to_vec_zlib;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -227,9 +227,10 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
 
 /// Abgehakte Checklisten-Zeilen im PDF.
 fn page_checks(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String) {
-    if page.template.kind != TemplateKind::Checklist || page.checks.is_empty() {
+    if page.checks.is_empty() {
         return;
     }
+    let fade = page.template.kind == TemplateKind::Checklist;
     let p = page.paper;
     let light = p.luminance() > 0.5;
     for (i, row) in page.template.check_rows(w, h).iter().enumerate() {
@@ -237,7 +238,9 @@ fn page_checks(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f
             continue;
         }
         let s = row.size;
-        let _ = writeln!(c, "q /{} gs {} {} {} rg {} {} {} {} re f Q", gs(0.55, false), n(p.r), n(p.g), n(p.b), n(row.text_x - 4.0), n(row.y0 + 1.0), n(w - row.text_x + 4.0), n(row.y1 - row.y0 - 2.0));
+        if fade {
+            let _ = writeln!(c, "q /{} gs {} {} {} rg {} {} {} {} re f Q", gs(0.55, false), n(p.r), n(p.g), n(p.b), n(row.text_x - 4.0), n(row.y0 + 1.0), n(row.x1 - row.text_x + 4.0), n(row.y1 - row.y0 - 2.0));
+        }
         if let Some((x0, x1, y)) = page.row_strike(row) {
             let col = if light { "0.14 0.15 0.2" } else { "0.92 0.93 0.96" };
             let _ = writeln!(c, "q /{} gs {} RG {} w 1 J {} {} m {} {} l S Q", gs(0.85, false), col, n(s * 0.09), n(x0), n(y), n(x1), n(y));
@@ -255,6 +258,30 @@ fn page_checks(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f
     }
 }
 
+/// Abgerundetes Rechteck als PDF-Pfad.
+fn round_rect(c: &mut String, x: f32, y: f32, w: f32, h: f32, r: f32) {
+    let r = r.min(w * 0.5).min(h * 0.5).max(0.0);
+    if r < 0.01 {
+        let _ = write!(c, "{} {} {} {} re ", n(x), n(y), n(w), n(h));
+        return;
+    }
+    let k = r * 0.4477;
+    let (x1, y1) = (x + w, y + h);
+    let _ = write!(
+        c,
+        "{} {} m {} {} l {} {} {} {} {} {} c {} {} l {} {} {} {} {} {} c {} {} l {} {} {} {} {} {} c {} {} l {} {} {} {} {} {} c h ",
+        n(x + r), n(y),
+        n(x1 - r), n(y),
+        n(x1 - k), n(y), n(x1), n(y + k), n(x1), n(y + r),
+        n(x1), n(y1 - r),
+        n(x1), n(y1 - k), n(x1 - k), n(y1), n(x1 - r), n(y1),
+        n(x + r), n(y1),
+        n(x + k), n(y1), n(x), n(y1 - k), n(x), n(y1 - r),
+        n(x), n(y + r),
+        n(x), n(y + k), n(x + k), n(y), n(x + r), n(y)
+    );
+}
+
 fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String) {
     let p = page.paper;
     let _ = writeln!(c, "{} {} {} rg 0 0 {} {} re f", n(p.r), n(p.g), n(p.b), n(w), n(h));
@@ -262,40 +289,49 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
     if prims.is_empty() {
         return;
     }
+    let light = p.luminance() > 0.5;
     let (line, accent) = line_colors(p);
     let lw = page.template.line_width(w, h);
-    for pr in &prims {
-        match *pr {
-            Prim::Line { x0, y0, x1, y1, accent: ac, strong } => {
-                let col = if ac { accent } else { line };
-                let _ = writeln!(c, "q /{} gs {} RG {} w {} {} m {} {} l S Q", gs(col[3], false), rgb(col), n(if strong { lw * 1.8 } else { lw }), n(x0), n(y0), n(x1), n(y1));
-            }
-            Prim::Box { x, y, size } => {
-                let _ = writeln!(c, "q /{} gs {} RG {} w {} {} {} {} re S Q", gs(line[3], false), rgb(line), n(lw * 1.8), n(x), n(y), n(size), n(size));
-            }
-            Prim::Dot { x, y, r } => {
-                let k = r * 0.5523;
-                let _ = writeln!(
-                    c,
-                    "q /{} gs {} rg {} {} m {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c f Q",
-                    gs((line[3] * 1.4).min(1.0), false),
-                    rgb(line),
-                    n(x + r), n(y),
-                    n(x + r), n(y + k), n(x + k), n(y + r), n(x), n(y + r),
-                    n(x - k), n(y + r), n(x - r), n(y + k), n(x - r), n(y),
-                    n(x - r), n(y - k), n(x - k), n(y - r), n(x), n(y - r),
-                    n(x + k), n(y - r), n(x + r), n(y - k), n(x + r), n(y)
-                );
+    // Reihenfolge: Flächen, Linien/Punkte/Kästchen, Beschriftungen
+    for pass in 0..3 {
+        for pr in &prims {
+            match (*pr, pass) {
+                (Prim::Fill { x, y, w: fw, h: fh, r, color }, 0) => {
+                    let _ = write!(c, "q /{} gs {} rg ", gs(color[3] as f32 / 255.0, false), rgb8(color));
+                    round_rect(c, x, y, fw, fh, r);
+                    c.push_str("f Q\n");
+                }
+                (Prim::Line { x0, y0, x1, y1, accent: ac, strong }, 1) => {
+                    let col = if ac { accent } else { line };
+                    let _ = writeln!(c, "q /{} gs {} RG {} w {} {} m {} {} l S Q", gs(col[3], false), rgb(col), n(if strong { lw * 1.8 } else { lw }), n(x0), n(y0), n(x1), n(y1));
+                }
+                (Prim::Box { x, y, size }, 1) => {
+                    let _ = writeln!(c, "q /{} gs {} RG {} w {} {} {} {} re S Q", gs(line[3], false), rgb(line), n(lw * 1.8), n(x), n(y), n(size), n(size));
+                }
+                (Prim::Dot { x, y, r }, 1) => {
+                    let k = r * 0.5523;
+                    let _ = writeln!(
+                        c,
+                        "q /{} gs {} rg {} {} m {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c f Q",
+                        gs((line[3] * 1.4).min(1.0), false),
+                        rgb(line),
+                        n(x + r), n(y),
+                        n(x + r), n(y + k), n(x + k), n(y + r), n(x), n(y + r),
+                        n(x - k), n(y + r), n(x - r), n(y + k), n(x - r), n(y),
+                        n(x - r), n(y - k), n(x - k), n(y - r), n(x), n(y - r),
+                        n(x + k), n(y - r), n(x + r), n(y - k), n(x + r), n(y)
+                    );
+                }
+                (Prim::Label { x, y, size, text, color, bold }, 2) => {
+                    let (col, a) = match color {
+                        Some(cl) => (rgb8(cl), cl[3] as f32 / 255.0),
+                        None => (rgb(line), if light { 0.9 } else { 0.7 }),
+                    };
+                    let _ = writeln!(c, "q /{} gs BT /{} {} Tf {} rg 1 0 0 -1 {} {} Tm {} Tj ET Q", gs(a, false), if bold { "F2" } else { "F1" }, n(size), col, n(x), n(y), pdf_text(text));
+                }
+                _ => {}
             }
         }
-    }
-    if page.template.kind == TemplateKind::Planner {
-        let size = page.template.unit(w, h) * 0.55;
-        let _ = write!(c, "BT /F2 {} Tf {} rg ", n(size), rgb(line));
-        for (x, y, l) in planner_label_pos(&page.template, w, h) {
-            let _ = write!(c, "1 0 0 -1 {} {} Tm {} Tj ", n(x), n(y), pdf_text(l));
-        }
-        c.push_str("ET\n");
     }
 }
 
@@ -306,6 +342,15 @@ mod tests {
     use crate::engine::ink::{Pt, Stroke};
     use crate::engine::note::{Format, Item};
     use crate::engine::paper::Template;
+
+    #[test]
+    fn exports_all_templates() {
+        for k in TemplateKind::ALL {
+            let nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template { kind: k, spacing: 1 }, Color::WHITE, 0.0);
+            let s = String::from_utf8_lossy(&export_pdf(&nb, &[0], &|t: &TextBox| vec![t.text.clone()])).to_string();
+            assert!(s.ends_with("%%EOF\n"), "{:?}", k);
+        }
+    }
 
     #[test]
     fn text_escaping() {

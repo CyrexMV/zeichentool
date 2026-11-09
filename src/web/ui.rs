@@ -170,6 +170,19 @@ impl App {
                 self.request_frame();
             }
             "study" => self.open_study(),
+            "deck-study" => self.study_deck(arg.to_string()),
+            "deck-new" => {
+                let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-cards\"/></svg></div>";
+                self.open_dialog(
+                    visual,
+                    "Neues Lernkarten-Set",
+                    "Jede Seite ist eine Karte: <b>oben die Frage</b>, <b>unten die Antwort</b>. Weitere Karten fügst du oben mit „Seite hinzufügen“ hinzu. Name des Sets:",
+                    "Erstellen",
+                    false,
+                    Some(""),
+                    Pending::NewDeck,
+                );
+            }
             "study-close" => self.close_study(),
             "study-home" => self.render_study_home(),
             "study-start" => self.study_start(arg == "hard"),
@@ -867,16 +880,48 @@ impl App {
         TemplateKind::ALL
             .iter()
             .map(|k| {
-                format!(
-                    "<button class=\"tpl{}\" data-act=\"{}-tpl\" data-arg=\"{}\"><span class=\"tpl-prev tp-{}\"></span>{}</button>",
-                    if *k == cur { " active" } else { "" },
-                    prefix,
-                    k.code(),
-                    k.code(),
-                    k.name_de()
-                )
+                let prev = if k.is_colored() { format!("<span class=\"tpl-prev svg\">{}</span>", Self::tpl_svg(*k)) } else { format!("<span class=\"tpl-prev tp-{}\"></span>", k.code()) };
+                format!("<button class=\"tpl{}\" data-act=\"{}-tpl\" data-arg=\"{}\">{}{}</button>", if *k == cur { " active" } else { "" }, prefix, k.code(), prev, k.name_de())
             })
             .collect()
+    }
+
+    /// Vorschau einer Vorlage als SVG (aus denselben Grundformen wie die Seite).
+    fn tpl_svg(k: TemplateKind) -> String {
+        use crate::engine::Prim;
+        use std::fmt::Write as _;
+        let (w, h) = if k == TemplateKind::Flashcard { (420.0, 595.0) } else { (595.0, 842.0) };
+        let (mut fills, mut lines, mut strong, mut labels) = (String::new(), String::new(), String::new(), String::new());
+        let rgba = |c: [u8; 4]| format!("rgba({},{},{},{:.2})", c[0], c[1], c[2], c[3] as f32 / 255.0);
+        for p in (Template { kind: k, spacing: 1 }).primitives(w, h) {
+            match p {
+                Prim::Fill { x, y, w, h, r, color } => {
+                    let _ = write!(fills, "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" rx=\"{:.1}\" fill=\"{}\"/>", x, y, w, h, r, rgba(color));
+                }
+                Prim::Line { x0, y0, x1, y1, strong: st, .. } => {
+                    let _ = write!(if st { &mut strong } else { &mut lines }, "M{:.1} {:.1}L{:.1} {:.1}", x0, y0, x1, y1);
+                }
+                Prim::Box { x, y, size } => {
+                    let _ = write!(strong, "M{:.1} {:.1}h{:.1}v{:.1}h{:.1}Z", x, y, size, size, -size);
+                }
+                Prim::Label { x, y, size, text, color, bold } => {
+                    let _ = write!(
+                        labels,
+                        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" font-weight=\"{}\" fill=\"{}\">{}</text>",
+                        x,
+                        y,
+                        size,
+                        if bold { 700 } else { 500 },
+                        color.map(rgba).unwrap_or_else(|| "rgba(95,115,150,.9)".into()),
+                        esc(text)
+                    );
+                }
+                Prim::Dot { .. } => {}
+            }
+        }
+        format!(
+            "<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" font-family=\"Inter, system-ui, sans-serif\">{fills}<path d=\"{lines}\" fill=\"none\" stroke=\"rgba(120,153,200,.7)\" stroke-width=\".5\" vector-effect=\"non-scaling-stroke\"/><path d=\"{strong}\" fill=\"none\" stroke=\"rgba(100,125,170,.85)\" stroke-width=\".8\" vector-effect=\"non-scaling-stroke\"/>{labels}</svg>"
+        )
     }
 
     fn paper_dots(prefix: &str, cur: Color) -> String {

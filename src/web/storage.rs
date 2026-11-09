@@ -265,10 +265,13 @@ impl App {
 
     /// Aktuelles Notizbuch sofort speichern.
     pub fn save_now(&mut self) {
-        let Some(ed) = &self.ed else { return };
         if !self.unsaved {
             return;
         }
+        if let Some(ed) = &mut self.ed {
+            ed.nb.sync_template_cards();
+        }
+        let Some(ed) = &self.ed else { return };
         self.unsaved = false;
         let meta = NoteMeta::of(&ed.nb);
         self.persist_notebook(&ed.nb);

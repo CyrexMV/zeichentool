@@ -106,7 +106,7 @@ pub struct Editor {
     pub dirty: bool,
     pub paths: HashMap<u32, (u64, Path2d)>,
     pub bmps: HashMap<u32, PageBmp>,
-    pub tpl_cache: HashMap<String, Vec<(u8, Path2d)>>,
+    pub tpl_cache: super::render::TplCache,
     pub wraps: HashMap<u32, (u64, Vec<String>)>,
     pub op: Option<Op>,
     pub selection: Option<Selection>,

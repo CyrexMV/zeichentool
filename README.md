@@ -19,6 +19,9 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - Mehrere Seiten, vertikal durchscrollen (mit Schwung), Seitenübersicht mit Vorschaubildern, Lesezeichen
 - Seiten hinzufügen, duplizieren, löschen, verschieben; Vorlage pro Seite oder für alle Seiten ändern
 - Vorlagen: Blanko, Liniert, Kariert, Gepunktet, Cornell, Notenlinien, Wochenplaner, **Checkliste** – eng/mittel/weit
+- Farbige Planer mit fertigen Beschriftungen: **Woche farbig** (Mo–So + Notizen), **Einkaufsliste** (nach Kategorien, abhakbar),
+  **Tagesplaner** (Zeitplan, Top 3, To-do, Wasser), **Monatskalender**, **Stundenplan** (mit Hausaufgaben), **Essensplan**
+  (mit Einkaufsliste), **Gewohnheiten** (31 Tage) und **Lernkarte** – passen sich an Hoch-/Querformat an
 - **Checkliste**: Kästchen antippen → abgehakt; die Schrift in der Zeile wird automatisch durchgestrichen und ausgegraut
 - Papierfarben: Weiß, Creme, Notizgelb, Hellblau, Dunkel, Schwarz, Tafelgrün
 - Formate: A4 hoch/quer, Quadrat, Bildschirm
@@ -34,6 +37,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - Rückgängig/Wiederholen (auch Zwei-/Drei-Finger-Tipp)
 - **Lineal & Geodreieck**: mit einem Finger verschieben, mit zwei drehen (rastet bei 0°/45°/90° ein); am Rand
   entlang zeichnet der Stift exakt gerade Linien, mit cm-Skala, Winkelmesser und Längenanzeige
+- **Lernkarten auf dem Startbildschirm**: „Neues Lernkarten-Set“ legt ein Kartenset an (jede Seite = Karte, oben Frage,
+  unten Antwort); „Lernen“ startet direkt vom Startbildschirm, mit Fortschrittsbalken je Set
 - **Lernkarten**: Frage und Antwort mit dem Lasso markieren → „Lernkarte“; lernen mit Umdrehen und
   Karteikasten (gewusst → nächstes Fach, sonst zurück); Karten zeigen immer den aktuellen Stand der Seite
 - **Inhaltsverzeichnis**: Seitentitel vergeben (⋯ → „Seitentitel“), Übersicht unter Seiten → „Inhalt“

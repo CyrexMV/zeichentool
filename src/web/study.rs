@@ -87,8 +87,13 @@ impl App {
 
     pub fn open_study(&mut self) {
         self.close_popovers();
-        if self.ed.is_none() {
-            return;
+        self.study_from_lib = false;
+        let Some(ed) = &mut self.ed else { return };
+        if ed.text_edit.is_some() {
+            self.commit_text();
+        }
+        if let Some(ed) = &mut self.ed {
+            ed.nb.sync_template_cards();
         }
         show("study", true);
         self.study = None;
@@ -99,6 +104,10 @@ impl App {
     pub fn close_study(&mut self) {
         show("study", false);
         self.study = None;
+        if std::mem::take(&mut self.study_from_lib) {
+            self.close_editor();
+            return;
+        }
         self.sync_ui_rects();
         self.request_frame();
     }
@@ -109,7 +118,7 @@ impl App {
         show("study-done", false);
         style(&el("study-bar"), "width", "0%");
         let Some(ed) = &mut self.ed else { return };
-        let cards = &ed.nb.cards;
+        let cards = ed.nb.study_cards();
         let n = cards.len();
         set_text("study-sub", &format!("{} · {} {}", ed.nb.title, n, if n == 1 { "Karte" } else { "Karten" }));
         let mut boxes = String::new();
@@ -135,7 +144,7 @@ impl App {
             grid = "<p class=\"muted\" style=\"grid-column:1/-1;text-align:center\">Noch keine Lernkarten in diesem Notizbuch.</p>".into();
         }
         el("study-cards").set_inner_html(&grid);
-        let fronts: Vec<(u32, Region)> = ed.nb.cards.iter().map(|c| (c.id, c.front)).collect();
+        let fronts: Vec<(u32, Region)> = cards.iter().map(|c| (c.id, c.front)).collect();
         for (id, region) in fronts {
             if let Ok(Some(cv)) = dom().query_selector(&format!("canvas[data-card=\"{}\"]", id)) {
                 ed.render_region(&cv.unchecked_into(), &region, &mut self.images);
@@ -146,15 +155,9 @@ impl App {
     pub fn study_start(&mut self, hard_only: bool) {
         let Some(ed) = &self.ed else { return };
         // nur Karten, deren Seiten noch existieren
-        let mut cards: Vec<&Card> = ed
-            .nb
-            .cards
-            .iter()
-            .filter(|c| !hard_only || c.level <= 1)
-            .filter(|c| ed.nb.page_index(c.front.page).is_some() && ed.nb.page_index(c.back.page).is_some())
-            .collect();
+        let mut cards: Vec<&Card> = ed.nb.study_cards().into_iter().filter(|c| !hard_only || c.level <= 1).collect();
         if cards.is_empty() {
-            self.toast(if hard_only { "Keine schwierigen Karten – super!" } else { "Noch keine Lernkarten – erst mit dem Lasso welche anlegen" });
+            self.toast(if hard_only { "Keine schwierigen Karten – super!" } else { "Noch keine Lernkarten – schreibe zuerst Frage und Antwort auf eine Karte" });
             return;
         }
         // nach Fach sortieren, innerhalb des Fachs mischen
@@ -229,7 +232,19 @@ impl App {
 
     pub fn delete_card(&mut self, id: u32) {
         if let Some(ed) = &mut self.ed {
-            ed.nb.cards.retain(|c| c.id != id);
+            // Karten eines Lernkarten-Sets sind Seiten: dann die Seite löschen (rückgängig machbar)
+            let page = ed.nb.cards.iter().find(|c| c.id == id).filter(|c| ed.nb.is_auto_card(c)).map(|c| c.front.page);
+            if let Some(pi) = page.and_then(|p| ed.nb.page_index(p)) {
+                if ed.delete_page(pi) {
+                    ed.nb.sync_template_cards();
+                    self.after_pages_change();
+                    self.toast("Karte gelöscht – Rückgängig ist möglich");
+                } else {
+                    self.toast("Die letzte Karte bleibt – radiere ihren Inhalt einfach weg");
+                }
+            } else if let Some(ed) = &mut self.ed {
+                ed.nb.cards.retain(|c| c.id != id);
+            }
         }
         self.mark_unsaved();
         self.render_study_home();

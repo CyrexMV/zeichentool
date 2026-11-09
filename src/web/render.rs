@@ -4,7 +4,7 @@
 use super::editor::{new_canvas, Editor, Op, PageBmp, GAP};
 use super::*;
 use crate::engine::geom::{Rect, Xf};
-use crate::engine::paper::{line_colors, planner_label_pos, Prim};
+use crate::engine::paper::{line_colors, Prim};
 use crate::engine::{Content, Page, PenKind, Stroke, TemplateKind, TextBox};
 use std::fmt::Write as _;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Path2d};
@@ -83,9 +83,12 @@ fn fp_text(t: &TextBox) -> u64 {
 }
 
 /// Zeichen-Zwischenspeicher, gemeinsam für Ansicht, Vorschaubilder und Export.
+/// Vorlagen-Zwischenspeicher: Linienpfade + Farbflächen/Beschriftungen.
+pub type TplCache = HashMap<String, (Vec<(u8, Path2d)>, Vec<Prim>)>;
+
 pub struct Caches<'a> {
     pub paths: &'a mut HashMap<u32, (u64, Path2d)>,
-    pub tpl: &'a mut HashMap<String, Vec<(u8, Path2d)>>,
+    pub tpl: &'a mut TplCache,
     pub wraps: &'a mut HashMap<u32, (u64, Vec<String>)>,
     pub images: &'a mut HashMap<u64, HtmlImageElement>,
 }
@@ -217,9 +220,10 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
 
 /// Abgehakte Checklisten-Zeilen: Kästchen füllen, Häkchen, Inhalt ausgrauen und durchstreichen.
 fn draw_checks(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32) {
-    if page.template.kind != TemplateKind::Checklist || page.checks.is_empty() {
+    if page.checks.is_empty() {
         return;
     }
+    let fade = page.template.kind == TemplateKind::Checklist;
     let light = page.paper.luminance() > 0.5;
     let [pr, pg, pb] = page.paper.to_u8();
     for (i, row) in page.template.check_rows(w, h).iter().enumerate() {
@@ -227,9 +231,11 @@ fn draw_checks(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32) {
             continue;
         }
         let s = row.size as f64;
-        // Inhalt ausgrauen
-        ctx.set_fill_style_str(&format!("rgba({},{},{},0.55)", pr, pg, pb));
-        ctx.fill_rect(row.text_x as f64 - 4.0, row.y0 as f64 + 1.0, (w - row.text_x) as f64 + 4.0, (row.y1 - row.y0) as f64 - 2.0);
+        // Inhalt ausgrauen (nur auf der schlichten Checkliste – farbige Flächen bleiben sichtbar)
+        if fade {
+            ctx.set_fill_style_str(&format!("rgba({},{},{},0.55)", pr, pg, pb));
+            ctx.fill_rect(row.text_x as f64 - 4.0, row.y0 as f64 + 1.0, (row.x1 - row.text_x) as f64 + 4.0, (row.y1 - row.y0) as f64 - 2.0);
+        }
         // durchstreichen
         if let Some((x0, x1, y)) = page.row_strike(row) {
             ctx.set_stroke_style_str(if light { "rgba(35,37,50,.85)" } else { "rgba(235,236,245,.85)" });
@@ -266,9 +272,10 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
     let light = page.paper.luminance() > 0.5;
     let key = format!("{}-{}-{}-{}", t.kind as u8, t.spacing, w, h);
     if !c.tpl.contains_key(&key) {
+        let prims = t.primitives(w, h);
         let mut d = [String::new(), String::new(), String::new(), String::new()];
-        for p in t.primitives(w, h) {
-            match p {
+        for p in &prims {
+            match *p {
                 Prim::Line { x0, y0, x1, y1, accent, strong } => {
                     let k = if accent { 2 } else if strong { 1 } else { 0 };
                     let _ = write!(d[k], "M{:.2} {:.2}L{:.2} {:.2}", x0, y0, x1, y1);
@@ -279,15 +286,32 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                 Prim::Box { x, y, size } => {
                     let _ = write!(d[1], "M{:.2} {:.2}h{:.2}v{:.2}h{:.2}Z", x, y, size, size, -size);
                 }
+                Prim::Fill { .. } | Prim::Label { .. } => {}
             }
         }
         let v = d.iter().enumerate().filter(|(_, s)| !s.is_empty()).filter_map(|(k, s)| Path2d::new_with_path_string(s).ok().map(|p| (k as u8, p))).collect();
-        c.tpl.insert(key.clone(), v);
+        let decor = prims.into_iter().filter(|p| matches!(p, Prim::Fill { .. } | Prim::Label { .. })).collect();
+        c.tpl.insert(key.clone(), (v, decor));
     }
     let (line, accent) = line_colors(page.paper);
     let css = |c: [f32; 4]| format!("rgba({},{},{},{})", (c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8, c[3]);
+    let css8 = |c: [u8; 4]| format!("rgba({},{},{},{:.3})", c[0], c[1], c[2], c[3] as f32 / 255.0);
+    let (paths, decor) = &c.tpl[&key];
+    // Farbflächen unter den Linien
+    for p in decor {
+        if let Prim::Fill { x, y, w: fw, h: fh, r, color } = *p {
+            ctx.set_fill_style_str(&css8(color));
+            ctx.begin_path();
+            if r > 0.0 {
+                let _ = ctx.round_rect_with_f64(x as f64, y as f64, fw as f64, fh as f64, r as f64);
+            } else {
+                ctx.rect(x as f64, y as f64, fw as f64, fh as f64);
+            }
+            ctx.fill();
+        }
+    }
     let lw = t.line_width(w, h) as f64;
-    for (k, p) in &c.tpl[&key] {
+    for (k, p) in paths {
         match k {
             3 => {
                 ctx.set_fill_style_str(&css([line[0], line[1], line[2], (line[3] * 1.4).min(1.0)]));
@@ -300,12 +324,17 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
             }
         }
     }
-    if t.kind == TemplateKind::Planner {
-        let size = t.unit(w, h) * 0.55;
-        ctx.set_font(&format!("650 {}px {}", size, FONT));
-        ctx.set_fill_style_str(&css([line[0], line[1], line[2], if light { 0.9 } else { 0.7 }]));
-        for (x, y, l) in planner_label_pos(&t, w, h) {
-            let _ = ctx.fill_text(l, x as f64, y as f64);
+    // Beschriftungen
+    ctx.set_text_baseline("alphabetic");
+    ctx.set_text_align("start");
+    for p in decor {
+        if let Prim::Label { x, y, size, text, color, bold } = *p {
+            ctx.set_font(&format!("{} {}px {}", if bold { 700 } else { 500 }, size, FONT));
+            ctx.set_fill_style_str(&match color {
+                Some(c) => css8(c),
+                None => css([line[0], line[1], line[2], if light { 0.9 } else { 0.7 }]),
+            });
+            let _ = ctx.fill_text(text, x as f64, y as f64);
         }
     }
 }

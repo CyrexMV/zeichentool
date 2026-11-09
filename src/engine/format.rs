@@ -281,6 +281,13 @@ pub struct NoteMeta {
     pub h: f32,
     pub folder: String,
     pub is_template: bool,
+    /// Lernbare Karten / davon sicher gelernt
+    pub cards: u32,
+    pub learned: u32,
+    /// Enthält Seiten mit der Vorlage „Lernkarte“ (Lernkarten-Set)
+    pub deck: bool,
+    /// Lernfortschritt in Prozent (Durchschnitt der Karteikasten-Fächer)
+    pub progress: u32,
 }
 
 impl NoteMeta {
@@ -297,6 +304,17 @@ impl NoteMeta {
             h: nb.format.h,
             folder: nb.folder.clone(),
             is_template: nb.is_template,
+            cards: nb.study_cards().len() as u32,
+            learned: nb.study_cards().iter().filter(|c| c.level >= 4).count() as u32,
+            progress: {
+                let c = nb.study_cards();
+                if c.is_empty() {
+                    0
+                } else {
+                    (c.iter().map(|c| c.level as u32).sum::<u32>() * 100) / (c.len() as u32 * 4)
+                }
+            },
+            deck: nb.pages.iter().any(|p| p.template.kind == TemplateKind::Flashcard),
         }
     }
 }
@@ -307,7 +325,7 @@ fn clean(s: &str) -> String {
 
 pub fn save_library(list: &[NoteMeta]) -> String {
     list.iter()
-        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h, clean(&m.folder), m.is_template as u8))
+        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h, clean(&m.folder), m.is_template as u8, m.cards, m.learned, m.deck as u8, m.progress))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -331,6 +349,10 @@ pub fn load_library(s: &str) -> Vec<NoteMeta> {
                 h: f[8].parse().unwrap_or(842.0),
                 folder: f.get(9).map(|x| x.to_string()).unwrap_or_default(),
                 is_template: f.get(10) == Some(&"1"),
+                cards: f.get(11).and_then(|x| x.parse().ok()).unwrap_or(0),
+                learned: f.get(12).and_then(|x| x.parse().ok()).unwrap_or(0),
+                deck: f.get(13) == Some(&"1"),
+                progress: f.get(14).and_then(|x| x.parse().ok()).unwrap_or(0),
             })
         })
         .collect()
@@ -467,13 +489,14 @@ mod tests {
 
     #[test]
     fn library_roundtrip() {
-        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0, folder: "Schule".into(), is_template: true };
+        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0, folder: "Schule".into(), is_template: true, cards: 7, learned: 2, deck: true, progress: 40 };
         let back = load_library(&save_library(&[m.clone()]));
         assert_eq!(back[0].title, "Ti tel");
         assert_eq!(back[0].pages, 3);
         assert!(back[0].favorite);
         assert_eq!(back[0].folder, "Schule");
         assert!(back[0].is_template);
+        assert_eq!((back[0].cards, back[0].learned, back[0].deck), (7, 2, true));
         // alte Zeilen ohne Ordner bleiben lesbar
         let old = load_library("x\tAlt\t0\t0\t1\t2\t1\t595\t842");
         assert_eq!(old[0].folder, "");

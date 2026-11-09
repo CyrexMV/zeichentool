@@ -3,7 +3,7 @@
 use super::color::Color;
 use super::geom::{Rect, Xf};
 use super::ink::Stroke;
-use super::paper::Template;
+use super::paper::{Template, TemplateKind};
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -165,7 +165,7 @@ impl Page {
             }
             let b = it.bbox();
             let (cx, cy) = b.center();
-            if cy >= row.y0 && cy < row.y1 && cx > row.bx + row.size {
+            if cy >= row.y0 && cy < row.y1 && cx > row.bx + row.size && cx < row.x1 {
                 r = r.union(&b);
             }
         }
@@ -174,7 +174,7 @@ impl Page {
         }
         let x0 = row.text_x - (row.text_x - row.bx - row.size) * 0.5;
         let y = ((r.y0 + r.y1) * 0.5).clamp(row.y0 + (row.y1 - row.y0) * 0.3, row.y1 - (row.y1 - row.y0) * 0.2);
-        Some((x0.min(r.x0), r.x1 + 4.0, y))
+        Some((x0.min(r.x0), (r.x1 + 4.0).min(row.x1), y))
     }
 
     pub fn stroke_count(&self) -> usize {
@@ -322,6 +322,45 @@ impl Notebook {
         self.cards.retain(|c| ids.contains(&c.front.page) && ids.contains(&c.back.page));
     }
 
+    /// Bereiche (Frage, Antwort) einer Seite mit der Vorlage „Lernkarte“.
+    pub fn flashcard_regions(&self, page: u32) -> (Region, Region) {
+        let ((a0, a1, a2, a3), (b0, b1, b2, b3)) = Template::flashcard_halves(self.format.w, self.format.h);
+        (Region { page, rect: Rect::new(a0, a1, a2, a3) }, Region { page, rect: Rect::new(b0, b1, b2, b3) })
+    }
+
+    pub fn is_auto_card(&self, c: &Card) -> bool {
+        c.front.page == c.back.page && (c.front, c.back) == self.flashcard_regions(c.front.page)
+    }
+
+    /// Jede Seite mit der Vorlage „Lernkarte“ ist automatisch eine Karte (oben/links Frage,
+    /// unten/rechts Antwort). Legt fehlende Karten an und entfernt verwaiste.
+    pub fn sync_template_cards(&mut self) {
+        let pages: Vec<u32> = self.pages.iter().filter(|p| p.template.kind == TemplateKind::Flashcard).map(|p| p.id).collect();
+        let keep: Vec<bool> = self.cards.iter().map(|c| !self.is_auto_card(c) || pages.contains(&c.front.page)).collect();
+        let mut k = keep.iter();
+        self.cards.retain(|_| *k.next().unwrap_or(&true));
+        for pid in pages {
+            if !self.cards.iter().any(|c| c.front.page == pid && self.is_auto_card(c)) {
+                let (front, back) = self.flashcard_regions(pid);
+                let id = self.alloc_id();
+                self.cards.push(Card { id, front, back, level: 0, right: 0, wrong: 0 });
+            }
+        }
+    }
+
+    pub fn region_has_content(&self, r: &Region) -> bool {
+        self.pages.iter().find(|p| p.id == r.page).map(|p| p.items.iter().any(|it| it.bbox().intersects(&r.rect))).unwrap_or(false)
+    }
+
+    /// Karten, die sich lernen lassen (Seiten vorhanden, Frage oder Antwort beschrieben).
+    pub fn study_cards(&self) -> Vec<&Card> {
+        self.cards
+            .iter()
+            .filter(|c| self.page_index(c.front.page).is_some() && self.page_index(c.back.page).is_some())
+            .filter(|c| self.region_has_content(&c.front) || self.region_has_content(&c.back))
+            .collect()
+    }
+
     /// Kopie einer Seite mit neuen IDs.
     pub fn duplicate_page(&mut self, index: usize) -> Page {
         let mut p = self.pages[index].clone();
@@ -361,7 +400,6 @@ mod tests {
 
     #[test]
     fn checklist_strike_follows_handwriting() {
-        use crate::engine::paper::TemplateKind;
         let t = Template { kind: TemplateKind::Checklist, spacing: 1 };
         let rows = t.check_rows(595.0, 842.0);
         let r = rows[2];
@@ -372,6 +410,29 @@ mod tests {
         assert!(x0 < r.text_x + 5.0 && x1 > 300.0);
         assert!(sy > r.y0 && sy < r.y1);
         assert!(p.row_strike(&rows[0]).is_none(), "leere Zeile ohne Strich");
+    }
+
+    #[test]
+    fn flashcard_pages_become_cards() {
+        let t = Template { kind: TemplateKind::Flashcard, spacing: 1 };
+        let mut nb = Notebook::new("x".into(), "Vokabeln", 0, Format { w: 420.0, h: 595.0 }, t, Color::WHITE, 0.0);
+        nb.sync_template_cards();
+        assert_eq!(nb.cards.len(), 1);
+        assert!(nb.study_cards().is_empty(), "leere Karte wird nicht abgefragt");
+        let id = nb.alloc_id();
+        nb.pages[0].insert([stroke(1.0, id)]);
+        assert_eq!(nb.study_cards().len(), 1);
+        let p = nb.new_page_like(0);
+        nb.pages.push(p);
+        nb.sync_template_cards();
+        nb.sync_template_cards();
+        assert_eq!(nb.cards.len(), 2);
+        nb.pages.remove(1);
+        nb.sync_template_cards();
+        assert_eq!(nb.cards.len(), 1);
+        nb.pages[0].template.kind = TemplateKind::Lined;
+        nb.sync_template_cards();
+        assert!(nb.cards.is_empty());
     }
 
     #[test]

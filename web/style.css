@@ -453,3 +453,35 @@ input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bo
 
 .pick-item > span:last-child { display: flex; flex-direction: column; align-items: flex-start; text-align: left; min-width: 0; }
 .pick-item { text-align: left; }
+
+/* ---------- Lernkarten auf dem Startbildschirm ---------- */
+.lib-decks { padding: 4px 32px 20px; }
+.lib-decks.hidden { display: none; }
+.decks-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 12px; }
+.decks-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; }
+.decks-head h3 svg { width: 20px; height: 20px; color: var(--accent); }
+.decks-head .muted { font-size: 13px; }
+.decks-row { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; touch-action: pan-x pan-y; }
+.decks-row::-webkit-scrollbar { height: 0; }
+.deck, .deck-new { flex: 0 0 232px; scroll-snap-align: start; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm); padding: 14px; cursor: pointer; text-align: left; transition: transform .15s, box-shadow .15s; animation: rise .3s ease both; }
+.deck:hover, .deck-new:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.deck-new { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px; border: 1.5px dashed var(--line2); background: transparent; box-shadow: none; min-height: 170px; }
+.deck-new b { font-size: 15px; }
+.deck-new small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.deck-plus { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--grad); color: #fff; margin-bottom: 6px; box-shadow: 0 6px 18px rgba(109,92,255,.35); }
+.deck-plus svg { width: 22px; height: 22px; }
+.deck-stack { position: relative; height: 96px; margin: 4px 6px 14px; }
+.deck-stack > span { position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, var(--c1), var(--c2)); opacity: .35; transform: rotate(-5deg) translate(-4px, 4px); }
+.deck-stack > span + span { opacity: .6; transform: rotate(3deg) translate(3px, 2px); }
+.deck-face { position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, var(--c1), var(--c2)); color: #fff; padding: 14px; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 6px 16px rgba(20,22,40,.18); }
+.deck-face b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.deck-face small { opacity: .9; font-size: 12.5px; }
+.deck-prog { height: 6px; border-radius: 4px; background: var(--hover); overflow: hidden; }
+.deck-prog span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #1fbf75, #2fb5ff); }
+.deck-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.deck-foot small { color: var(--muted); font-size: 12px; }
+.deck-foot .btn svg { width: 16px; height: 16px; }
+
+/* Vorschau farbiger Vorlagen (aus den echten Grundformen erzeugt) */
+.tpl-prev.svg { overflow: hidden; }
+.tpl-prev.svg svg { display: block; width: 100%; height: 100%; }

@@ -86,6 +86,7 @@ impl App {
             }
         }
         el("lib-folders").set_inner_html(&fhtml);
+        self.render_decks(folder.is_none() && !searching && !self.lib_fav);
         show("lib-crumb", folder.is_some() && !searching);
         set_text("lib-crumb-name", folder.as_deref().unwrap_or(""));
         el("lib-grid").set_inner_html(&html);
@@ -106,8 +107,62 @@ impl App {
         }
     }
 
+    /// Lernkarten-Bereich auf dem Startbildschirm.
+    fn render_decks(&self, visible: bool) {
+        show("lib-decks", visible);
+        if !visible {
+            return;
+        }
+        let mut decks: Vec<&NoteMeta> = self.library.iter().filter(|m| !m.is_template && (m.deck || m.cards > 0)).collect();
+        decks.sort_by(|a, b| b.modified.partial_cmp(&a.modified).unwrap_or(std::cmp::Ordering::Equal));
+        let (total, learned): (u32, u32) = decks.iter().fold((0, 0), |(t, l), m| (t + m.cards, l + m.learned));
+        let summary = if decks.is_empty() {
+            "Lerne mit Karteikarten – Frage vorne, Antwort hinten".to_string()
+        } else {
+            format!("{} {} · {} gelernt", total, if total == 1 { "Karte" } else { "Karten" }, learned)
+        };
+        let mut html = format!(
+            "<div class=\"decks-head\"><h3><svg><use href=\"#i-cards\"/></svg>Lernkarten</h3><span class=\"muted\">{}</span></div><div class=\"decks-row\">\
+             <button class=\"deck-new\" data-act=\"deck-new\"><span class=\"deck-plus\"><svg><use href=\"#i-plus\"/></svg></span><b>Neues Lernkarten-Set</b><small>Frage oben, Antwort unten – mit dem S-Pen</small></button>",
+            summary
+        );
+        for m in decks {
+            let pct = m.progress.min(100) as f64;
+            html.push_str(&format!(
+                "<div class=\"deck\" data-act=\"card\" data-arg=\"{id}\" title=\"Bearbeiten\">\
+                   <div class=\"deck-stack\" style=\"{css}\"><span></span><span></span><div class=\"deck-face\"><b>{title}</b><small>{n} {nw}</small></div></div>\
+                   <div class=\"deck-prog\"><span style=\"width:{pct:.0}%\"></span></div>\
+                   <div class=\"deck-foot\"><small>{l} von {n} gelernt</small><button class=\"btn small primary\" data-act=\"deck-study\" data-arg=\"{id}\"><svg><use href=\"#i-cards\"/></svg>Lernen</button></div>\
+                 </div>",
+                id = esc(&m.id),
+                css = cover_css(m.cover),
+                title = esc(&m.title),
+                n = m.cards,
+                nw = if m.cards == 1 { "Karte" } else { "Karten" },
+                l = m.learned,
+                pct = pct
+            ));
+        }
+        html.push_str("</div>");
+        el("lib-decks").set_inner_html(&html);
+    }
+
+    /// Lernkarten-Set vom Startbildschirm aus öffnen und gleich lernen.
+    pub fn study_deck(&mut self, id: String) {
+        self.with_stored(id, |a, nb| {
+            a.enter_editor(nb);
+            a.open_study();
+            a.study_from_lib = true;
+            let has = a.ed.as_ref().map(|e| !e.nb.study_cards().is_empty()).unwrap_or(false);
+            if has {
+                a.study_start(false);
+            }
+        });
+    }
+
     /// Neues Notizbuch speichern und (optional) öffnen.
-    pub fn add_notebook(&mut self, nb: Notebook, open: bool) {
+    pub fn add_notebook(&mut self, mut nb: Notebook, open: bool) {
+        nb.sync_template_cards();
         self.library.retain(|m| m.id != nb.id);
         self.library.push(NoteMeta::of(&nb));
         self.persist_notebook(&nb);
@@ -247,6 +302,16 @@ impl App {
         let pending = self.pending.take();
         self.close_modals();
         match pending {
+            Some(Pending::NewDeck) => {
+                let t: String = value.trim().chars().take(80).collect();
+                let title = if t.is_empty() { "Lernkarten".to_string() } else { t };
+                let cover = (js_sys::Math::random() * COVERS.len() as f64) as u8 % COVERS.len() as u8;
+                let tpl = crate::engine::Template { kind: crate::engine::TemplateKind::Flashcard, spacing: 1 };
+                let mut nb = Notebook::new(super::storage::new_id(), &title, cover, crate::engine::Format { w: 420.0, h: 595.0 }, tpl, crate::engine::Color::WHITE, wall_clock());
+                nb.folder = self.folder.clone().unwrap_or_default();
+                self.add_notebook(nb, true);
+                self.toast("Oben die Frage, unten die Antwort schreiben – neue Karte über „Seite hinzufügen“ (Blatt mit +)");
+            }
             Some(Pending::DeleteNotebook(id)) => {
                 self.delete_stored(&id);
                 self.toast("Notizbuch gelöscht");
