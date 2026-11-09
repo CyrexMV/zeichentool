@@ -518,18 +518,33 @@ public class MainActivity extends Activity {
                 fileCallback.onReceiveValue(null);
             }
             fileCallback = callback;
-            boolean image = false;
+            // Nur einschränken, wenn ausschließlich Bilder bzw. ausschließlich PDFs erlaubt sind –
+            // sonst (z. B. Import: PDF, Bild, .znote) alle Dateien zeigen.
+            boolean any = false, allImage = true, allPdf = true;
             String[] types = params.getAcceptTypes();
             if (types != null) {
-                for (String t : types) {
-                    if (t != null && t.startsWith("image")) {
-                        image = true;
+                for (String raw : types) {
+                    if (raw == null) {
+                        continue;
+                    }
+                    for (String part : raw.split(",")) {
+                        String t = part.trim().toLowerCase();
+                        if (t.isEmpty()) {
+                            continue;
+                        }
+                        any = true;
+                        if (!t.startsWith("image")) {
+                            allImage = false;
+                        }
+                        if (!t.equals("application/pdf") && !t.equals(".pdf")) {
+                            allPdf = false;
+                        }
                     }
                 }
             }
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType(image ? "image/*" : "*/*");
+            i.setType(any && allImage ? "image/*" : any && allPdf ? "application/pdf" : "*/*");
             try {
                 startActivityForResult(i, REQUEST_FILE);
             } catch (ActivityNotFoundException e) {

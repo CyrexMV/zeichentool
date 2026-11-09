@@ -150,6 +150,8 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 #view, #live, #view2, #live2 { position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; }
 #view.hidden, #live.hidden, #view2.hidden, #live2.hidden { display: none; }
 #live, #live2 { cursor: crosshair; }
+/* Stift schwebt: nur der eigene Vorschaupunkt, kein zusätzlicher System-Zeiger */
+#editor.pen-hover #live, #editor.pen-hover #live2, #editor.pen-hover #view, #editor.pen-hover #view2 { cursor: none; }
 .ed-top {
   position: absolute; top: calc(var(--safe-top) + 10px); left: 10px; right: 10px; z-index: 10;
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: start;

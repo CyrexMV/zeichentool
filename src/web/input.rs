@@ -336,6 +336,8 @@ impl App {
             if mine {
                 self.end_op(id);
             }
+            // eigener Vorschaupunkt statt zusätzlichem System-Zeiger
+            set_class(&el("editor"), "pen-hover", true);
             self.show_hover(sx, sy);
         }
     }
@@ -465,13 +467,15 @@ impl App {
         let d = d.max(5.0);
         style(&c, "width", &format!("{}px", d));
         style(&c, "height", &format!("{}px", d));
-        style(&c, "transform", &format!("translate({}px,{}px) translate(-50%,-50%)", sx, sy));
+        // sx/sy sind Koordinaten des Editorbereichs → Fenster (Seitenleiste / Split-Ansicht)
+        style(&c, "transform", &format!("translate({}px,{}px) translate(-50%,-50%)", sx + ed.ox, sy));
         set_class(&c, "eraser", tool == Tool::Eraser);
         set_class(&c, "show", true);
     }
 
     pub fn hide_cursor(&mut self) {
         set_class(&el("cursor"), "show", false);
+        set_class(&el("editor"), "pen-hover", false);
     }
 
     // ----- Finger -----

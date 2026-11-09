@@ -764,38 +764,45 @@ pub fn bind_files() {
             with_app(|a| a.insert_image(png, w as f32, h as f32));
         });
     });
-    on(&input_el("file-import"), "change", |e: Event| {
-        let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
-        let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
-        inp.set_value("");
-        let name = file.name();
-        if file.type_() == "application/pdf" || name.to_lowercase().ends_with(".pdf") {
-            spawn_local(async move {
-                let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
-                let bytes = Uint8Array::new(&buf).to_vec();
-                with_app(|a| a.import_pdf(name, bytes));
-            });
-            return;
-        }
-        if file.type_().starts_with("image/") {
-            let title: String = name.rsplit_once('.').map(|(a, _)| a.to_string()).unwrap_or(name.clone());
-            decode_image(file, move |png, w, h| {
-                if let Some((w, h, rgba)) = decode_png(&png) {
-                    let nb = image_notebook(&title, w, h, &rgba);
-                    with_app(|a| {
-                        a.add_notebook(nb, false);
-                        a.toast("Bild als Notizbuch importiert");
-                    });
-                }
-                let _ = (w, h);
-            });
-            return;
-        }
+    for id in ["file-import", "file-import-pdf", "file-import-image"] {
+        on(&input_el(id), "change", |e: Event| {
+            let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
+            let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
+            inp.set_value("");
+            import_file(file);
+        });
+    }
+}
+
+/// Datei vom Startbildschirm importieren: PDF → Notizbuch, Bild → Notizbuch, sonst .znote/Backup/alte Zeichnung.
+fn import_file(file: web_sys::File) {
+    let name = file.name();
+    if file.type_() == "application/pdf" || name.to_lowercase().ends_with(".pdf") {
         spawn_local(async move {
             let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
             let bytes = Uint8Array::new(&buf).to_vec();
-            with_app(|a| a.import_bytes(&name, bytes));
+            with_app(|a| a.import_pdf(name, bytes));
         });
+        return;
+    }
+    if file.type_().starts_with("image/") {
+        let title: String = name.rsplit_once('.').map(|(a, _)| a.to_string()).unwrap_or(name.clone());
+        decode_image(file, move |png, w, h| {
+            if let Some((w, h, rgba)) = decode_png(&png) {
+                let nb = image_notebook(&title, w, h, &rgba);
+                with_app(|a| {
+                    a.add_notebook(nb, false);
+                    a.toast("Bild als Notizbuch importiert");
+                });
+            }
+            let _ = (w, h);
+        });
+        return;
+    }
+    spawn_local(async move {
+        let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
+        let bytes = Uint8Array::new(&buf).to_vec();
+        with_app(|a| a.import_bytes(&name, bytes));
     });
 }
 

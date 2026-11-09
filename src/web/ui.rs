@@ -12,7 +12,7 @@ thread_local! {
 
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
-const POPS: [&str; 10] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
+const POPS: [&str; 11] = ["pop-import", "pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
 thread_local! {
     /// zuletzt in der Seitenleiste markierte Seite (Seite, Seitenzahl, Notizbuch)
     static NAV_CUR: std::cell::RefCell<Option<(usize, usize, String)>> = const { std::cell::RefCell::new(None) };
@@ -132,7 +132,16 @@ impl App {
                 self.render_library();
             }
             "new-nb" => self.open_new_dialog(),
-            "import" => set_timeout(0, || input_el("file-import").click()),
+            "import-menu" => self.open_popover("pop-import", src),
+            "import" => {
+                self.close_popovers();
+                set_timeout(0, || input_el("file-import").click());
+            }
+            "import-pdf" | "import-image" => {
+                self.close_popovers();
+                let id = if act == "import-pdf" { "file-import-pdf" } else { "file-import-image" };
+                set_timeout(0, move || input_el(id).click());
+            }
             "settings" => self.open_settings(),
             "card" => self.open_guarded(arg.to_string()),
             "trash-open" => {
