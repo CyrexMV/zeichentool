@@ -332,9 +332,11 @@ pub fn plot_items(spec: &PlotSpec, x0: f32, y0: f32, w: f32, h: f32, ink: [u8; 4
     // Achsen mit Pfeilen
     let a = 6.0;
     out.push(line(&[(x0, ay), (x0 + w, ay)], ink, 1.1));
-    out.push(line(&[(x0 + w - a, ay - a * 0.6), (x0 + w, ay), (x0 + w - a, ay + a * 0.6)], ink, 1.1));
+    out.push(line(&[(x0 + w - a, ay - a * 0.6), (x0 + w, ay)], ink, 1.1));
+    out.push(line(&[(x0 + w - a, ay + a * 0.6), (x0 + w, ay)], ink, 1.1));
     out.push(line(&[(ax, y0 + h), (ax, y0)], ink, 1.1));
-    out.push(line(&[(ax - a * 0.6, y0 + a), (ax, y0), (ax + a * 0.6, y0 + a)], ink, 1.1));
+    out.push(line(&[(ax - a * 0.6, y0 + a), (ax, y0)], ink, 1.1));
+    out.push(line(&[(ax + a * 0.6, y0 + a), (ax, y0)], ink, 1.1));
     out.push(Content::Text(TextBox { x: x0 + w - fs, y: ay - fs * 1.9, w: fs * 2.0, size: fs * 1.1, color: ink, bold: true, text: "x".into() }));
     out.push(Content::Text(TextBox { x: ax + 6.0, y: y0 - fs * 0.2, w: fs * 2.0, size: fs * 1.1, color: ink, bold: true, text: "y".into() }));
     // Kurven
@@ -404,7 +406,10 @@ pub fn table_items(x: f32, y: f32, cols: usize, rows: usize, cw: f32, rh: f32, h
         let xx = x + cw * c as f32;
         out.push(line(&[(xx, y), (xx, y + h)], ink, 0.8));
     }
-    out.push(line(&[(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)], ink, 1.4));
+    // Rahmen als vier einzelne gerade Linien (saubere Ecken)
+    for (a, b) in [((x, y), (x + w, y)), ((x + w, y), (x + w, y + h)), ((x + w, y + h), (x, y + h)), ((x, y + h), (x, y))] {
+        out.push(line(&[a, b], ink, 1.4));
+    }
     out
 }
 
@@ -441,6 +446,10 @@ mod tests {
         assert_eq!(c[0].last().unwrap().1, 3.0);
         assert_eq!(c[1][0].1, 3.0);
         let t = table_items(0.0, 0.0, 3, 4, 50.0, 20.0, Some([1, 2, 3, 40]), [0, 0, 0, 255]);
-        assert_eq!(t.len(), 1 + 3 + 2 + 1);
+        assert_eq!(t.len(), 1 + 3 + 2 + 4);
+        // ein Rahmen mit wenigen Punkten bleibt eckig (keine Spline-Ausbeulung)
+        let rect = Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.4, pts: [(0.0, 0.0), (100.0, 0.0), (100.0, 50.0), (0.0, 50.0), (0.0, 0.0)].iter().map(|&(x, y)| Pt::new(x, y, 0.5)).collect() };
+        let o = rect.outline();
+        assert!(o.iter().all(|&(x, y)| (-2.0..=102.0).contains(&x) && (-2.0..=52.0).contains(&y)), "Rahmen beult aus");
     }
 }

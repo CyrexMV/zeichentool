@@ -140,6 +140,20 @@ impl Stroke {
         if p.len() < 3 {
             return p.clone();
         }
+        // wenige Punkte mit langen Strecken (z. B. eingefügte Linien/Rahmen): gerade verbinden,
+        // sonst würde die Spline-Glättung Ecken zu Bögen aufblähen
+        let long = p.windows(2).any(|w| dist(w[0].x, w[0].y, w[1].x, w[1].y) > self.width.max(1.0) * 12.0);
+        if p.len() <= 6 && long {
+            let mut out = vec![p[0]];
+            for w in p.windows(2) {
+                let n = ((dist(w[0].x, w[0].y, w[1].x, w[1].y) / step).ceil() as usize).clamp(1, 400);
+                for k in 1..=n {
+                    let t = k as f32 / n as f32;
+                    out.push(Pt { x: w[0].x + (w[1].x - w[0].x) * t, y: w[0].y + (w[1].y - w[0].y) * t, p: w[0].p + (w[1].p - w[0].p) * t });
+                }
+            }
+            return out;
+        }
         let mut out = Vec::with_capacity(p.len() * 3);
         out.push(p[0]);
         for i in 0..p.len() - 1 {
