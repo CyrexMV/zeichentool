@@ -9,7 +9,7 @@ use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 struct W(Vec<u8>);
 
@@ -100,6 +100,10 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
         let [r, g, b] = p.paper.to_u8();
         w.rgba([r, g, b, 255]);
         w.u8(p.bookmark as u8);
+        w.u32(p.checks.len() as u32);
+        for c in &p.checks {
+            w.0.extend_from_slice(&c.to_le_bytes());
+        }
         w.u32(p.items.len() as u32);
         for it in &p.items {
             match &it.content {
@@ -175,6 +179,14 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
         let c = r.rgba()?;
         let paper = Color::from_u8(c[0], c[1], c[2]);
         let bookmark = r.u8()? != 0;
+        let mut checks = Vec::new();
+        if version >= 2 {
+            let nc = r.u32()? as usize;
+            for _ in 0..nc.min(10_000) {
+                let b = r.take(2)?;
+                checks.push(u16::from_le_bytes([b[0], b[1]]));
+            }
+        }
         let ni = r.u32()? as usize;
         let mut items = Vec::with_capacity(ni.min(100_000));
         for _ in 0..ni {
@@ -206,7 +218,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
             items.push(Item { id, order, content });
         }
         items.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap_or(std::cmp::Ordering::Equal));
-        pages.push(Page { id: pid, template, paper, bookmark, items, version: 1 });
+        pages.push(Page { id: pid, template, paper, bookmark, checks, items, version: 1 });
     }
     if pages.is_empty() {
         return Err("Notizbuch enthält keine Seiten".into());
@@ -398,6 +410,7 @@ mod tests {
         ]);
         nb.next_id = id + 3;
         nb.pages[0].bookmark = true;
+        nb.pages[0].checks = vec![0, 3];
         let bytes = save_notebook(&nb);
         let mut back = load_notebook(&bytes).unwrap();
         back.pages[0].version = nb.pages[0].version;

@@ -9,17 +9,19 @@ pub struct PageMeta {
     pub template: Template,
     pub paper: Color,
     pub bookmark: bool,
+    pub checks: Vec<u16>,
 }
 
 impl PageMeta {
     pub fn of(p: &Page) -> PageMeta {
-        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark }
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone() }
     }
 
     fn apply(&self, p: &mut Page) {
         p.template = self.template;
         p.paper = self.paper;
         p.bookmark = self.bookmark;
+        p.checks = self.checks.clone();
         p.touch();
     }
 }

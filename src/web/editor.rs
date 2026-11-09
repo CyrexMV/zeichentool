@@ -361,6 +361,7 @@ impl Editor {
         p.template = after.template;
         p.paper = after.paper;
         p.bookmark = after.bookmark;
+        p.checks = after.checks.clone();
         p.touch();
         let id = p.id;
         self.push(Action::PageMeta { page: id, before, after });
@@ -371,7 +372,7 @@ impl Editor {
         let mut group = Vec::new();
         for p in self.nb.pages.iter_mut() {
             let before = PageMeta::of(p);
-            let after = PageMeta { template, paper, bookmark: before.bookmark };
+            let after = PageMeta { template, paper, bookmark: before.bookmark, checks: before.checks.clone() };
             if before != after {
                 p.template = template;
                 p.paper = paper;

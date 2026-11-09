@@ -193,6 +193,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                 }
             }
         }
+        page_checks(&mut c, page, w, h, &mut gs_name);
         c.push_str("Q\n");
         contents.push(c);
     }
@@ -224,6 +225,36 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     pdf.finish(catalog)
 }
 
+/// Abgehakte Checklisten-Zeilen im PDF.
+fn page_checks(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String) {
+    if page.template.kind != TemplateKind::Checklist || page.checks.is_empty() {
+        return;
+    }
+    let p = page.paper;
+    let light = p.luminance() > 0.5;
+    for (i, row) in page.template.check_rows(w, h).iter().enumerate() {
+        if !page.is_checked(i) {
+            continue;
+        }
+        let s = row.size;
+        let _ = writeln!(c, "q /{} gs {} {} {} rg {} {} {} {} re f Q", gs(0.55, false), n(p.r), n(p.g), n(p.b), n(row.text_x - 4.0), n(row.y0 + 1.0), n(w - row.text_x + 4.0), n(row.y1 - row.y0 - 2.0));
+        if let Some((x0, x1, y)) = page.row_strike(row) {
+            let col = if light { "0.14 0.15 0.2" } else { "0.92 0.93 0.96" };
+            let _ = writeln!(c, "q /{} gs {} RG {} w 1 J {} {} m {} {} l S Q", gs(0.85, false), col, n(s * 0.09), n(x0), n(y), n(x1), n(y));
+        }
+        let (bx, by) = (row.bx, row.by);
+        let _ = writeln!(c, "q 0.427 0.361 1 rg {} {} {} {} re f Q", n(bx - s * 0.04), n(by - s * 0.04), n(s * 1.08), n(s * 1.08));
+        let _ = writeln!(
+            c,
+            "q 1 1 1 RG {} w 1 J 1 j {} {} m {} {} l {} {} l S Q",
+            n(s * 0.13),
+            n(bx + s * 0.22), n(by + s * 0.53),
+            n(bx + s * 0.43), n(by + s * 0.73),
+            n(bx + s * 0.79), n(by + s * 0.3)
+        );
+    }
+}
+
 fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String) {
     let p = page.paper;
     let _ = writeln!(c, "{} {} {} rg 0 0 {} {} re f", n(p.r), n(p.g), n(p.b), n(w), n(h));
@@ -238,6 +269,9 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
             Prim::Line { x0, y0, x1, y1, accent: ac, strong } => {
                 let col = if ac { accent } else { line };
                 let _ = writeln!(c, "q /{} gs {} RG {} w {} {} m {} {} l S Q", gs(col[3], false), rgb(col), n(if strong { lw * 1.8 } else { lw }), n(x0), n(y0), n(x1), n(y1));
+            }
+            Prim::Box { x, y, size } => {
+                let _ = writeln!(c, "q /{} gs {} RG {} w {} {} {} {} re S Q", gs(line[3], false), rgb(line), n(lw * 1.8), n(x), n(y), n(size), n(size));
             }
             Prim::Dot { x, y, r } => {
                 let k = r * 0.5523;

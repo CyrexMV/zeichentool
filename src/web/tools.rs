@@ -51,6 +51,12 @@ impl App {
         let er = (self.prefs.er_mode == EraserMode::Precise, self.prefs.er_hl_only, self.eraser_radius());
         let straight = tool == Tool::Highlighter && self.prefs.hl_straight;
         let Some(ed) = &mut self.ed else { return };
+        // Checkliste: Kästchen antippen hakt ab (mit allen Werkzeugen außer Radierer/Laser)
+        if !matches!(tool, Tool::Eraser | Tool::Laser) && ed.toggle_check_at(sx, sy) {
+            vibrate(10);
+            self.after_edit();
+            return;
+        }
         if tool != Tool::Lasso {
             ed.selection = None;
             show("sel-menu", false);
@@ -567,6 +573,27 @@ pub fn autosize(ta: &HtmlElement) {
 }
 
 impl Editor {
+    /// Checklisten-Kästchen an einem Bildschirmpunkt umschalten. `true`, wenn eines getroffen wurde.
+    pub fn toggle_check_at(&mut self, sx: f64, sy: f64) -> bool {
+        let Some((i, x, y)) = self.hit_page(sx, sy, 0.0) else { return false };
+        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let page = &self.nb.pages[i];
+        // Trefferfläche mindestens ~11 Bildschirmpixel um das Kästchen (gut mit dem Finger)
+        let pad = (11.0 / self.view.s() as f32).max(2.0);
+        let Some(row) = page.template.check_rows(w, h).iter().position(|r| r.box_contains(x, y, pad)) else { return false };
+        let row = row as u16;
+        self.set_page_meta(i, |m| {
+            if let Some(pos) = m.checks.iter().position(|c| *c == row) {
+                m.checks.remove(pos);
+            } else {
+                m.checks.push(row);
+                m.checks.sort_unstable();
+            }
+        });
+        self.dirty = true;
+        true
+    }
+
     /// Radiert entlang der Strecke a→b (Seitenkoordinaten).
     pub fn erase_segment(&mut self, a: (f32, f32), b: (f32, f32)) {
         let Some(Op::Erase { page, precise, hl_only, radius, .. }) = &self.op else { return };

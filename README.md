@@ -16,7 +16,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 **Notizbuch**
 - Mehrere Seiten, vertikal durchscrollen (mit Schwung), Seitenübersicht mit Vorschaubildern, Lesezeichen
 - Seiten hinzufügen, duplizieren, löschen, verschieben; Vorlage pro Seite oder für alle Seiten ändern
-- Vorlagen: Blanko, Liniert, Kariert, Gepunktet, Cornell, Notenlinien, Wochenplaner – eng/mittel/weit
+- Vorlagen: Blanko, Liniert, Kariert, Gepunktet, Cornell, Notenlinien, Wochenplaner, **Checkliste** – eng/mittel/weit
+- **Checkliste**: Kästchen antippen → abgehakt; die Schrift in der Zeile wird automatisch durchgestrichen und ausgegraut
 - Papierfarben: Weiß, Creme, Notizgelb, Hellblau, Dunkel, Schwarz, Tafelgrün
 - Formate: A4 hoch/quer, Quadrat, Bildschirm
 

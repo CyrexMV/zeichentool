@@ -100,6 +100,8 @@ pub struct Page {
     pub template: Template,
     pub paper: Color,
     pub bookmark: bool,
+    /// Abgehakte Zeilen der Checkliste (Zeilenindizes)
+    pub checks: Vec<u16>,
     /// nach `order` sortiert
     pub items: Vec<Item>,
     /// Laufzeit-Zähler für Zwischenspeicher (nicht gespeichert)
@@ -108,7 +110,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(id: u32, template: Template, paper: Color) -> Page {
-        Page { id, template, paper, bookmark: false, items: Vec::new(), version: 0 }
+        Page { id, template, paper, bookmark: false, checks: Vec::new(), items: Vec::new(), version: 0 }
     }
 
     pub fn touch(&mut self) {
@@ -146,6 +148,31 @@ impl Page {
 
     pub fn get(&self, id: u32) -> Option<&Item> {
         self.items.iter().find(|i| i.id == id)
+    }
+
+    pub fn is_checked(&self, row: usize) -> bool {
+        self.checks.contains(&(row as u16))
+    }
+
+    /// Durchstreichen einer abgehakten Zeile: (x0, x1, y) – nur, wenn dort etwas steht.
+    pub fn row_strike(&self, row: &super::paper::CheckRow) -> Option<(f32, f32, f32)> {
+        let mut r = Rect::EMPTY;
+        for it in &self.items {
+            if it.is_highlighter() {
+                continue;
+            }
+            let b = it.bbox();
+            let (cx, cy) = b.center();
+            if cy >= row.y0 && cy < row.y1 && cx > row.bx + row.size {
+                r = r.union(&b);
+            }
+        }
+        if r.is_empty() {
+            return None;
+        }
+        let x0 = row.text_x - (row.text_x - row.bx - row.size) * 0.5;
+        let y = ((r.y0 + r.y1) * 0.5).clamp(row.y0 + (row.y1 - row.y0) * 0.3, row.y1 - (row.y1 - row.y0) * 0.2);
+        Some((x0.min(r.x0), r.x1 + 4.0, y))
     }
 
     pub fn stroke_count(&self) -> usize {
@@ -227,6 +254,7 @@ impl Notebook {
         let mut p = self.pages[index].clone();
         p.id = self.alloc_id();
         p.bookmark = false;
+        p.checks.clear();
         for it in p.items.iter_mut() {
             it.id = self.next_id;
             self.next_id += 1;
@@ -253,6 +281,21 @@ mod tests {
         let removed = p.remove_ids(&[2]);
         assert_eq!(removed.len(), 1);
         assert_eq!(p.items.len(), 2);
+    }
+
+    #[test]
+    fn checklist_strike_follows_handwriting() {
+        use crate::engine::paper::TemplateKind;
+        let t = Template { kind: TemplateKind::Checklist, spacing: 1 };
+        let rows = t.check_rows(595.0, 842.0);
+        let r = rows[2];
+        let mut p = Page::new(1, t, Color::WHITE);
+        let y = (r.y0 + r.y1) * 0.5;
+        p.insert([Item { id: 1, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.0, pts: vec![Pt::new(r.text_x + 5.0, y, 1.0), Pt::new(300.0, y, 1.0)] }) }]);
+        let (x0, x1, sy) = p.row_strike(&r).expect("Zeile mit Schrift wird durchgestrichen");
+        assert!(x0 < r.text_x + 5.0 && x1 > 300.0);
+        assert!(sy > r.y0 && sy < r.y1);
+        assert!(p.row_strike(&rows[0]).is_none(), "leere Zeile ohne Strich");
     }
 
     #[test]

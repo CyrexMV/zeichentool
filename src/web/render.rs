@@ -211,7 +211,51 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
             }
         }
     }
+    draw_checks(ctx, page, w, h);
     ctx.restore();
+}
+
+/// Abgehakte Checklisten-Zeilen: Kästchen füllen, Häkchen, Inhalt ausgrauen und durchstreichen.
+fn draw_checks(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32) {
+    if page.template.kind != TemplateKind::Checklist || page.checks.is_empty() {
+        return;
+    }
+    let light = page.paper.luminance() > 0.5;
+    let [pr, pg, pb] = page.paper.to_u8();
+    for (i, row) in page.template.check_rows(w, h).iter().enumerate() {
+        if !page.is_checked(i) {
+            continue;
+        }
+        let s = row.size as f64;
+        // Inhalt ausgrauen
+        ctx.set_fill_style_str(&format!("rgba({},{},{},0.55)", pr, pg, pb));
+        ctx.fill_rect(row.text_x as f64 - 4.0, row.y0 as f64 + 1.0, (w - row.text_x) as f64 + 4.0, (row.y1 - row.y0) as f64 - 2.0);
+        // durchstreichen
+        if let Some((x0, x1, y)) = page.row_strike(row) {
+            ctx.set_stroke_style_str(if light { "rgba(35,37,50,.85)" } else { "rgba(235,236,245,.85)" });
+            ctx.set_line_width(s * 0.09);
+            ctx.set_line_cap("round");
+            ctx.begin_path();
+            ctx.move_to(x0 as f64, y as f64);
+            ctx.line_to(x1 as f64, y as f64);
+            ctx.stroke();
+        }
+        // gefülltes Kästchen mit Häkchen
+        let (bx, by) = (row.bx as f64, row.by as f64);
+        ctx.set_fill_style_str("#6d5cff");
+        ctx.begin_path();
+        let _ = ctx.round_rect_with_f64(bx - s * 0.04, by - s * 0.04, s * 1.08, s * 1.08, s * 0.18);
+        ctx.fill();
+        ctx.set_stroke_style_str("#ffffff");
+        ctx.set_line_width(s * 0.13);
+        ctx.set_line_cap("round");
+        ctx.set_line_join("round");
+        ctx.begin_path();
+        ctx.move_to(bx + s * 0.22, by + s * 0.53);
+        ctx.line_to(bx + s * 0.43, by + s * 0.73);
+        ctx.line_to(bx + s * 0.79, by + s * 0.3);
+        ctx.stroke();
+    }
 }
 
 fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c: &mut Caches) {
@@ -231,6 +275,9 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                 }
                 Prim::Dot { x, y, r } => {
                     let _ = write!(d[3], "M{:.2} {:.2}A{r:.2} {r:.2} 0 1 0 {:.2} {:.2}A{r:.2} {r:.2} 0 1 0 {:.2} {:.2}", x + r, y, x - r, y, x + r, y, r = r);
+                }
+                Prim::Box { x, y, size } => {
+                    let _ = write!(d[1], "M{:.2} {:.2}h{:.2}v{:.2}h{:.2}Z", x, y, size, size, -size);
                 }
             }
         }

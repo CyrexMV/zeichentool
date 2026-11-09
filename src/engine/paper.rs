@@ -12,10 +12,11 @@ pub enum TemplateKind {
     Cornell = 4,
     Music = 5,
     Planner = 6,
+    Checklist = 7,
 }
 
 impl TemplateKind {
-    pub const ALL: [TemplateKind; 7] = [
+    pub const ALL: [TemplateKind; 8] = [
         TemplateKind::Blank,
         TemplateKind::Lined,
         TemplateKind::Grid,
@@ -23,6 +24,7 @@ impl TemplateKind {
         TemplateKind::Cornell,
         TemplateKind::Music,
         TemplateKind::Planner,
+        TemplateKind::Checklist,
     ];
 
     pub fn code(&self) -> &'static str {
@@ -34,6 +36,7 @@ impl TemplateKind {
             TemplateKind::Cornell => "cornell",
             TemplateKind::Music => "music",
             TemplateKind::Planner => "planner",
+            TemplateKind::Checklist => "checklist",
         }
     }
 
@@ -54,6 +57,7 @@ impl TemplateKind {
             TemplateKind::Cornell => "Cornell",
             TemplateKind::Music => "Notenlinien",
             TemplateKind::Planner => "Wochenplaner",
+            TemplateKind::Checklist => "Checkliste",
         }
     }
 }
@@ -77,6 +81,25 @@ pub enum Prim {
     /// Linie; `accent` = farbige Randlinie, `strong` = kräftige Strukturlinie
     Line { x0: f32, y0: f32, x1: f32, y1: f32, accent: bool, strong: bool },
     Dot { x: f32, y: f32, r: f32 },
+    /// Kästchen (Checkliste), linke obere Ecke + Kantenlänge
+    Box { x: f32, y: f32, size: f32 },
+}
+
+/// Eine Zeile der Checkliste: Zeilenband (y0..y1), Kästchen, Beginn des Schreibbereichs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CheckRow {
+    pub y0: f32,
+    pub y1: f32,
+    pub bx: f32,
+    pub by: f32,
+    pub size: f32,
+    pub text_x: f32,
+}
+
+impl CheckRow {
+    pub fn box_contains(&self, x: f32, y: f32, pad: f32) -> bool {
+        x >= self.bx - pad && x <= self.bx + self.size + pad && y >= self.by - pad && y <= self.by + self.size + pad
+    }
 }
 
 /// Linienfarben passend zur Papierhelligkeit: (Linie, Akzent) als RGBA 0..1.
@@ -101,6 +124,24 @@ impl Template {
 
     pub fn line_width(&self, w: f32, h: f32) -> f32 {
         (self.unit(w, h) / 40.0).max(0.35)
+    }
+
+    /// Zeilen der Checkliste (leer für andere Vorlagen).
+    pub fn check_rows(&self, w: f32, h: f32) -> Vec<CheckRow> {
+        if self.kind != TemplateKind::Checklist {
+            return Vec::new();
+        }
+        let s = self.unit(w, h);
+        let size = s * 0.52;
+        let bx = s * 0.9;
+        let mut rows = Vec::new();
+        let mut y0 = s * 2.5;
+        while y0 + s <= h - s * 0.5 {
+            let y1 = y0 + s;
+            rows.push(CheckRow { y0, y1, bx, by: y0 + (s - size) * 0.5 + s * 0.08, size, text_x: bx + size + s * 0.45 });
+            y0 = y1;
+        }
+        rows
     }
 
     pub fn primitives(&self, w: f32, h: f32) -> Vec<Prim> {
@@ -173,6 +214,16 @@ impl Template {
                     top += s * 2.6;
                 }
             }
+            TemplateKind::Checklist => {
+                let rows = self.check_rows(w, h);
+                if let Some(first) = rows.first() {
+                    hline(&mut v, first.y0, 0.0, w, false);
+                }
+                for r in &rows {
+                    hline(&mut v, r.y1, 0.0, w, false);
+                    v.push(Prim::Box { x: r.bx, y: r.by, size: r.size });
+                }
+            }
             TemplateKind::Planner => {
                 // 2 Spalten × 4 Felder (Montag–Sonntag + Notizen)
                 let m = s * 1.2;
@@ -234,6 +285,11 @@ mod tests {
             assert_eq!(TemplateKind::from_code(k.code()), k);
             assert_eq!(TemplateKind::from_u8(k as u8), k);
         }
+        let c = Template { kind: TemplateKind::Checklist, spacing: 1 };
+        let rows = c.check_rows(595.0, 842.0);
+        assert!(rows.len() > 20);
+        assert!(rows[0].box_contains(rows[0].bx + 1.0, rows[0].by + 1.0, 0.0));
+        assert!(c.primitives(595.0, 842.0).iter().any(|p| matches!(p, Prim::Box { .. })));
         // mittel ≈ 8 mm
         let u = Template::default().unit(595.0, 842.0);
         assert!((u - 22.75).abs() < 0.1);
