@@ -5,6 +5,7 @@ mod docs;
 mod editor;
 mod input;
 mod insert;
+mod libdrag;
 mod library;
 mod links;
 mod marks;
@@ -689,6 +690,7 @@ pub fn start() {
     APP.with(|cell| *cell.borrow_mut() = Some(app));
     ui::bind_ui();
     input::bind_input();
+    libdrag::bind_lib_drag();
     colorpick::bind_color_picker();
     scrubber::bind_scrubber();
     with_app(|a| {
