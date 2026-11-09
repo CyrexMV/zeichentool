@@ -62,7 +62,7 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Fällige Karten (freiwillig)**: Wiederholungsplan einschalten → gewusste Karten kommen nach 1, 3, 7, 21 Tagen wieder
 - **Lernkarten**: Frage und Antwort mit dem Lasso markieren → „Lernkarte“; lernen mit Umdrehen und
   Karteikasten (gewusst → nächstes Fach, sonst zurück); Karten zeigen immer den aktuellen Stand der Seite
-- **Zirkel** (Lineal-Menü): Mitte verschieben, an der Spitze den Radius aufziehen; am Kreis entlang zeichnet der Stift exakt
+- **Zirkel** (Lineal-Menü): Mitte verschieben, an der Spitze den Radius aufziehen; am Kreis entlang zeichnet der Stift exakt, der Arm dreht sich dabei mit
 - **Einfügen-Menü**: Bild, **Tabelle** (Spalten/Zeilen, farbige Kopfzeile) und **Funktionsgraph** (z. B. `x^2 - 2; 2sin(x)`,
   automatischer y-Bereich, Gitternetz) – als normale Elemente, mit dem Lasso verschieb- und skalierbar
 - **Datum einfügen** (Einfügen-Menü): heutiges Datum als Text, lang („Montag, 9. November 2026“) oder kurz („09.11.2026“)

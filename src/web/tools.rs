@@ -187,6 +187,17 @@ impl App {
             }
             _ => (pts.to_vec(), predicted.to_vec()),
         };
+        // Zirkel: der Arm dreht sich mit der Stiftspitze mit
+        if let Some(Op::Ink { rule: Some(super::ruler::Guide::Circle(cx, cy, _)), .. }) = &ed.op {
+            if let (Some(r), Some(&(x, y, _))) = (ed.ruler.as_mut(), pts.last()) {
+                let a = (y - cy).atan2(x - cx);
+                if (a - r.angle).sin().abs() > 0.002 || (a - r.angle).cos() < 0.0 {
+                    r.angle = a;
+                    ed.dirty = true;
+                }
+            }
+        }
+        let Some(op) = &ed.op else { return };
         let (pts, predicted) = (&pts[..], &predicted[..]);
         let page_idx = match op {
             Op::Ink { page, .. } | Op::Erase { page, .. } | Op::Lasso { page, .. } => ed.page_index(*page),
