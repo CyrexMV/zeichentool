@@ -47,11 +47,48 @@ pub fn hash_bytes(b: &[u8]) -> u64 {
     h
 }
 
+/// Mindmap-Blase: abgerundetes Feld mit Text; `parent` = ID der Elternblase (0 = Wurzel).
+/// Die Verbindungslinie wird beim Zeichnen aus den Positionen berechnet und folgt deshalb jeder Verschiebung.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Node {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub text: String,
+    pub color: [u8; 4],
+    pub parent: u32,
+}
+
+impl Node {
+    pub fn center(&self) -> (f32, f32) {
+        (self.x + self.w * 0.5, self.y + self.h * 0.5)
+    }
+
+    /// Verbindung Eltern → Kind als kubische Bézierkurve (von Mitte zu Mitte, waagerecht auslaufend).
+    pub fn edge_to(&self, child: &Node) -> [(f32, f32); 4] {
+        let (a, b) = (self.center(), child.center());
+        let dx = (b.0 - a.0) * 0.5;
+        [a, (a.0 + dx, a.1), (b.0 - dx, b.1), b]
+    }
+
+    /// Innenabstand links/rechts.
+    pub fn pad(&self) -> f32 {
+        self.font_size() * 0.8
+    }
+
+    /// Schriftgröße passend zur Blasenhöhe.
+    pub fn font_size(&self) -> f32 {
+        (self.h * 0.32).clamp(8.0, 30.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Content {
     Stroke(Stroke),
     Text(TextBox),
     Image(ImageItem),
+    Node(Node),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,6 +105,7 @@ impl Item {
             Content::Stroke(s) => s.bbox(),
             Content::Text(t) => t.approx_rect(t.text.lines().count().max(1)),
             Content::Image(i) => Rect::new(i.x, i.y, i.x + i.w, i.y + i.h),
+            Content::Node(n) => Rect::new(n.x, n.y, n.x + n.w, n.y + n.h),
         }
     }
 
@@ -84,6 +122,12 @@ impl Item {
                 let (x1, y1) = xf.apply(i.x + i.w, i.y + i.h);
                 let r = Rect::new(x0, y0, x1, y1);
                 Content::Image(ImageItem { x: r.x0, y: r.y0, w: r.w(), h: r.h(), ..i.clone() })
+            }
+            Content::Node(n) => {
+                let (x0, y0) = xf.apply(n.x, n.y);
+                let (x1, y1) = xf.apply(n.x + n.w, n.y + n.h);
+                let r = Rect::new(x0, y0, x1, y1);
+                Content::Node(Node { x: r.x0, y: r.y0, w: r.w(), h: r.h(), ..n.clone() })
             }
         };
         Item { id: self.id, order: self.order, content }
@@ -124,6 +168,10 @@ pub struct Page {
     pub title: String,
     /// Eigenes Papier (Bild oder PDF-Seite), seitenfüllend
     pub bg: Option<ImageItem>,
+    /// Farbmarkierung (0 = keine, sonst Index in `MARK_COLORS` + 1)
+    pub mark: u8,
+    /// Schlagwörter der Seite
+    pub tags: Vec<String>,
     /// Hintergrund ist eigenes Papier (wird für neue Seiten übernommen); sonst Dokument (PDF)
     pub bg_paper: bool,
     /// Verweise auf andere Seiten/Notizbücher
@@ -136,7 +184,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(id: u32, template: Template, paper: Color) -> Page {
-        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), bg: None, bg_paper: false, links: Vec::new(), items: Vec::new(), version: 0 }
+        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), mark: 0, tags: Vec::new(), bg: None, bg_paper: false, links: Vec::new(), items: Vec::new(), version: 0 }
     }
 
     pub fn touch(&mut self) {
@@ -210,6 +258,9 @@ impl Page {
         self.items.iter().filter(|i| matches!(i.content, Content::Stroke(_))).count()
     }
 }
+
+/// Farben der Seitenmarkierung (Name, Farbe).
+pub const MARK_COLORS: [(&str, &str); 7] = [("Rot", "#e5484d"), ("Orange", "#f5a524"), ("Gelb", "#f5d90a"), ("Grün", "#1fbf75"), ("Blau", "#2f8cff"), ("Lila", "#8e5cff"), ("Grau", "#8792a8")];
 
 /// Seitenformat in pt.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -356,10 +407,13 @@ impl Notebook {
     pub fn adopt_page(&mut self, src: &Page) -> Page {
         let mut p = src.clone();
         p.id = self.alloc_id();
+        let mut map = Vec::new();
         for it in p.items.iter_mut() {
+            map.push((it.id, self.next_id));
             it.id = self.next_id;
             self.next_id += 1;
         }
+        remap_parents(&mut p.items, &map);
         p.touch();
         p
     }
@@ -495,11 +549,26 @@ impl Notebook {
         if !p.title.is_empty() {
             p.title = format!("{} (Kopie)", p.title);
         }
+        let mut map = Vec::new();
         for it in p.items.iter_mut() {
+            map.push((it.id, self.next_id));
             it.id = self.next_id;
             self.next_id += 1;
         }
+        remap_parents(&mut p.items, &map);
         p
+    }
+}
+
+/// Mindmap-Verbindungen nach dem Umnummerieren anpassen (alte → neue ID).
+/// Blasen, deren Eltern nicht mitkopiert wurden, werden zu Wurzeln.
+pub fn remap_parents(items: &mut [Item], map: &[(u32, u32)]) {
+    for it in items.iter_mut() {
+        if let Content::Node(n) = &mut it.content {
+            if n.parent != 0 {
+                n.parent = map.iter().find(|(o, _)| *o == n.parent).map(|(_, nw)| *nw).unwrap_or(0);
+            }
+        }
     }
 }
 

@@ -40,7 +40,7 @@ pub enum Op {
         straight: bool,
         predicted: Vec<Pt>,
         /// Linealkante, an der der Strich entlangläuft (Bildschirmkoordinaten)
-        rule: Option<super::ruler::Seg>,
+        rule: Option<super::ruler::Guide>,
     },
     Erase {
         page: u32,
@@ -64,6 +64,16 @@ pub enum Op {
     },
     Laser {
         pointer: i32,
+    },
+    /// Mindmap: Blase antippen/verschieben oder auf leere Stelle tippen
+    Mind {
+        pointer: i32,
+        page: u32,
+        id: Option<u32>,
+        start: (f64, f64),
+        at: (f32, f32),
+        orig: Option<Item>,
+        moved: bool,
     },
 }
 
@@ -118,6 +128,8 @@ pub struct Editor {
     pub nav_bookmarks: bool,
     /// Seitenübersicht zeigt das Inhaltsverzeichnis
     pub nav_toc: bool,
+    /// Filter der Seitenübersicht: "c:<Farbe>" oder "t:<Schlagwort>"
+    pub nav_filter: Option<String>,
     pub thumbs_dirty: bool,
     pub thumb_versions: HashMap<u32, u64>,
     pub live_page: Option<u32>,
@@ -126,6 +138,10 @@ pub struct Editor {
     pub ruler: Option<super::ruler::Ruler>,
     /// Zoom-Fenster (Schreibstreifen unten)
     pub zoomwin: Option<super::zoomwin::ZoomWin>,
+    /// hervorgehobene Mindmap-Blase (Seite, ID)
+    pub mind_hl: Option<(u32, u32)>,
+    /// Präsentationsmodus: gezeigte Seite
+    pub presenting: Option<usize>,
     /// Gemerkte Vorderseite einer neuen Lernkarte
     pub card_front: Option<crate::engine::Region>,
     /// Platz für die Werkzeugleiste oben (CSS-Pixel)
@@ -177,6 +193,7 @@ impl Editor {
             nav_open: false,
             nav_bookmarks: false,
             nav_toc: false,
+            nav_filter: None,
             thumbs_dirty: true,
             thumb_versions: HashMap::new(),
             live_page: None,
@@ -184,6 +201,8 @@ impl Editor {
             paste_at: None,
             ruler: None,
             zoomwin: None,
+            mind_hl: None,
+            presenting: None,
             card_front: None,
             top_pad: 84.0,
         };
@@ -214,7 +233,7 @@ impl Editor {
         self.dpr = win.device_pixel_ratio().max(1.0);
         self.vw = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
         self.vh = win.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(800.0);
-        self.top_pad = dom().get_element_by_id("ed-top").map(|e| e.get_bounding_client_rect().bottom()).filter(|b| *b > 0.0).unwrap_or(72.0) + 12.0;
+        self.top_pad = if self.presenting.is_some() { 16.0 } else { dom().get_element_by_id("ed-top").map(|e| e.get_bounding_client_rect().bottom()).filter(|b| *b > 0.0).unwrap_or(72.0) + 12.0 };
         for c in [&self.canvas, &self.live] {
             c.set_width((self.vw * self.dpr).round() as u32);
             c.set_height((self.vh * self.dpr).round() as u32);

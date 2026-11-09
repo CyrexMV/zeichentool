@@ -44,6 +44,10 @@ impl App {
             self.pick_color_at(sx, sy);
             return;
         }
+        if self.effective_tool() == Tool::Mind {
+            self.mind_begin(pointer, sx, sy);
+            return;
+        }
         if self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false) {
             self.commit_text();
         }
@@ -66,6 +70,7 @@ impl App {
             show("sel-menu", false);
         }
         match tool {
+            Tool::Mind => {}
             Tool::Laser => {
                 ed.op = Some(Op::Laser { pointer });
                 ed.laser.push((sx, sy, now()));
@@ -126,9 +131,9 @@ impl App {
                 // Am Lineal/Geodreieck entlang: Startpunkt auf die Kante legen
                 let (pen, color, width) = ink;
                 let half = width as f64 * 0.5 * ed.view.s() + 1.0;
-                let rule = ed.ruler.and_then(|r| r.snap(sx, sy, 34.0, half));
+                let rule = ed.ruler.and_then(|r| r.guide(sx, sy, 34.0, half));
                 let (sx, sy) = match &rule {
-                    Some(seg) => super::ruler::project(seg, sx, sy),
+                    Some(g) => g.project(sx, sy),
                     None => (sx, sy),
                 };
                 if let Some((i, x, y)) = ed.hit_page(sx, sy, 30.0) {
@@ -159,6 +164,12 @@ impl App {
 
     /// Weitere Eingabepunkte (Bildschirmkoordinaten + Druck).
     pub fn move_op(&mut self, pointer: i32, pts: &[(f64, f64, f32)], predicted: &[(f64, f64, f32)]) {
+        if matches!(self.ed.as_ref().and_then(|e| e.op.as_ref()), Some(Op::Mind { .. })) {
+            if let Some(&(x, y, _)) = pts.last() {
+                self.mind_move(pointer, x, y);
+            }
+            return;
+        }
         let pressure_on = self.settings.pressure;
         let er_cursor = self.eraser_radius();
         let Some(ed) = &mut self.ed else { return };
@@ -167,9 +178,9 @@ impl App {
         // Strich am Lineal: alle Punkte auf die Kante projizieren
         type Samples = Vec<(f64, f64, f32)>;
         let (pts, predicted): (Samples, Samples) = match op {
-            Op::Ink { rule: Some(seg), .. } => {
+            Op::Ink { rule: Some(g), .. } => {
                 let pr = |v: &[(f64, f64, f32)]| v.iter().map(|&(x, y, p)| {
-                    let (a, b) = super::ruler::project(seg, x, y);
+                    let (a, b) = g.project(x, y);
                     (a, b, p)
                 }).collect();
                 (pr(pts), pr(predicted))
@@ -180,7 +191,7 @@ impl App {
         let page_idx = match op {
             Op::Ink { page, .. } | Op::Erase { page, .. } | Op::Lasso { page, .. } => ed.page_index(*page),
             Op::MoveSel { .. } => ed.selection.as_ref().and_then(|sel| ed.page_index(sel.page)),
-            Op::Laser { .. } => None,
+            Op::Laser { .. } | Op::Mind { .. } => None,
         };
         let top = page_idx.map(|i| ed.page_top(i)).unwrap_or(0.0);
         let to_page = |sx: f64, sy: f64, ed: &Editor| {
@@ -264,9 +275,13 @@ impl App {
 
     /// Ende der Eingabe.
     pub fn end_op(&mut self, pointer: i32) {
+        if matches!(self.ed.as_ref().and_then(|e| e.op.as_ref()), Some(Op::Mind { pointer: p, .. }) if *p == pointer) {
+            self.mind_end();
+            return;
+        }
         let Some(ed) = &mut self.ed else { return };
         let mine = match &ed.op {
-            Some(Op::Ink { pointer: p, .. } | Op::Erase { pointer: p, .. } | Op::Lasso { pointer: p, .. } | Op::MoveSel { pointer: p, .. } | Op::Laser { pointer: p }) => *p == pointer,
+            Some(Op::Ink { pointer: p, .. } | Op::Erase { pointer: p, .. } | Op::Lasso { pointer: p, .. } | Op::MoveSel { pointer: p, .. } | Op::Laser { pointer: p } | Op::Mind { pointer: p, .. }) => *p == pointer,
             None => false,
         };
         if !mine {
@@ -372,6 +387,7 @@ impl App {
                 ed.dirty = true;
             }
             Op::Laser { .. } => {}
+            Op::Mind { .. } => {}
         }
         ed.clear_live();
         if auto_back && self.prefs.er_auto_back && self.tool == Tool::Eraser && !self.hold_eraser {
@@ -488,6 +504,7 @@ impl App {
 
     /// Auswahlmenü, Einfügen-Knopf und Textfeld an die Ansicht anpassen.
     pub fn position_overlays(&mut self) {
+        self.position_mind_menu();
         let Some(ed) = &self.ed else { return };
         let menu = el("sel-menu");
         match (&ed.selection, &ed.op) {
@@ -709,6 +726,10 @@ impl Editor {
                     let inside = s.pts.iter().filter(|p| point_in_polygon(p.x, p.y, poly)).count();
                     inside * 2 >= s.pts.len().max(1)
                 }
+                Content::Node(_) if kinds.0 || kinds.1 => {
+                    let (cx, cy) = it.bbox().center();
+                    point_in_polygon(cx, cy, poly)
+                }
                 Content::Text(_) | Content::Image(_) if (kinds.1 && matches!(it.content, Content::Text(_))) || (kinds.2 && matches!(it.content, Content::Image(_))) => {
                     let (cx, cy) = it.bbox().center();
                     point_in_polygon(cx, cy, poly)
@@ -805,14 +826,17 @@ impl Editor {
         let Some(pi) = self.page_index(page) else { return };
         let mut order = self.nb.pages[pi].max_order();
         let mut items = Vec::new();
+        let mut map = Vec::new();
         for it in self.clipboard.clone() {
             order += 1.0;
             let id = self.nb.alloc_id();
             let mut n = it.transformed(&xf);
+            map.push((n.id, id));
             n.id = id;
             n.order = order;
             items.push(n);
         }
+        crate::engine::note::remap_parents(&mut items, &map);
         self.nb.pages[pi].insert(items.clone());
         let mut bbox = Rect::EMPTY;
         for i in &items {

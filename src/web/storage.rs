@@ -82,6 +82,7 @@ impl App {
             format!("new={},{},{},{},{}", self.new_nb.cover, self.new_nb.template.kind.code(), self.new_nb.template.spacing, self.new_nb.paper.to_hex(), self.new_nb.format),
             format!("new_cover_page={}", self.new_nb.cover_page),
             format!("recent_colors={}", self.recent_colors.join(",")),
+            format!("tabs={}", self.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(",")),
             format!("tool={}", self.tool.code()),
         ];
         if let Ok(Some(ls)) = window().local_storage() {
@@ -160,6 +161,7 @@ impl App {
                     }
                 }
                 "new_cover_page" => self.new_nb.cover_page = b(v),
+                "tabs" => self.tabs = v.split(',').filter(|s| !s.is_empty()).take(8).map(|s| super::tabs::Tab { id: s.to_string(), view: None }).collect(),
                 "recent_colors" => self.recent_colors = v.split(',').filter(|h| Color::from_hex(h).is_some()).map(|h| h.to_string()).take(12).collect(),
                 "new" => {
                     let l: Vec<&str> = v.split(',').collect();

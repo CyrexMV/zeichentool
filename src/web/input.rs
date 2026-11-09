@@ -14,6 +14,8 @@ pub struct TouchPt {
 
 /// Finger, die gerade das Lineal halten.
 pub struct RulerGrab {
+    /// Zirkel an der Spitze angefasst (Radius/Richtung ändern statt verschieben)
+    pub tip: bool,
     pub base: super::ruler::Ruler,
     pub anchors: Vec<(i32, f64, f64)>,
     pub cur: Vec<(i32, f64, f64)>,
@@ -129,6 +131,9 @@ pub fn bind_input() {
         with_app(|a| {
             if let Some(ed) = &mut a.ed {
                 ed.resize();
+                if let Some(i) = ed.presenting {
+                    ed.present_fit(i);
+                }
             }
             a.position_overlays();
             a.request_frame();
@@ -248,7 +253,7 @@ impl App {
     pub fn op_pointer(&self) -> Option<i32> {
         use super::editor::Op;
         self.ed.as_ref().and_then(|ed| match &ed.op {
-            Some(Op::Ink { pointer, .. } | Op::Erase { pointer, .. } | Op::Lasso { pointer, .. } | Op::MoveSel { pointer, .. } | Op::Laser { pointer }) => Some(*pointer),
+            Some(Op::Ink { pointer, .. } | Op::Erase { pointer, .. } | Op::Lasso { pointer, .. } | Op::MoveSel { pointer, .. } | Op::Laser { pointer } | Op::Mind { pointer, .. }) => Some(*pointer),
             None => None,
         })
     }
@@ -553,6 +558,14 @@ impl App {
             self.move_op(id, &pts, &[]);
             return;
         }
+        // Präsentation: Finger blättert nur (kein Verschieben/Zoomen)
+        if self.present.is_some() {
+            if let Some(g) = &mut self.gesture {
+                g.moved = g.moved.max(d);
+                g.last = (x, y, now());
+            }
+            return;
+        }
         let one_finger = self.settings.one_finger_scroll;
         let (cx, cy) = self.centroid();
         let t = now();
@@ -624,6 +637,28 @@ impl App {
                 self.cancel_op();
             } else {
                 self.end_op(id);
+            }
+            return;
+        }
+        if self.touches.is_empty() && self.present.is_some() {
+            if let Some(g) = self.gesture.take() {
+                let (x, y) = client_xy(e);
+                let dx = x - g.anchors.first().map(|a| a.1).unwrap_or(x);
+                let dy = y - g.anchors.first().map(|a| a.2).unwrap_or(y);
+                let vw = window().inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1000.0);
+                if !cancel && g.max_fingers == 1 {
+                    if dx.abs() > 60.0 && dx.abs() > dy.abs() {
+                        self.present_step(if dx < 0.0 { 1 } else { -1 });
+                    } else if dy.abs() > 60.0 {
+                        self.present_step(if dy < 0.0 { 1 } else { -1 });
+                    } else if g.moved < 14.0 {
+                        if x > vw * 0.6 {
+                            self.present_step(1);
+                        } else if x < vw * 0.4 {
+                            self.present_step(-1);
+                        }
+                    }
+                }
             }
             return;
         }
@@ -703,7 +738,7 @@ impl App {
         let Some(r) = self.ed.as_ref().and_then(|e| e.ruler) else { return false };
         match &mut self.ruler_grab {
             Some(g) => {
-                if g.cur.len() >= 2 {
+                if g.cur.len() >= 2 || g.tip || r.kind == super::ruler::RulerKind::Compass {
                     return true;
                 }
                 g.cur.push((id, x, y));
@@ -714,7 +749,7 @@ impl App {
                 if !r.contains(x, y) {
                     return false;
                 }
-                self.ruler_grab = Some(RulerGrab { base: r, anchors: vec![(id, x, y)], cur: vec![(id, x, y)] });
+                self.ruler_grab = Some(RulerGrab { tip: r.grabs_tip(x, y), base: r, anchors: vec![(id, x, y)], cur: vec![(id, x, y)] });
             }
         }
         self.momentum = None;
@@ -727,7 +762,11 @@ impl App {
         c.1 = x;
         c.2 = y;
         let mut r = g.base;
-        if g.anchors.len() == 1 || g.cur.len() == 1 {
+        if g.tip {
+            // Zirkel aufziehen: Radius und Richtung folgen dem Finger
+            r.radius = (x - r.cx).hypot(y - r.cy).max(24.0);
+            r.angle = (y - r.cy).atan2(x - r.cx);
+        } else if g.anchors.len() == 1 || g.cur.len() == 1 {
             let (_, ax, ay) = g.anchors[0];
             let (_, qx, qy) = g.cur[0];
             r.cx += qx - ax;
@@ -838,6 +877,11 @@ impl App {
         if let Some(t) = e.target() {
             if let Some(el) = t.dyn_ref::<web_sys::Element>() {
                 let tag = el.tag_name();
+                if tag == "INPUT" && el.id() == "marks-input" && e.key() == "Enter" {
+                    e.prevent_default();
+                    self.marks_action("tag-new", "");
+                    return;
+                }
                 if tag == "INPUT" || tag == "TEXTAREA" || tag == "SELECT" {
                     if e.key() == "Escape" && tag == "TEXTAREA" {
                         self.commit_text();
@@ -845,6 +889,16 @@ impl App {
                     return;
                 }
             }
+        }
+        if self.present.is_some() {
+            match e.key().as_str() {
+                "ArrowRight" | "ArrowDown" | "PageDown" | " " | "Enter" => self.present_step(1),
+                "ArrowLeft" | "ArrowUp" | "PageUp" | "Backspace" => self.present_step(-1),
+                "Escape" => self.present_exit(),
+                _ => return,
+            }
+            e.prevent_default();
+            return;
         }
         if e.key() == "Escape" {
             self.close_popovers();
@@ -874,6 +928,7 @@ impl App {
             "e" => self.set_tool(Tool::Eraser),
             "l" => self.set_tool(Tool::Lasso),
             "s" => self.set_tool(Tool::Shape),
+            "m" => self.set_tool(Tool::Mind),
             "t" => self.set_tool(Tool::Text),
             "delete" | "backspace" => self.selection_action("sel-delete", ""),
             "escape" => {

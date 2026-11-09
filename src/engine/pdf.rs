@@ -183,6 +183,39 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                         }
                         c.push_str("h f Q\n");
                     }
+                    (Content::Node(nd), 0) => {
+                        // Verbindung zur Elternblase (liegt unter allen Blasen)
+                        if let Some(Content::Node(par)) = page.get(nd.parent).map(|p| &p.content) {
+                            let q = par.edge_to(nd);
+                            let _ = writeln!(
+                                c,
+                                "q /{} gs {} RG 2 w 1 J {} {} m {} {} {} {} {} {} c S Q",
+                                gs_name(0.8, false),
+                                rgb8(par.color),
+                                n(q[0].0), n(q[0].1), n(q[1].0), n(q[1].1), n(q[2].0), n(q[2].1), n(q[3].0), n(q[3].1)
+                            );
+                        }
+                    }
+                    (Content::Node(nd), 3) => {
+                        let r = (nd.h * 0.5).min(14.0);
+                        let fill = [nd.color[0], nd.color[1], nd.color[2], 255];
+                        let _ = write!(c, "q {} rg ", rgb8(fill));
+                        round_rect(&mut c, nd.x, nd.y, nd.w, nd.h, r);
+                        c.push_str("f Q\n");
+                        let fs = nd.font_size();
+                        let tb = TextBox { x: nd.x + nd.pad(), y: 0.0, w: nd.w - nd.pad() * 2.0, size: fs, color: [255, 255, 255, 255], bold: true, text: nd.text.clone() };
+                        let lines = wrap(&tb);
+                        let total = fs * 1.25 * lines.len() as f32;
+                        let ink = if (fill[0] as f32 * 0.299 + fill[1] as f32 * 0.587 + fill[2] as f32 * 0.114) > 170.0 { "0.1 0.11 0.17" } else { "1 1 1" };
+                        let _ = write!(c, "BT /F2 {} Tf {} rg ", n(fs), ink);
+                        for (i, line) in lines.iter().enumerate() {
+                            let lw = line.chars().count() as f32 * fs * 0.55;
+                            let x = nd.x + (nd.w - lw).max(0.0) * 0.5;
+                            let y = nd.y + (nd.h - total) * 0.5 + fs * (0.95 + 1.25 * i as f32);
+                            let _ = write!(c, "1 0 0 -1 {} {} Tm {} Tj ", n(x), n(y), pdf_text(line));
+                        }
+                        c.push_str("ET\n");
+                    }
                     (Content::Text(t), 3) => {
                         let lines = wrap(t);
                         let f = if t.bold { "F2" } else { "F1" };

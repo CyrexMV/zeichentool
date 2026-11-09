@@ -11,6 +11,8 @@ pub struct PageMeta {
     pub bookmark: bool,
     pub checks: Vec<u16>,
     pub title: String,
+    pub mark: u8,
+    pub tags: Vec<String>,
     pub bg: Option<ImageItem>,
     pub bg_paper: bool,
     pub links: Vec<Link>,
@@ -18,7 +20,7 @@ pub struct PageMeta {
 
 impl PageMeta {
     pub fn of(p: &Page) -> PageMeta {
-        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone(), bg: p.bg.clone(), bg_paper: p.bg_paper, links: p.links.clone() }
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone(), mark: p.mark, tags: p.tags.clone(), bg: p.bg.clone(), bg_paper: p.bg_paper, links: p.links.clone() }
     }
 
     pub fn apply(&self, p: &mut Page) {
@@ -27,6 +29,8 @@ impl PageMeta {
         p.bookmark = self.bookmark;
         p.checks = self.checks.clone();
         p.title = self.title.clone();
+        p.mark = self.mark;
+        p.tags = self.tags.clone();
         p.bg = self.bg.clone();
         p.bg_paper = self.bg_paper;
         p.links = self.links.clone();

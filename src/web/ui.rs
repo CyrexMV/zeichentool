@@ -12,8 +12,8 @@ thread_local! {
 
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
-const POPS: [&str; 6] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash"];
-const MODALS: [&str; 8] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color"];
+const POPS: [&str; 7] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert"];
+const MODALS: [&str; 11] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -184,6 +184,7 @@ impl App {
                     ed.ruler = match arg {
                         "ruler" => Some(super::ruler::Ruler::new(super::ruler::RulerKind::Ruler, ed.vw, ed.vh)),
                         "triangle" => Some(super::ruler::Ruler::new(super::ruler::RulerKind::Triangle, ed.vw, ed.vh)),
+                        "compass" => Some(super::ruler::Ruler::new(super::ruler::RulerKind::Compass, ed.vw, ed.vh)),
                         _ => None,
                     };
                     ed.dirty = true;
@@ -218,6 +219,23 @@ impl App {
                 }
             }
             "sel-card" => self.selection_to_card(),
+            "marks" => self.open_marks_dialog(),
+            "mark-set" | "tag-add" | "tag-del" | "tag-new" => self.marks_action(act, arg),
+            "nav-mark" => self.nav_mark_filter(arg),
+            "tab" => self.tab_switch(arg.to_string()),
+            "tab-close" => self.tab_close(arg),
+            "present" => self.present_start(),
+            "present-exit" => self.present_exit(),
+            "present-prev" => self.present_step(-1),
+            "present-next" => self.present_step(1),
+            "mind-child" => self.mind_add_child(),
+            "mind-text" => {
+                if let Some((p, id)) = self.mind_sel {
+                    self.mind_edit_text(p, id, false);
+                }
+            }
+            "mind-color" => self.mind_set_color(n),
+            "mind-del" => self.mind_delete(),
             "color-custom" => self.open_color_picker(),
             "cp-ok" => {
                 self.cp_ok();
@@ -320,6 +338,11 @@ impl App {
                     }
                 }
             }
+            "insert-menu" => self.open_popover("pop-insert", src),
+            "insert-table" => self.open_table_dialog(),
+            "insert-plot" => self.open_plot_dialog(),
+            "plot-insert" => self.insert_plot(),
+            a if a.starts_with("tbl-") => self.table_action(a, arg),
             "image" => {
                 self.close_popovers();
                 set_timeout(0, || input_el("file-image").click());
@@ -552,6 +575,10 @@ impl App {
                     self.save_settings();
                 }
             }
+            "plot-f" | "plot-x0" | "plot-x1" | "plot-y0" | "plot-y1" | "plot-yauto" | "plot-grid" => {
+                self.refresh_plot();
+                return;
+            }
             "cp-hex" => {
                 self.cp_hex_input(value);
                 return;
@@ -622,6 +649,7 @@ impl App {
     }
 
     pub fn refresh_toolbar(&mut self) {
+        self.position_mind_menu();
         let active = self.effective_tool();
         let list = dom().query_selector_all(".tb.tool").unwrap();
         for i in 0..list.length() {
@@ -837,6 +865,9 @@ impl App {
                 h.push_str(&toggle("pop-bold", "Fett", p.text_bold));
                 h.push_str(&swatches(&PEN_COLORS, p.text_colors[p.text_ci]));
             }
+            Tool::Mind => {
+                h.push_str("<p class=\"hint\">Auf eine freie Stelle tippen = neue Blase. Blase antippen = auswählen (Ast hinzufügen, Farbe, Text, löschen), nochmal antippen = Text ändern. Ziehen verschiebt – die Verbindungen wandern mit.</p>");
+            }
             Tool::Laser => {
                 h.push_str("<div class=\"swatches\">");
                 for c in ["#ff323c", "#24d17e", "#2fb5ff", "#ffb000"] {
@@ -905,6 +936,11 @@ impl App {
             let short: String = title.chars().take(24).collect();
             format!("{} / {} · {}", ed.cur_page + 1, ed.nb.pages.len(), short)
         };
+        let p = &ed.nb.pages[ed.cur_page];
+        let label = if p.tags.is_empty() { label } else { format!("{} · {}", label, p.tags.iter().take(2).map(|t| format!("#{}", t)).collect::<Vec<_>>().join(" ")) };
+        let dot = if p.mark > 0 { crate::engine::note::MARK_COLORS[(p.mark - 1) as usize].1 } else { "" };
+        style(&el("page-label"), "--mark", if dot.is_empty() { "transparent" } else { dot });
+        set_class(&el("page-label"), "marked", !dot.is_empty());
         let zoom = format!("{:.0}%", ed.zoom_percent());
         let key = format!("{}|{}", label, zoom);
         let changed = PILL.with(|p| {
@@ -959,23 +995,34 @@ impl App {
             el("nav-list").set_inner_html(&html);
             return;
         }
+        let filter = ed.nav_filter.clone();
         for (i, p) in ed.nb.pages.iter().enumerate() {
             if ed.nav_bookmarks && !p.bookmark {
                 continue;
             }
+            if !super::marks::page_matches(p, filter.as_deref()) {
+                continue;
+            }
+            let mark = if p.mark > 0 { format!("<span class=\"nav-mark\" style=\"background:{}\"></span>", crate::engine::note::MARK_COLORS[(p.mark - 1) as usize].1) } else { String::new() };
+            let tags: String = p.tags.iter().take(3).map(|t| format!("<span class=\"nav-tag\">#{}</span>", esc(t))).collect();
             html.push_str(&format!(
-                "<button class=\"nav-item{}\" data-act=\"nav-page\" data-arg=\"{}\"><canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}{}</span></button>",
+                "<button class=\"nav-item{}\" data-act=\"nav-page\" data-arg=\"{}\">{}<canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}{}</span>{}</button>",
                 if i == ed.cur_page { " current" } else { "" },
                 i,
+                mark,
                 p.id,
                 i + 1,
                 if p.bookmark { " <svg class=\"bm\"><use href=\"#i-bookmark\"/></svg>" } else { "" },
-                if p.title.is_empty() { String::new() } else { format!(" · {}", esc(&p.title)) }
+                if p.title.is_empty() { String::new() } else { format!(" · {}", esc(&p.title)) },
+                if tags.is_empty() { String::new() } else { format!("<span class=\"nav-tags\">{}</span>", tags) }
             ));
         }
         if html.is_empty() {
-            html = "<p class=\"muted nav-empty\">Keine Seiten mit Lesezeichen</p>".into();
+            html = if filter.is_some() { "<p class=\"muted nav-empty\">Keine Seiten mit dieser Markierung</p>".into() } else { "<p class=\"muted nav-empty\">Keine Seiten mit Lesezeichen</p>".into() };
         }
+        let bar = self.nav_filter_bar();
+        html.insert_str(0, &bar);
+        let Some(ed) = &mut self.ed else { return };
         html.push_str("<div class=\"nav-actions\"><button class=\"btn small\" data-act=\"page-up\">Seite nach oben</button><button class=\"btn small\" data-act=\"page-down\">Seite nach unten</button></div>");
         el("nav-list").set_inner_html(&html);
         ed.thumb_versions.clear();

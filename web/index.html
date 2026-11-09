@@ -64,6 +64,13 @@
     <symbol id="i-zoomwin" viewBox="0 0 24 24"><rect x="2" y="13" width="20" height="8" rx="2"/><rect x="6" y="3" width="8" height="5" rx="1"/><path d="M10 8v5"/></symbol>
     <symbol id="i-paper" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="2"/><path d="m20 17-3-3-6 6"/></symbol>
     <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2a1.5 1.5 0 0 1 0 3H8v-5M14 11v5M14 11h2"/></symbol>
+    <symbol id="i-insert" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14.5h18M9 4v16M15 4v16"/></symbol>
+    <symbol id="i-plot" viewBox="0 0 24 24"><path d="M3 12h18M12 3v18"/><path d="M4 19c4-1 5-13 8-13s4 12 8 13"/></symbol>
+    <symbol id="i-mind" viewBox="0 0 24 24"><rect x="8" y="9.5" width="8" height="5" rx="2.5"/><rect x="2" y="3" width="6" height="4" rx="2"/><rect x="16" y="3" width="6" height="4" rx="2"/><rect x="16" y="17" width="6" height="4" rx="2"/><path d="M8 11c-2 0-2-4-3-4M16 11c2 0 2-4 3-4M16 13c2 0 2 4 3 4"/></symbol>
+    <symbol id="i-present" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M10 8l5 2-5 2z"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.3"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="m10.8 6.2-5.3 14.3M13.2 6.2l5.3 14.3M7.3 15.5a10 10 0 0 0 9.4 0"/></symbol>
     <symbol id="i-fingerprint" viewBox="0 0 24 24"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></symbol>
     <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
   </defs>
@@ -127,13 +134,15 @@
       <button class="tb tool" data-act="tool" data-arg="lasso" title="Lasso (L)"><svg><use href="#i-lasso"/></svg></button>
       <button class="tb tool" data-act="tool" data-arg="shape" title="Formen (S)"><svg><use href="#i-shapes"/></svg></button>
       <button class="tb tool" data-act="tool" data-arg="text" title="Text (T)"><svg><use href="#i-text"/></svg></button>
-      <button class="tb" data-act="image" title="Bild einfügen"><svg><use href="#i-image"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="mind" title="Mindmap (M)"><svg><use href="#i-mind"/></svg></button>
+      <button class="tb" id="btn-insert" data-act="insert-menu" title="Einfügen: Bild, Tabelle, Funktionsgraph"><svg><use href="#i-insert"/></svg></button>
       <button class="tb tool" data-act="tool" data-arg="laser" title="Laserpointer"><svg><use href="#i-laser"/></svg></button>
       <button class="tb" id="btn-ruler" data-act="ruler-menu" title="Lineal &amp; Geodreieck"><svg><use href="#i-ruler"/></svg></button>
       <button class="tb" id="btn-zoomwin" data-act="zoomwin" title="Zoom-Fenster"><svg><use href="#i-zoomwin"/></svg></button>
       <span class="sep" id="fav-sep"></span>
       <div id="favs" class="favs"></div>
     </div>
+    <div id="ed-tabs" class="ed-tabs hidden"></div>
     <div class="ed-right glass">
       <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-nib"/></svg></span>
       <button class="icon-btn" data-act="study" title="Lernkarten"><svg><use href="#i-cards"/></svg></button>
@@ -173,6 +182,12 @@
     <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
     <button data-act="sel-delete" class="danger" title="Löschen"><svg><use href="#i-trash"/></svg></button>
   </div>
+  <div id="present-bar" class="present-bar">
+    <button data-act="present-prev" title="Vorherige Seite">‹</button>
+    <span id="present-count">1 / 1</span>
+    <button data-act="present-next" title="Nächste Seite">›</button>
+    <button data-act="present-exit" class="exit" title="Präsentation beenden"><svg><use href="#i-close"/></svg></button>
+  </div>
   <div id="zoomwin" class="zoomwin glass hidden">
     <canvas id="zw-canvas"></canvas>
     <div class="zw-tools" id="zw-tools">
@@ -183,6 +198,16 @@
       <button data-act="zw-out" title="Weniger vergrößern">−</button>
       <button data-act="zw-close" title="Zoom-Fenster schließen">✕</button>
     </div>
+  </div>
+  <div id="mind-menu" class="sel-menu mind-menu glass hidden">
+    <button data-act="mind-child" class="mind-add" title="Ast hinzufügen"><svg><use href="#i-plus"/></svg>Ast</button>
+    <button data-act="mind-text" title="Text ändern"><svg><use href="#i-text"/></svg></button>
+    <span class="sep"></span>
+    <div class="sel-colors">
+      <button data-act="mind-color" data-arg="0" style="background:#6d5cff"></button><button data-act="mind-color" data-arg="1" style="background:#24a0ed"></button><button data-act="mind-color" data-arg="2" style="background:#1fb26e"></button><button data-act="mind-color" data-arg="3" style="background:#f09819"></button><button data-act="mind-color" data-arg="4" style="background:#f05858"></button><button data-act="mind-color" data-arg="5" style="background:#d648ba"></button><button data-act="mind-color" data-arg="6" style="background:#00a89b"></button>
+    </div>
+    <span class="sep"></span>
+    <button data-act="mind-del" class="danger" title="Blase löschen"><svg><use href="#i-trash"/></svg></button>
   </div>
   <button id="paste-btn" class="paste-btn glass hidden" data-act="paste"><svg><use href="#i-paste"/></svg>Einfügen</button>
   <div id="cursor"></div>
@@ -204,21 +229,32 @@
   <button class="mi" data-act="cover-page"><svg><use href="#i-template"/></svg><span id="cover-page-label">Deckblatt hinzufügen</span></button>
   <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
   <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
+  <button class="mi" data-act="marks"><svg><use href="#i-tag"/></svg>Markierung &amp; Schlagwörter …</button>
   <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
   <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>Seite in anderes Notizbuch …</button>
   <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
   <hr>
+  <button class="mi" data-act="present"><svg><use href="#i-present"/></svg>Präsentieren</button>
   <button class="mi" data-act="study"><svg><use href="#i-cards"/></svg>Lernkarten</button>
   <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Notizbuchvorlage speichern …</button>
   <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+</div>
+
+<!-- Einfügen-Menü -->
+<div id="pop-insert" class="popover menu glass hidden">
+  <button class="mi" data-act="image"><svg><use href="#i-image"/></svg>Bild</button>
+  <button class="mi" data-act="insert-table"><svg><use href="#i-table"/></svg>Tabelle …</button>
+  <button class="mi" data-act="insert-plot"><svg><use href="#i-plot"/></svg>Funktionsgraph …</button>
+  <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten …</button>
 </div>
 
 <!-- Lineal-Menü -->
 <div id="pop-ruler" class="popover menu glass hidden">
   <button class="mi" data-act="ruler" data-arg="ruler"><svg><use href="#i-ruler"/></svg>Lineal</button>
   <button class="mi" data-act="ruler" data-arg="triangle"><svg><use href="#i-triangle"/></svg>Geodreieck</button>
+  <button class="mi" data-act="ruler" data-arg="compass"><svg><use href="#i-compass"/></svg>Zirkel</button>
   <button class="mi" data-act="ruler" data-arg="off"><svg><use href="#i-close"/></svg>Ausblenden</button>
-  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien.</p>
+  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien. Zirkel: Mitte verschieben, Spitze ziehen = Radius; am Kreis entlang zeichnen.</p>
 </div>
 
 <!-- Ordner-Menü -->
@@ -404,6 +440,64 @@
     </div>
   </div>
 </section>
+
+<!-- Tabelle -->
+<div id="modal-table" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><h2>Tabelle einfügen</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="stepper-row">
+      <div class="stepper"><span>Spalten</span><button data-act="tbl-cols" data-arg="-1">−</button><b id="tbl-cols">3</b><button data-act="tbl-cols" data-arg="1">+</button></div>
+      <div class="stepper"><span>Zeilen</span><button data-act="tbl-rows" data-arg="-1">−</button><b id="tbl-rows">5</b><button data-act="tbl-rows" data-arg="1">+</button></div>
+    </div>
+    <h4>Kopfzeile</h4>
+    <div id="tbl-heads" class="tbl-heads"></div>
+    <div id="tbl-preview" class="ins-preview"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="tbl-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Funktionsgraph -->
+<div id="modal-plot" class="modal hidden">
+  <div class="modal-card glass plot-card">
+    <div class="modal-head"><h2>Funktionsgraph</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <label class="field"><span>f(x) = <small class="muted">mehrere mit ; trennen, z. B. x^2 - 2; 2sin(x)</small></span><input id="plot-f" data-input="plot-f" autocomplete="off" spellcheck="false" placeholder="x^2 - 2"></label>
+    <div class="plot-range">
+      <label class="field"><span>x von</span><input id="plot-x0" data-input="plot-x0" value="-5" inputmode="decimal"></label>
+      <label class="field"><span>x bis</span><input id="plot-x1" data-input="plot-x1" value="5" inputmode="decimal"></label>
+    </div>
+    <label class="row toggle"><span>y-Bereich automatisch</span><span class="switch"><input type="checkbox" id="plot-yauto" data-input="plot-yauto" checked><span></span></span></label>
+    <div class="plot-range" id="plot-yrow">
+      <label class="field"><span>y von</span><input id="plot-y0" data-input="plot-y0" value="-5" inputmode="decimal"></label>
+      <label class="field"><span>y bis</span><input id="plot-y1" data-input="plot-y1" value="5" inputmode="decimal"></label>
+    </div>
+    <label class="row toggle"><span>Gitternetz</span><span class="switch"><input type="checkbox" id="plot-grid" data-input="plot-grid" checked><span></span></span></label>
+    <p id="plot-err" class="plot-err"></p>
+    <div id="plot-preview" class="ins-preview plot"></div>
+    <p class="hint">Erlaubt: + − · / ^, Klammern, sin cos tan sqrt abs ln log exp, pi, e – auch „2x“ oder „0,5x²“.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" id="plot-insert" data-act="plot-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Markierung & Schlagwörter -->
+<div id="modal-marks" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><div><h2>Markierung &amp; Schlagwörter</h2><span id="marks-page" class="muted"></span></div><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <h4>Farbe</h4>
+    <div id="marks-colors" class="marks-colors"></div>
+    <h4>Schlagwörter</h4>
+    <div id="marks-tags" class="tag-row"></div>
+    <div class="tag-input"><span>#</span><input id="marks-input" placeholder="z. B. Prüfung, Wichtig" autocomplete="off" spellcheck="false" maxlength="60" enterkeyhint="done"><button class="btn small primary" data-act="tag-new">Hinzufügen</button></div>
+    <div id="marks-sugg-wrap" class="hidden"><h4>Im Notizbuch verwendet</h4><div id="marks-sugg" class="tag-row"></div></div>
+    <p class="hint">In der Seitenübersicht kannst du nach Farbe oder Schlagwort filtern.</p>
+    <div class="modal-actions"><button class="btn primary" data-act="modal-close">Fertig</button></div>
+  </div>
+</div>
 
 <!-- Farbwähler -->
 <div id="modal-color" class="modal hidden">

@@ -56,6 +56,14 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Fällige Karten (freiwillig)**: Wiederholungsplan einschalten → gewusste Karten kommen nach 1, 3, 7, 21 Tagen wieder
 - **Lernkarten**: Frage und Antwort mit dem Lasso markieren → „Lernkarte“; lernen mit Umdrehen und
   Karteikasten (gewusst → nächstes Fach, sonst zurück); Karten zeigen immer den aktuellen Stand der Seite
+- **Zirkel** (Lineal-Menü): Mitte verschieben, an der Spitze den Radius aufziehen; am Kreis entlang zeichnet der Stift exakt
+- **Einfügen-Menü**: Bild, **Tabelle** (Spalten/Zeilen, farbige Kopfzeile) und **Funktionsgraph** (z. B. `x^2 - 2; 2sin(x)`,
+  automatischer y-Bereich, Gitternetz) – als normale Elemente, mit dem Lasso verschieb- und skalierbar
+- **Mindmap-Werkzeug**: Blasen anlegen, Äste hinzufügen, Text und Farbe ändern; beim Verschieben wandern die Verbindungen mit
+- **Tabs**: zuletzt geöffnete Notizbücher als Reiter, jede Ansicht bleibt erhalten
+- **Präsentationsmodus** (⋯ → „Präsentieren“): Vollbild, ganze Seite, wischen/tippen zum Blättern, Stift = Laserpointer
+- **Seitenmarkierungen & Schlagwörter** (⋯ → „Markierung & Schlagwörter“): farbiges Lesebändchen, #Schlagwörter,
+  Filter in der Seitenübersicht
 - **Inhaltsverzeichnis**: Seitentitel vergeben (⋯ → „Seitentitel“), Übersicht unter Seiten → „Inhalt“
 - **Seiten in andere Notizbücher** kopieren oder verschieben (⋯ → „Seite in anderes Notizbuch“)
 
@@ -112,6 +120,7 @@ src/engine/   Notiz-Engine (reines Rust, getestet)
   note.rs       Notizbuch → Seiten → Elemente (Strich, Text, Bild)
   paper.rs      Vorlagen als Vektor-Grundformen
   covers.rs     Buchcover (Verläufe und Muster) als Vektor-Grundformen
+  plot.rs       Formelparser, Funktionsplotter, Tabellen
   history.rs    Rückgängig/Wiederholen
   format.rs     .znote-Format, Bibliothek, PNG, Import alter Zeichnungen
   pdf.rs        Vektor-PDF-Export (mit klickbaren Links)
@@ -131,6 +140,11 @@ src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   stats.rs      Lernstatistik
   zoomwin.rs    Zoom-Fenster
   svg.rs        Vorlagen- und Cover-Vorschauen als SVG
+  insert.rs     Tabellen und Funktionsgraphen einfügen
+  mind.rs       Mindmap-Werkzeug
+  tabs.rs       Tabs und Präsentationsmodus
+  marks.rs      Seitenmarkierungen und Schlagwörter
+  colorpick.rs  eigener Farbwähler
 web/          index.html, style.css, Manifest, Icons, Service Worker
 web/vendor/pdfjs/  pdf.js von Mozilla (Apache-2.0, siehe LICENSE) für den PDF-Import
 android/      Android-Hülle (WebView) mit nativem S-Pen-/Handballen-Filter

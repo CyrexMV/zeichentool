@@ -3,14 +3,14 @@
 use super::color::Color;
 use super::ink::{PenKind, Pt, Stroke};
 use super::geom::Rect;
-use super::note::{hash_bytes, Card, Content, Format, ImageItem, Item, Link, LinkTarget, Notebook, Page, Region, TextBox};
+use super::note::{hash_bytes, Card, Content, Format, ImageItem, Item, Link, LinkTarget, Node, Notebook, Page, Region, TextBox};
 use super::paper::{Plan, Template, TemplateKind};
 use miniz_oxide::deflate::compress_to_vec;
 use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 5;
+const VERSION: u32 = 6;
 
 struct W(Vec<u8>);
 
@@ -137,12 +137,18 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
                 }
             }
         }
+        w.u8(p.mark);
+        w.u32(p.tags.len() as u32);
+        for t in &p.tags {
+            w.str(t);
+        }
         w.u32(p.items.len() as u32);
         for it in &p.items {
             match &it.content {
                 Content::Stroke(_) => w.u8(0),
                 Content::Text(_) => w.u8(1),
                 Content::Image(_) => w.u8(2),
+                Content::Node(_) => w.u8(3),
             }
             w.u32(it.id);
             w.f64(it.order);
@@ -173,6 +179,15 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
                     w.f32(i.w);
                     w.f32(i.h);
                     w.bytes(&i.png);
+                }
+                Content::Node(n) => {
+                    w.f32(n.x);
+                    w.f32(n.y);
+                    w.f32(n.w);
+                    w.f32(n.h);
+                    w.rgba(n.color);
+                    w.u32(n.parent);
+                    w.str(&n.text);
                 }
             }
         }
@@ -265,6 +280,14 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                 links.push(Link { rect, target, hidden: kind & 0x80 != 0 });
             }
         }
+        let (mut mark, mut tags) = (0u8, Vec::new());
+        if version >= 6 {
+            mark = r.u8()?.min(super::note::MARK_COLORS.len() as u8);
+            let nt = r.u32()? as usize;
+            for _ in 0..nt.min(1000) {
+                tags.push(r.str()?);
+            }
+        }
         let ni = r.u32()? as usize;
         let mut items = Vec::with_capacity(ni.min(100_000));
         for _ in 0..ni {
@@ -291,12 +314,16 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                     let key = hash_bytes(&png);
                     Content::Image(ImageItem { x, y, w, h, png: Rc::new(png), key })
                 }
+                3 => {
+                    let (x, y, w, h) = (r.f32()?, r.f32()?, r.f32()?, r.f32()?);
+                    Content::Node(Node { x, y, w, h, color: r.rgba()?, parent: r.u32()?, text: r.str()? })
+                }
                 _ => return Err(BROKEN.into()),
             };
             items.push(Item { id, order, content });
         }
         items.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap_or(std::cmp::Ordering::Equal));
-        pages.push(Page { id: pid, template, paper, bookmark, checks, title, bg, bg_paper, links, items, version: 1 });
+        pages.push(Page { id: pid, template, paper, bookmark, checks, title, mark, tags, bg, bg_paper, links, items, version: 1 });
     }
     if pages.is_empty() {
         return Err("Notizbuch enthält keine Seiten".into());
@@ -577,6 +604,10 @@ mod tests {
         let bgp = encode_png(1, 1, &[1, 2, 3, 255]);
         nb.pages[0].bg = Some(ImageItem { x: 0.0, y: 0.0, w: 595.0, h: 842.0, key: hash_bytes(&bgp), png: Rc::new(bgp) });
         nb.pages[0].bg_paper = true;
+        nb.pages[0].mark = 3;
+        nb.pages[0].tags = vec!["Prüfung".into(), "Wichtig".into()];
+        let nid = nb.alloc_id();
+        nb.pages[0].insert([Item { id: nid, order: 9.0, content: Content::Node(Node { x: 1.0, y: 2.0, w: 80.0, h: 30.0, text: "Thema".into(), color: [1, 2, 3, 255], parent: 0 }) }]);
         nb.pages[0].links = vec![Link { rect: Rect::new(1.0, 2.0, 3.0, 4.0), target: LinkTarget::Page(1), hidden: true }, Link { rect: Rect::new(5.0, 6.0, 7.0, 8.0), target: LinkTarget::Notebook("abc".into()), hidden: false }];
         nb.cards.push(Card { id: 99, front: Region { page: nb.pages[0].id, rect: Rect::new(1.0, 2.0, 30.0, 40.0) }, back: Region { page: nb.pages[0].id, rect: Rect::new(5.0, 50.0, 60.0, 90.0) }, level: 2, right: 3, wrong: 1, due: 12345.0 });
         nb.next_id = nb.next_id.max(100);

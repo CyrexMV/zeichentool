@@ -11,6 +11,7 @@ pub mod note;
 pub mod paper;
 pub mod pdf;
 pub mod planner;
+pub mod plot;
 pub mod sha;
 pub mod shapes;
 

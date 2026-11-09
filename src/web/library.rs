@@ -254,13 +254,16 @@ impl App {
         self.screen = Screen::Editor;
         show("library", false);
         show("editor", true);
+        let nb_id = nb.id.clone();
         self.ed = Some(Editor::new(nb));
+        self.tab_opened(&nb_id);
         if let Some(ed) = &mut self.ed {
             ed.resize();
             let i = 0;
             ed.fit_page(i);
             ed.nav_open = false;
         }
+        self.tab_restore_view();
         set_class(&el("navigator"), "open", false);
         set_class(&el("btn-nav"), "active", false);
         self.hold_eraser = false;
@@ -271,6 +274,10 @@ impl App {
     }
 
     pub fn close_editor(&mut self) {
+        if self.present.is_some() {
+            self.present_exit();
+        }
+        self.tab_store_view();
         if self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false) {
             self.commit_text();
         }
@@ -404,6 +411,7 @@ impl App {
             }
         }
         match pending {
+            Some(Pending::NodeText(page, id)) => self.mind_set_text(page, id, &value),
             Some(Pending::DeleteForever(id)) => {
                 self.delete_stored(&id);
                 self.toast("Endgültig gelöscht");

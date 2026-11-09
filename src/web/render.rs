@@ -209,6 +209,40 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                     ctx.set_fill_style_str(&rgba_css(s.color));
                     ctx.fill_with_path_2d(&p);
                 }
+                (Content::Node(nd), 0) => {
+                    // Verbindung zur Elternblase (unter allen Blasen)
+                    if let Some(Content::Node(par)) = page.get(nd.parent).map(|p| &p.content) {
+                        let q = par.edge_to(nd);
+                        ctx.set_stroke_style_str(&rgba_css([par.color[0], par.color[1], par.color[2], 205]));
+                        ctx.set_line_width(2.2);
+                        ctx.set_line_cap("round");
+                        ctx.begin_path();
+                        ctx.move_to(q[0].0 as f64, q[0].1 as f64);
+                        ctx.bezier_curve_to(q[1].0 as f64, q[1].1 as f64, q[2].0 as f64, q[2].1 as f64, q[3].0 as f64, q[3].1 as f64);
+                        ctx.stroke();
+                    }
+                }
+                (Content::Node(nd), 3) => {
+                    let r = (nd.h * 0.5).min(14.0) as f64;
+                    ctx.set_fill_style_str(&rgba_css([nd.color[0], nd.color[1], nd.color[2], 255]));
+                    ctx.begin_path();
+                    let _ = ctx.round_rect_with_f64(nd.x as f64, nd.y as f64, nd.w as f64, nd.h as f64, r);
+                    ctx.fill();
+                    let fs = nd.font_size();
+                    let tb = TextBox { x: 0.0, y: 0.0, w: nd.w - nd.pad() * 2.0, size: fs, color: [255, 255, 255, 255], bold: true, text: nd.text.clone() };
+                    let lines = c.lines(ctx, it.id, &tb);
+                    let light = nd.color[0] as f32 * 0.299 + nd.color[1] as f32 * 0.587 + nd.color[2] as f32 * 0.114 > 170.0;
+                    ctx.set_font(&text_font(&tb));
+                    ctx.set_fill_style_str(if light { "#1c1e2c" } else { "#ffffff" });
+                    ctx.set_text_align("center");
+                    ctx.set_text_baseline("alphabetic");
+                    let total = fs * 1.25 * lines.len() as f32;
+                    for (k, l) in lines.iter().enumerate() {
+                        let y = nd.y + (nd.h - total) * 0.5 + fs * (0.95 + 1.25 * k as f32);
+                        let _ = ctx.fill_text(l, (nd.x + nd.w * 0.5) as f64, y as f64);
+                    }
+                    ctx.set_text_align("start");
+                }
                 (Content::Text(t), 3) => {
                     let lines = c.lines(ctx, it.id, t);
                     ctx.set_font(&text_font(t));
@@ -435,7 +469,7 @@ impl Editor {
         let (sx, sy) = (self.view.sx, self.view.sy);
         let ctx = self.ctx.clone();
         ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
-        ctx.set_fill_style_str(if dark { "#15161b" } else { "#e9ebf1" });
+        ctx.set_fill_style_str(if self.presenting.is_some() { "#0b0c10" } else if dark { "#15161b" } else { "#e9ebf1" });
         ctx.fill_rect(0.0, 0.0, self.vw * dpr, self.vh * dpr);
         let (w, h) = (self.nb.format.w, self.nb.format.h);
         let span = self.ph() + GAP;
@@ -460,6 +494,9 @@ impl Editor {
         for i in first..=last.max(first) {
             if i >= self.nb.pages.len() {
                 break;
+            }
+            if self.presenting.is_some_and(|p| p != i) {
+                continue;
             }
             let top = self.page_top(i);
             let (ox, oy) = (-sx * s * dpr, (top - sy) * s * dpr);
@@ -533,11 +570,46 @@ impl Editor {
                 ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
             }
         }
+        // farbige Markierung als Lesebändchen oben rechts an der Seite
+        for i in first..=last.max(first) {
+            let Some(p) = self.nb.pages.get(i) else { break };
+            if p.mark == 0 || self.presenting.is_some() {
+                continue;
+            }
+            let (x, y) = self.page_to_screen(i, w - 36.0, 0.0);
+            let bw = (14.0 * s).clamp(8.0, 22.0);
+            let bh = bw * 2.4;
+            ctx.set_transform(dpr, 0.0, 0.0, dpr, 0.0, 0.0).ok();
+            ctx.set_fill_style_str(crate::engine::note::MARK_COLORS[(p.mark as usize - 1) % 7].1);
+            ctx.begin_path();
+            ctx.move_to(x, y);
+            ctx.line_to(x + bw, y);
+            ctx.line_to(x + bw, y + bh);
+            ctx.line_to(x + bw * 0.5, y + bh - bw * 0.45);
+            ctx.line_to(x, y + bh);
+            ctx.close_path();
+            ctx.fill();
+        }
         // Lineal / Geodreieck
         if let Some(r) = self.ruler {
             r.draw(&ctx, dpr, 2.8346 * s, dark);
         }
         self.draw_zw_frame(&ctx);
+        // ausgewählte Mindmap-Blase
+        if let Some((page, id)) = self.mind_hl {
+            if let (Some(i), Some(n)) = (self.page_index(page), self.node(page, id)) {
+                let (x0, y0) = self.page_to_screen(i, n.x, n.y);
+                let (x1, y1) = self.page_to_screen(i, n.x + n.w, n.y + n.h);
+                ctx.set_transform(dpr, 0.0, 0.0, dpr, 0.0, 0.0).ok();
+                ctx.set_stroke_style_str("rgba(109,92,255,.9)");
+                ctx.set_line_width(2.5);
+                let _ = ctx.set_line_dash(&js_sys::Array::of2(&6.0.into(), &4.0.into()));
+                ctx.begin_path();
+                let _ = ctx.round_rect_with_f64(x0 - 5.0, y0 - 5.0, x1 - x0 + 10.0, y1 - y0 + 10.0, 16.0);
+                ctx.stroke();
+                let _ = ctx.set_line_dash(&js_sys::Array::new());
+            }
+        }
         // ungenutzte Seitenbilder freigeben
         if self.bmps.len() > 8 {
             let keep: Vec<u32> = (first..=last).filter_map(|i| self.nb.pages.get(i).map(|p| p.id)).collect();
@@ -568,7 +640,7 @@ impl Editor {
             Some(Op::Ink { page, stroke, predicted, rule, .. }) => {
                 let Some(i) = self.page_index(*page) else { return };
                 // Länge der Linie am Lineal anzeigen
-                if let (Some(_), Some(a), Some(b)) = (rule, stroke.pts.first(), stroke.pts.last()) {
+                if let (Some(super::ruler::Guide::Line(_)), Some(a), Some(b)) = (rule, stroke.pts.first(), stroke.pts.last()) {
                     let cm = (((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt() * 0.035278) as f64;
                     let (lx, ly) = self.page_to_screen(i, b.x, b.y);
                     ctx.set_transform(self.dpr, 0.0, 0.0, self.dpr, 0.0, 0.0).ok();

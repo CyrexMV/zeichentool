@@ -4,8 +4,11 @@ mod colorpick;
 mod docs;
 mod editor;
 mod input;
+mod insert;
 mod library;
 mod links;
+mod marks;
+mod mind;
 mod lock;
 mod render;
 mod ruler;
@@ -13,6 +16,7 @@ mod stats;
 mod study;
 mod storage;
 mod svg;
+mod tabs;
 mod tools;
 mod zoomwin;
 mod ui;
@@ -136,10 +140,11 @@ pub enum Tool {
     Shape,
     Text,
     Laser,
+    Mind,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 7] = [Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Lasso, Tool::Shape, Tool::Text, Tool::Laser];
+    pub const ALL: [Tool; 8] = [Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Lasso, Tool::Shape, Tool::Text, Tool::Laser, Tool::Mind];
 
     pub fn code(&self) -> &'static str {
         match self {
@@ -150,6 +155,7 @@ impl Tool {
             Tool::Shape => "shape",
             Tool::Text => "text",
             Tool::Laser => "laser",
+            Tool::Mind => "mind",
         }
     }
 
@@ -166,6 +172,7 @@ impl Tool {
             Tool::Shape => "Formen",
             Tool::Text => "Text",
             Tool::Laser => "Laserpointer",
+            Tool::Mind => "Mindmap",
         }
     }
 }
@@ -357,6 +364,8 @@ pub enum Pending {
     NewDeck,
     /// Link setzen: Seite + Rechteck (x0, y0, x1, y1)
     Link(u32, f32, f32, f32, f32),
+    /// Text einer Mindmap-Blase (Seite, ID)
+    NodeText(u32, u32),
     Unlock(String, lock::Then),
     SetPin(String),
     ConfirmPin(String, String),
@@ -447,6 +456,14 @@ pub struct App {
     pub cp_old: Color,
     /// zuletzt gewählte eigene Farben
     pub recent_colors: Vec<String>,
+    /// Tabellen-Dialog
+    pub table_opts: insert::TableOpts,
+    /// ausgewählte Mindmap-Blase (Seite, ID)
+    pub mind_sel: Option<(u32, u32)>,
+    /// geöffnete Notizbücher als Tabs
+    pub tabs: Vec<tabs::Tab>,
+    /// Präsentationsmodus: (vorheriges Werkzeug, vorherige Ansicht)
+    pub present: Option<(Tool, (f64, f64, f64))>,
     /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
     pub study_from_lib: bool,
 }
@@ -506,6 +523,10 @@ impl App {
             cp: (0.0, 0.0, 0.0),
             cp_old: Color::WHITE,
             recent_colors: Vec::new(),
+            table_opts: insert::TableOpts::default(),
+            mind_sel: None,
+            tabs: Vec::new(),
+            present: None,
             study_from_lib: false,
         }
     }
@@ -535,7 +556,12 @@ impl App {
         let dark = self.dark;
         let lib_needed = self.screen == Screen::Editor;
         let mut rendered = false;
+        let mind_hl = if self.tool == Tool::Mind { self.mind_sel } else { None };
         if let (Some(ed), true) = (&mut self.ed, lib_needed) {
+            if ed.mind_hl != mind_hl {
+                ed.mind_hl = mind_hl;
+                ed.dirty = true;
+            }
             if ed.dirty {
                 ed.render(&mut self.images, dark);
                 rendered = true;
