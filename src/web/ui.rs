@@ -218,6 +218,31 @@ impl App {
                 }
             }
             "sel-card" => self.selection_to_card(),
+            "ed-cover" => {
+                self.close_popovers();
+                if let Some(ed) = &self.ed {
+                    self.ctx_target = Some(ed.nb.id.clone());
+                    let html = super::library::cover_dots("cover-pick", true, Some(ed.nb.cover));
+                    el("cover-pick").set_inner_html(&html);
+                    self.open_modal("modal-cover");
+                }
+            }
+            "cover-page" => {
+                self.close_popovers();
+                let Some(ed) = &mut self.ed else { return };
+                if ed.nb.has_cover_page() {
+                    if ed.delete_page(0) {
+                        self.toast("Deckblatt entfernt – Rückgängig ist möglich");
+                    }
+                } else {
+                    let p = ed.nb.make_cover_page();
+                    ed.nb.pages.insert(0, p.clone());
+                    ed.push(crate::engine::Action::AddPage { index: 0, page: p });
+                    ed.goto_page(0);
+                    self.toast("Deckblatt hinzugefügt – der Titel lässt sich wie Text bearbeiten");
+                }
+                self.after_pages_change();
+            }
             "zoomwin" => self.toggle_zoomwin(),
             a if a.starts_with("zw-") => self.zw_action(a),
             "sel-link" => self.open_link_dialog(),
@@ -300,6 +325,8 @@ impl App {
             "more" => {
                 let bm = self.ed.as_ref().map(|e| e.nb.pages[e.cur_page].bookmark).unwrap_or(false);
                 set_text("bm-label", if bm { "Lesezeichen entfernen" } else { "Lesezeichen setzen" });
+                let cp = self.ed.as_ref().map(|e| e.nb.has_cover_page()).unwrap_or(false);
+                set_text("cover-page-label", if cp { "Deckblatt entfernen" } else { "Deckblatt hinzufügen" });
                 self.open_popover("pop-more", src);
             }
             "page-prev" => self.goto_relative(-1),
@@ -475,12 +502,26 @@ impl App {
             "title" => {
                 if let Some(ed) = &mut self.ed {
                     let t = value.trim();
-                    ed.nb.title = if t.is_empty() { "Ohne Titel".into() } else { t.chars().take(80).collect() };
-                    ed.nb.modified = wall_clock();
+                    let t: String = if t.is_empty() { "Ohne Titel".into() } else { t.chars().take(80).collect() };
+                    // Titel auf dem Deckblatt wandert mit
+                    if ed.nb.set_title(&t) {
+                        let id = ed.nb.pages[0].id;
+                        ed.bmps.remove(&id);
+                        ed.thumbs_dirty = true;
+                        ed.dirty = true;
+                        self.request_frame();
+                    }
+                    if let Some(ed) = &mut self.ed {
+                        ed.nb.modified = wall_clock();
+                    }
                 }
                 if kind == "change" {
                     self.mark_unsaved();
                 }
+            }
+            "new-cover-page" => {
+                self.new_nb.cover_page = checked;
+                return;
             }
             "new-title" => {
                 let t = if value.trim().is_empty() { "Notizbuch" } else { value.trim() };
@@ -958,39 +999,10 @@ impl App {
 
     /// Vorschau einer Vorlage als SVG (aus denselben Grundformen wie die Seite).
     fn tpl_svg(k: TemplateKind) -> String {
-        use crate::engine::Prim;
-        use std::fmt::Write as _;
         let (w, h) = if k == TemplateKind::Flashcard { (420.0, 595.0) } else { (595.0, 842.0) };
-        let (mut fills, mut lines, mut strong, mut labels) = (String::new(), String::new(), String::new(), String::new());
-        let rgba = |c: [u8; 4]| format!("rgba({},{},{},{:.2})", c[0], c[1], c[2], c[3] as f32 / 255.0);
-        for p in (Template::new(k, 1)).primitives(w, h) {
-            match p {
-                Prim::Fill { x, y, w, h, r, color } => {
-                    let _ = write!(fills, "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" rx=\"{:.1}\" fill=\"{}\"/>", x, y, w, h, r, rgba(color));
-                }
-                Prim::Line { x0, y0, x1, y1, strong: st, .. } => {
-                    let _ = write!(if st { &mut strong } else { &mut lines }, "M{:.1} {:.1}L{:.1} {:.1}", x0, y0, x1, y1);
-                }
-                Prim::Box { x, y, size } => {
-                    let _ = write!(strong, "M{:.1} {:.1}h{:.1}v{:.1}h{:.1}Z", x, y, size, size, -size);
-                }
-                Prim::Label { x, y, size, text, color, bold } => {
-                    let _ = write!(
-                        labels,
-                        "<text x=\"{:.1}\" y=\"{:.1}\" font-size=\"{:.1}\" font-weight=\"{}\" fill=\"{}\">{}</text>",
-                        x,
-                        y,
-                        size,
-                        if bold { 700 } else { 500 },
-                        color.map(rgba).unwrap_or_else(|| "rgba(95,115,150,.9)".into()),
-                        esc(&text)
-                    );
-                }
-                Prim::Dot { .. } => {}
-            }
-        }
         format!(
-            "<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" font-family=\"Inter, system-ui, sans-serif\">{fills}<path d=\"{lines}\" fill=\"none\" stroke=\"rgba(120,153,200,.7)\" stroke-width=\".5\" vector-effect=\"non-scaling-stroke\"/><path d=\"{strong}\" fill=\"none\" stroke=\"rgba(100,125,170,.85)\" stroke-width=\".8\" vector-effect=\"non-scaling-stroke\"/>{labels}</svg>"
+            "<svg viewBox=\"0 0 {w} {h}\" preserveAspectRatio=\"none\" font-family=\"Inter, system-ui, sans-serif\">{}</svg>",
+            super::svg::body(Template::new(k, 1).primitives(w, h))
         )
     }
 
@@ -1013,11 +1025,7 @@ impl App {
         self.close_popovers();
         input_el("new-title").set_value("");
         set_text("new-cover-title", "Notizbuch");
-        let covers: String = COVERS
-            .iter()
-            .enumerate()
-            .map(|(i, (name, a, b))| format!("<button class=\"cover-dot\" data-act=\"new-cover\" data-arg=\"{}\" title=\"{}\" style=\"background:linear-gradient(135deg,{},{})\"></button>", i, name, a, b))
-            .collect();
+        let covers = super::library::cover_dots("new-cover", false, None);
         el("new-covers").set_inner_html(&covers);
         self.new_from = None;
         self.refresh_new_dialog();
@@ -1078,6 +1086,17 @@ impl App {
         }
         let (_, a, b) = COVERS[n.cover as usize % COVERS.len()];
         style(&el("new-cover"), "background", &format!("linear-gradient(135deg,{},{})", a, b));
+        let (rw, rh) = match n.format {
+            1 => (842.0, 595.0),
+            2 => (1.0, 1.0),
+            3 => (3.0, 4.0),
+            _ => (595.0, 842.0),
+        };
+        if let Ok(Some(cb)) = dom().query_selector("#new-cover-page") {
+            cb.unchecked_into::<web_sys::HtmlInputElement>().set_checked(self.new_nb.cover_page);
+        }
+        el("new-cover-art").set_inner_html(&super::library::cover_art(n.cover, rw, rh));
+        set_class(&el("new-cover"), "patterned", super::svg::patterned(n.cover));
         let ratio = match n.format {
             1 => "842 / 595",
             2 => "1 / 1",
@@ -1129,6 +1148,10 @@ impl App {
         }
         let mut nb = Notebook::new(super::storage::new_id(), &title, cover, format, template, paper, wall_clock());
         nb.folder = folder;
+        if self.new_nb.cover_page {
+            let p = nb.make_cover_page();
+            nb.pages.insert(0, p);
+        }
         self.add_notebook(nb, true);
     }
 

@@ -18,6 +18,45 @@ fn date_label(ms: f64) -> String {
     }
 }
 
+/// Gemustertes Cover als SVG-Hintergrund (leer bei reinen Farbverläufen).
+pub fn cover_art(i: u8, w: f32, h: f32) -> String {
+    if super::svg::patterned(i) {
+        super::svg::cover(i as usize, w, h)
+    } else {
+        String::new()
+    }
+}
+
+/// Zusatzklasse für gemusterte Cover (Titel auf hellem Schild).
+pub fn cover_class(i: u8) -> &'static str {
+    if super::svg::patterned(i) {
+        " patterned"
+    } else {
+        ""
+    }
+}
+
+/// Auswahlpunkte für alle Cover (`act` = Aktion beim Antippen).
+pub fn cover_dots(act: &str, big: bool, cur: Option<u8>) -> String {
+    COVERS
+        .iter()
+        .enumerate()
+        .map(|(i, (name, a, b))| {
+            format!(
+                "<button class=\"cover-dot{}{}\" data-act=\"{}\" data-arg=\"{}\" title=\"{}\" style=\"background:linear-gradient(135deg,{},{})\">{}</button>",
+                if big { " big" } else { "" },
+                if cur == Some(i as u8) { " active" } else { "" },
+                act,
+                i,
+                name,
+                a,
+                b,
+                cover_art(i as u8, 1.0, 1.0)
+            )
+        })
+        .collect()
+}
+
 pub fn cover_css(i: u8) -> String {
     let (_, a, b) = COVERS[i as usize % COVERS.len()];
     format!("--c1:{};--c2:{}", a, b)
@@ -53,7 +92,7 @@ impl App {
             };
             html.push_str(&format!(
                 "<div class=\"card\" data-act=\"card\" data-arg=\"{id}\">\
-                   <div class=\"cover\" style=\"{css};aspect-ratio:{ratio}\">\
+                   <div class=\"cover{pat}\" style=\"{css};aspect-ratio:{ratio}\">{art}\
                      <div class=\"cover-band\"></div>\
                      <div class=\"cover-label\"><b>{title}</b><small>{pages} {pw}</small></div>\
                      {star}{lock}\
@@ -63,6 +102,8 @@ impl App {
                  </div>",
                 id = esc(&m.id),
                 css = cover_css(m.cover),
+                pat = cover_class(m.cover),
+                art = cover_art(m.cover, m.w, m.h),
                 ratio = ratio,
                 title = esc(&m.title),
                 pages = m.pages,
@@ -155,7 +196,7 @@ impl App {
             let pct = m.progress.min(100) as f64;
             html.push_str(&format!(
                 "<div class=\"deck\" data-act=\"card\" data-arg=\"{id}\" title=\"Bearbeiten\">\
-                   <div class=\"deck-stack\" style=\"{css}\"><span></span><span></span><div class=\"deck-face\"><b>{title}</b><small>{n} {nw}</small>{due}{lock}</div><button class=\"card-more\" data-act=\"card-menu\" data-arg=\"{id}\" title=\"Optionen\"><svg><use href=\"#i-more\"/></svg></button></div>\
+                   <div class=\"deck-stack\" style=\"{css}\"><span></span><span></span><div class=\"deck-face{pat}\">{art}<b>{title}</b><small>{n} {nw}</small>{due}{lock}</div><button class=\"card-more\" data-act=\"card-menu\" data-arg=\"{id}\" title=\"Optionen\"><svg><use href=\"#i-more\"/></svg></button></div>\
                    <div class=\"deck-prog\"><span style=\"width:{pct:.0}%\"></span></div>\
                    <div class=\"deck-foot\"><small>{l} von {n} gelernt</small><button class=\"btn small primary\" data-act=\"deck-study\" data-arg=\"{id}\"><svg><use href=\"#i-cards\"/></svg>Lernen</button></div>\
                  </div>",
@@ -166,6 +207,8 @@ impl App {
                 nw = if m.cards == 1 { "Karte" } else { "Karten" },
                 l = m.learned,
                 pct = pct,
+                pat = cover_class(m.cover),
+                art = cover_art(m.cover, 3.0, 2.0),
                 due = if due > 0 { format!("<span class=\"due-badge\">{} fällig</span>", due) } else { String::new() },
                 lock = if m.locked() { "<span class=\"cover-lock\"><svg><use href=\"#i-lock\"/></svg></span>" } else { "" }
             ));
@@ -260,17 +303,29 @@ impl App {
             }
             "card-fav" => self.modify_stored(id, |nb| nb.favorite = !nb.favorite),
             "card-cover" => {
-                let html: String = COVERS
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (name, a, b))| format!("<button class=\"cover-dot big\" data-act=\"cover-pick\" data-arg=\"{}\" title=\"{}\" style=\"background:linear-gradient(135deg,{},{})\"></button>", i, name, a, b))
-                    .collect();
+                let cur = self.library.iter().find(|m| m.id == id).map(|m| m.cover);
+                let html = cover_dots("cover-pick", true, cur);
                 el("cover-pick").set_inner_html(&html);
                 self.open_modal("modal-cover");
             }
             "cover-pick" => {
                 self.close_modals();
-                self.modify_stored(id, move |nb| nb.cover = n as u8);
+                // geöffnetes Notizbuch direkt ändern (sonst würde das Speichern es überschreiben)
+                if let Some(ed) = self.ed.as_mut().filter(|e| e.nb.id == id) {
+                    ed.nb.set_cover(n as u8);
+                    if let Some(p) = ed.nb.pages.first() {
+                        let pid = p.id;
+                        ed.bmps.remove(&pid);
+                    }
+                    ed.thumbs_dirty = true;
+                    ed.dirty = true;
+                    self.mark_unsaved();
+                    self.save_now();
+                    self.request_frame();
+                    self.toast("Cover geändert");
+                } else {
+                    self.modify_stored(id, move |nb| nb.set_cover(n as u8));
+                }
             }
             "card-dup" => self.duplicate_stored(id),
             "card-folder" => self.pick_folder(id),
@@ -302,8 +357,10 @@ impl App {
         let m = self.library.iter().find(|m| m.id == id);
         let (title, cover) = m.map(|m| (m.title.clone(), m.cover)).unwrap_or_default();
         format!(
-            "<div class=\"dlg-cover-wrap\"><div class=\"dlg-cover\" style=\"{}\"><span>{}</span></div><div class=\"badge {}\"><svg><use href=\"#{}\"/></svg></div></div>",
+            "<div class=\"dlg-cover-wrap\"><div class=\"dlg-cover{}\" style=\"{}\">{}<span>{}</span></div><div class=\"badge {}\"><svg><use href=\"#{}\"/></svg></div></div>",
+            cover_class(cover),
             cover_css(cover),
+            cover_art(cover, 3.0, 4.0),
             esc(&title),
             kind,
             icon
@@ -367,7 +424,9 @@ impl App {
             Some(Pending::RenameNotebook(id)) => {
                 let t: String = value.trim().chars().take(80).collect();
                 if !t.is_empty() {
-                    self.modify_stored(id, move |nb| nb.title = t);
+                    self.modify_stored(id, move |nb| {
+                        nb.set_title(&t);
+                    });
                 }
             }
             Some(Pending::DeletePage(i)) => {

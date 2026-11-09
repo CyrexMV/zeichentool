@@ -80,6 +80,7 @@ impl App {
             format!("laser={}", c4(p.laser_color)),
             format!("shape_fill={}", p.shape_fill),
             format!("new={},{},{},{},{}", self.new_nb.cover, self.new_nb.template.kind.code(), self.new_nb.template.spacing, self.new_nb.paper.to_hex(), self.new_nb.format),
+            format!("new_cover_page={}", self.new_nb.cover_page),
             format!("tool={}", self.tool.code()),
         ];
         if let Ok(Some(ls)) = window().local_storage() {
@@ -157,6 +158,7 @@ impl App {
                         p.laser_color = c;
                     }
                 }
+                "new_cover_page" => self.new_nb.cover_page = b(v),
                 "new" => {
                     let l: Vec<&str> = v.split(',').collect();
                     if l.len() == 5 {

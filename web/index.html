@@ -200,6 +200,8 @@
   <hr>
   <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel (Inhaltsverzeichnis) …</button>
   <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier ändern …</button>
+  <button class="mi" data-act="ed-cover"><svg><use href="#i-palette"/></svg>Cover ändern …</button>
+  <button class="mi" data-act="cover-page"><svg><use href="#i-template"/></svg><span id="cover-page-label">Deckblatt hinzufügen</span></button>
   <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
   <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
   <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
@@ -255,7 +257,7 @@
     <div class="modal-head"><h2>Neues Notizbuch</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
     <div class="new-grid">
       <div class="new-preview">
-        <div id="new-cover" class="cover big"><span id="new-cover-title">Notizbuch</span></div>
+        <div id="new-cover" class="cover big"><div id="new-cover-art"></div><span id="new-cover-title">Notizbuch</span></div>
       </div>
       <div class="new-opts">
         <label class="field"><span>Titel</span><input id="new-title" data-input="new-title" placeholder="z. B. Mathe, Ideen, Tagebuch" autocomplete="off"></label>
@@ -265,6 +267,7 @@
         </div>
         <h4>Cover</h4>
         <div id="new-covers" class="cover-row"></div>
+        <label class="row toggle cover-page-toggle"><span>Deckblatt als erste Seite<br><small>Das Cover erscheint auch beim Öffnen des Notizbuchs</small></span><span class="switch"><input type="checkbox" id="new-cover-page" data-input="new-cover-page" checked><span></span></span></label>
         <h4>Format</h4>
         <div class="seg" id="new-format">
           <button data-act="new-format" data-arg="0">A4 Hoch</button>

@@ -215,12 +215,14 @@ impl App {
             let left = (TRASH_DAYS - (now - m.trashed) / DAY_MS).ceil().max(0.0) as i64;
             html.push_str(&format!(
                 "<div class=\"card trashed\" data-act=\"trash-menu\" data-arg=\"{id}\">\
-                   <div class=\"cover\" style=\"{css};aspect-ratio:{w} / {h}\"><div class=\"cover-band\"></div><div class=\"cover-label\"><b>{title}</b><small>{pages} {pw}</small></div>\
+                   <div class=\"cover{pat}\" style=\"{css};aspect-ratio:{w} / {h}\">{art}<div class=\"cover-band\"></div><div class=\"cover-label\"><b>{title}</b><small>{pages} {pw}</small></div>\
                    <button class=\"card-more\" data-act=\"trash-menu\" data-arg=\"{id}\" title=\"Optionen\"><svg><use href=\"#i-more\"/></svg></button></div>\
                    <div class=\"card-meta\"><b>{title}</b><small>noch {left} {dw}</small></div>\
                  </div>",
                 id = esc(&m.id),
                 css = super::library::cover_css(m.cover),
+                pat = super::library::cover_class(m.cover),
+                art = super::library::cover_art(m.cover, m.w, m.h),
                 w = m.w,
                 h = m.h,
                 title = esc(&m.title),

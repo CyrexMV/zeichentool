@@ -2,6 +2,7 @@
 
 pub mod cal;
 pub mod color;
+pub mod covers;
 pub mod format;
 pub mod geom;
 pub mod history;

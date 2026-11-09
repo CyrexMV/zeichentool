@@ -131,6 +131,8 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
         let len = gstates.len();
         gstates.entry((a, multiply)).or_insert_with(|| format!("G{}", len)).clone()
     };
+    // Farbverläufe (Cover): Shading-Dictionaries, Name = Sh{Index}
+    let mut shadings: Vec<String> = Vec::new();
     // Bilder: (Schlüssel → Name, Objekt-ID)
     let mut images: BTreeMap<u64, (String, usize)> = BTreeMap::new();
     let (w, h) = (nb.format.w, nb.format.h);
@@ -154,7 +156,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
             let (x, y, dw, dh) = fit_contain(bw as f32, bh as f32, w, h);
             embed_image(&mut pdf, &mut images, img).map(|id| format!("q {} 0 0 {} {} {} cm /{} Do Q\n", n(dw), n(-dh), n(x), n(y + dh), id))
         });
-        page_background(&mut c, page, w, h, &mut gs_name, bg.as_deref());
+        page_background(&mut c, page, w, h, &mut gs_name, bg.as_deref(), &mut shadings);
         // Reihenfolge: Bilder, Textmarker, Tinte, Text
         for pass in 0..4 {
             for it in &page.items {
@@ -206,7 +208,15 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     for ((a, m), name) in &gstates {
         let _ = write!(res, " /{} << /ca {} /CA {}{} >>", name, n(*a as f32 / 20.0), n(*a as f32 / 20.0), if *m { " /BM /Multiply" } else { "" });
     }
-    res.push_str(" >> /XObject <<");
+    res.push_str(" >>");
+    if !shadings.is_empty() {
+        res.push_str(" /Shading <<");
+        for (i, d) in shadings.iter().enumerate() {
+            let _ = write!(res, " /Sh{} {}", i, d);
+        }
+        res.push_str(" >>");
+    }
+    res.push_str(" /XObject <<");
     for (name, oid) in images.values() {
         let _ = write!(res, " /{} {} 0 R", name, oid);
     }
@@ -370,7 +380,21 @@ fn embed_image(pdf: &mut Pdf, images: &mut BTreeMap<u64, (String, usize)>, img: 
     Some(name)
 }
 
-fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String, bg: Option<&str>) {
+/// Kreis als Bézier-Pfad.
+fn circle_path(c: &mut String, x: f32, y: f32, r: f32) {
+    let k = r * 0.5523;
+    let _ = write!(
+        c,
+        "{} {} m {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c ",
+        n(x + r), n(y),
+        n(x + r), n(y + k), n(x + k), n(y + r), n(x), n(y + r),
+        n(x - k), n(y + r), n(x - r), n(y + k), n(x - r), n(y),
+        n(x - r), n(y - k), n(x - k), n(y - r), n(x), n(y - r),
+        n(x + k), n(y - r), n(x + r), n(y - k), n(x + r), n(y)
+    );
+}
+
+fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String, bg: Option<&str>, shadings: &mut Vec<String>) {
     let p = page.paper;
     let _ = writeln!(c, "{} {} {} rg 0 0 {} {} re f", n(p.r), n(p.g), n(p.b), n(w), n(h));
     if let Some(cmd) = bg {
@@ -387,6 +411,33 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
     for pass in 0..3 {
         for pr in &prims {
             match (pr.clone(), pass) {
+                (Prim::Grad { x, y, w: gw, h: gh, c1, c2 }, 0) => {
+                    let d = format!(
+                        "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [{} {} {} {}] /Function << /FunctionType 2 /Domain [0 1] /C0 [{}] /C1 [{}] /N 1 >> /Extend [true true] >>",
+                        n(x), n(y), n(x + gw), n(y + gh), rgb8(c1), rgb8(c2)
+                    );
+                    let idx = shadings.iter().position(|e| *e == d).unwrap_or_else(|| {
+                        shadings.push(d);
+                        shadings.len() - 1
+                    });
+                    let _ = writeln!(c, "q {} {} {} {} re W n /Sh{} sh Q", n(x), n(y), n(gw), n(gh), idx);
+                }
+                (Prim::Circle { x, y, r, color }, 0) => {
+                    let _ = write!(c, "q /{} gs {} rg ", gs(color[3] as f32 / 255.0, false), rgb8(color));
+                    circle_path(c, x, y, r);
+                    c.push_str("f Q\n");
+                }
+                (Prim::Seg { x0, y0, x1, y1, w: lw, color, dash }, 0) => {
+                    let d = if dash { format!("[{} {}] 0 d ", n(lw * 4.0), n(lw * 3.0)) } else { String::new() };
+                    let _ = writeln!(c, "q /{} gs {} RG {} w 1 J {}{} {} m {} {} l S Q", gs(color[3] as f32 / 255.0, false), rgb8(color), n(lw), d, n(x0), n(y0), n(x1), n(y1));
+                }
+                (Prim::Poly { pts, w: lw, color }, 0) if pts.len() > 1 => {
+                    let _ = write!(c, "q /{} gs {} RG {} w 1 J 1 j {} {} m ", gs(color[3] as f32 / 255.0, false), rgb8(color), n(lw), n(pts[0].0), n(pts[0].1));
+                    for p in &pts[1..] {
+                        let _ = write!(c, "{} {} l ", n(p.0), n(p.1));
+                    }
+                    c.push_str("S Q\n");
+                }
                 (Prim::Fill { x, y, w: fw, h: fh, r, color }, 0) => {
                     let _ = write!(c, "q /{} gs {} rg ", gs(color[3] as f32 / 255.0, false), rgb8(color));
                     round_rect(c, x, y, fw, fh, r);
@@ -441,6 +492,17 @@ mod tests {
             let s = String::from_utf8_lossy(&export_pdf(&nb, &[0], &|t: &TextBox| vec![t.text.clone()])).to_string();
             assert!(s.ends_with("%%EOF\n"), "{:?}", k);
         }
+    }
+
+    #[test]
+    fn cover_page_pdf() {
+        let mut nb = Notebook::new("x".into(), "Mein Buch", 18, Format::A4_PORTRAIT, Template::default(), Color::WHITE, 0.0);
+        let p = nb.make_cover_page();
+        nb.pages.insert(0, p);
+        let s = String::from_utf8_lossy(&export_pdf(&nb, &[0, 1], &|t: &TextBox| vec![t.text.clone()])).to_string();
+        assert!(s.contains("/Shading <<"));
+        assert!(nb.set_title("Neu"));
+        assert!(nb.pages[0].items.iter().any(|i| matches!(&i.content, Content::Text(t) if t.text == "Neu")));
     }
 
     #[test]

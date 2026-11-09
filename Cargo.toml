@@ -31,7 +31,7 @@ features = [
   "IdbFactory", "IdbDatabase", "IdbOpenDbRequest", "IdbRequest", "IdbObjectStore",
   "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent",
   "VisibilityState", "DomStringList",
-  "Path2d", "TextMetrics", "MediaQueryList", "HtmlTextAreaElement", "HtmlDivElement",
+  "Path2d", "CanvasGradient", "TextMetrics", "MediaQueryList", "HtmlTextAreaElement", "HtmlDivElement",
 ]
 
 [profile.release]

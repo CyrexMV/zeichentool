@@ -11,7 +11,10 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 **Bibliothek**
 - **Ordner**: anlegen, umbenennen, auflösen; Notizbücher per ⋯ → „In Ordner verschieben“; die Suche findet über alle Ordner
 - **Notizbuchvorlagen**: Notizbuch als Vorlage speichern (⋯ → „Als Vorlage speichern“) und neue Notizbücher daraus erstellen
-- Notizbücher mit farbigen Buch-Covern, Suche, Sortierung (zuletzt bearbeitet / Name / erstellt), Favoriten
+- Notizbücher mit 23 Buch-Covern – Farbverläufe und Muster wie Leder, Leinen, Kraftpapier, Marmor, Punkte,
+  Streifen, Karo, Sternenhimmel, Wellen, Terrazzo, Regenbogen, Retro-Sonne; Suche, Sortierung, Favoriten
+- **Deckblatt**: das Cover erscheint als erste Seite mit Titelschild, wenn man das Notizbuch öffnet
+  (beim Erstellen wählbar, sonst ⋯ → „Deckblatt hinzufügen“; Titel und Cover wandern beim Ändern mit)
 - Umbenennen, Cover ändern, Duplizieren, Löschen, Export – alles über das ⋯-Menü der Karte
 - Import von Backups (`.znote`), Bildern und alten Zeichnungen; die bisherige Zeichnung wird automatisch übernommen
 - **PDF importieren**: jede PDF-Seite wird zur Seite, auf der man direkt schreiben kann (auch „⋯ → PDF-Seiten einfügen“)
@@ -108,6 +111,7 @@ src/engine/   Notiz-Engine (reines Rust, getestet)
   shapes.rs     Formerkennung (QuickShape)
   note.rs       Notizbuch → Seiten → Elemente (Strich, Text, Bild)
   paper.rs      Vorlagen als Vektor-Grundformen
+  covers.rs     Buchcover (Verläufe und Muster) als Vektor-Grundformen
   history.rs    Rückgängig/Wiederholen
   format.rs     .znote-Format, Bibliothek, PNG, Import alter Zeichnungen
   pdf.rs        Vektor-PDF-Export (mit klickbaren Links)
@@ -126,6 +130,7 @@ src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   lock.rs       PIN-Sperre, Fingerabdruck, Papierkorb
   stats.rs      Lernstatistik
   zoomwin.rs    Zoom-Fenster
+  svg.rs        Vorlagen- und Cover-Vorschauen als SVG
 web/          index.html, style.css, Manifest, Icons, Service Worker
 web/vendor/pdfjs/  pdf.js von Mozilla (Apache-2.0, siehe LICENSE) für den PDF-Import
 android/      Android-Hülle (WebView) mit nativem S-Pen-/Handballen-Filter

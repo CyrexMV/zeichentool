@@ -224,7 +224,7 @@ impl Format {
     pub const SQUARE: Format = Format { w: 700.0, h: 700.0 };
 }
 
-pub const COVERS: [(&str, &str, &str); 10] = [
+pub const COVERS: [(&str, &str, &str); 23] = [
     ("Violett", "#7c5cff", "#2fb5ff"),
     ("Ozean", "#0f62fe", "#00c2c7"),
     ("Sonnenuntergang", "#ff6b6b", "#ffb36b"),
@@ -235,6 +235,19 @@ pub const COVERS: [(&str, &str, &str); 10] = [
     ("Koralle", "#ff5e62", "#ff9966"),
     ("Schiefer", "#5b6b84", "#9aa9c2"),
     ("Minze", "#38ef7d", "#11998e"),
+    ("Leder Braun", "#8b5a2b", "#5a3617"),
+    ("Leder Schwarz", "#3a3a3d", "#151517"),
+    ("Leinen", "#34508a", "#22345e"),
+    ("Kraftpapier", "#cfaa74", "#b88f57"),
+    ("Marmor", "#f7f6f3", "#e1e1e5"),
+    ("Punkte", "#ffd6e0", "#ffffff"),
+    ("Streifen", "#eaf3ff", "#3b5bdb"),
+    ("Karo", "#b22d2d", "#3d0f12"),
+    ("Sternenhimmel", "#0f1c3f", "#3a1f6b"),
+    ("Wellen", "#00b4db", "#0062a3"),
+    ("Terrazzo", "#f4ede3", "#e8dccb"),
+    ("Regenbogen", "#ffadad", "#bdb2ff"),
+    ("Retro-Sonne", "#ff7e5f", "#5b2a86"),
 ];
 
 /// Bereich auf einer Seite (für Lernkarten).
@@ -414,6 +427,62 @@ impl Notebook {
             .filter(|c| self.page_index(c.front.page).is_some() && self.page_index(c.back.page).is_some())
             .filter(|c| self.region_has_content(&c.front) || self.region_has_content(&c.back))
             .collect()
+    }
+
+    /// Hat das Notizbuch ein Deckblatt (erste Seite mit dem Cover)?
+    pub fn has_cover_page(&self) -> bool {
+        self.pages.first().map(|p| p.template.kind == TemplateKind::Cover).unwrap_or(false)
+    }
+
+    /// Neues Deckblatt (Cover + Titelschild mit dem Titel als Textfeld) – noch nicht eingefügt.
+    pub fn make_cover_page(&mut self) -> Page {
+        let id = self.alloc_id();
+        let mut t = Template::new(TemplateKind::Cover, 1);
+        t.plan.idx = self.cover as u16;
+        let mut p = Page::new(id, t, Color::WHITE);
+        let (w, h) = (self.format.w, self.format.h);
+        let (x, y, pw, ph) = super::covers::title_plate(w, h);
+        let s = w.min(h) / 20.0;
+        let size = (ph * 0.3).min(s * 1.5);
+        let tid = self.alloc_id();
+        p.insert([Item {
+            id: tid,
+            order: 1.0,
+            content: Content::Text(TextBox { x: x + s * 0.6, y: y + ph * 0.5 - size * 0.75, w: pw - s * 1.2, size, color: [28, 30, 44, 255], bold: true, text: self.title.clone() }),
+        }]);
+        p
+    }
+
+    /// Titel ändern; ein unverändertes Titelfeld auf dem Deckblatt wandert mit. `true`, wenn sich das Deckblatt geändert hat.
+    pub fn set_title(&mut self, title: &str) -> bool {
+        let old = std::mem::replace(&mut self.title, title.to_string());
+        if !self.has_cover_page() {
+            return false;
+        }
+        let p = &mut self.pages[0];
+        let mut changed = false;
+        for it in p.items.iter_mut() {
+            if let Content::Text(t) = &mut it.content {
+                if t.text == old {
+                    t.text = title.to_string();
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if changed {
+            p.touch();
+        }
+        changed
+    }
+
+    /// Cover wechseln (auch auf dem Deckblatt).
+    pub fn set_cover(&mut self, idx: u8) {
+        self.cover = idx;
+        if self.has_cover_page() {
+            self.pages[0].template.plan.idx = idx as u16;
+            self.pages[0].touch();
+        }
     }
 
     /// Kopie einer Seite mit neuen IDs.

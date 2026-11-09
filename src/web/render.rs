@@ -325,19 +325,68 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                 Prim::Box { x, y, size } => {
                     let _ = write!(d[1], "M{:.2} {:.2}h{:.2}v{:.2}h{:.2}Z", x, y, size, size, -size);
                 }
-                Prim::Fill { .. } | Prim::Label { .. } => {}
+                _ => {}
             }
         }
         let v = d.iter().enumerate().filter(|(_, s)| !s.is_empty()).filter_map(|(k, s)| Path2d::new_with_path_string(s).ok().map(|p| (k as u8, p))).collect();
-        let decor = prims.into_iter().filter(|p| matches!(p, Prim::Fill { .. } | Prim::Label { .. })).collect();
+        let decor = prims.into_iter().filter(|p| !matches!(p, Prim::Line { .. } | Prim::Dot { .. } | Prim::Box { .. })).collect();
         c.tpl.insert(key.clone(), (v, decor));
     }
     let (line, accent) = line_colors(page.paper);
     let css = |c: [f32; 4]| format!("rgba({},{},{},{})", (c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8, c[3]);
     let css8 = |c: [u8; 4]| format!("rgba({},{},{},{:.3})", c[0], c[1], c[2], c[3] as f32 / 255.0);
     let (paths, decor) = &c.tpl[&key];
-    // Farbflächen unter den Linien
+    // Farbflächen, Verläufe, Kreise, farbige Linien (in Reihenfolge) unter den Vorlagen-Linien
     for p in decor {
+        match *p {
+            Prim::Grad { x, y, w: gw, h: gh, c1, c2 } => {
+                let g = ctx.create_linear_gradient(x as f64, y as f64, (x + gw) as f64, (y + gh) as f64);
+                let _ = g.add_color_stop(0.0, &css8(c1));
+                let _ = g.add_color_stop(1.0, &css8(c2));
+                ctx.set_fill_style_canvas_gradient(&g);
+                ctx.fill_rect(x as f64, y as f64, gw as f64, gh as f64);
+                continue;
+            }
+            Prim::Poly { ref pts, w: lw, color } => {
+                if pts.len() > 1 {
+                    ctx.set_stroke_style_str(&css8(color));
+                    ctx.set_line_width(lw as f64);
+                    ctx.set_line_cap("round");
+                    ctx.set_line_join("round");
+                    ctx.begin_path();
+                    ctx.move_to(pts[0].0 as f64, pts[0].1 as f64);
+                    for p in &pts[1..] {
+                        ctx.line_to(p.0 as f64, p.1 as f64);
+                    }
+                    ctx.stroke();
+                }
+                continue;
+            }
+            Prim::Circle { x, y, r, color } => {
+                ctx.set_fill_style_str(&css8(color));
+                ctx.begin_path();
+                let _ = ctx.arc(x as f64, y as f64, r as f64, 0.0, std::f64::consts::TAU);
+                ctx.fill();
+                continue;
+            }
+            Prim::Seg { x0, y0, x1, y1, w: lw, color, dash } => {
+                ctx.set_stroke_style_str(&css8(color));
+                ctx.set_line_width(lw as f64);
+                ctx.set_line_cap("round");
+                if dash {
+                    let _ = ctx.set_line_dash(&js_sys::Array::of2(&((lw * 4.0) as f64).into(), &((lw * 3.0) as f64).into()));
+                }
+                ctx.begin_path();
+                ctx.move_to(x0 as f64, y0 as f64);
+                ctx.line_to(x1 as f64, y1 as f64);
+                ctx.stroke();
+                if dash {
+                    let _ = ctx.set_line_dash(&js_sys::Array::new());
+                }
+                continue;
+            }
+            _ => {}
+        }
         if let Prim::Fill { x, y, w: fw, h: fh, r, color } = *p {
             ctx.set_fill_style_str(&css8(color));
             ctx.begin_path();

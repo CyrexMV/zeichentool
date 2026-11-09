@@ -26,10 +26,12 @@ pub enum TemplateKind {
     YearPlan = 16,
     MonthPlan = 17,
     WeekPlan = 18,
+    /// Deckblatt (Cover-Index in `plan.idx`)
+    Cover = 19,
 }
 
 impl TemplateKind {
-    pub const ALL: [TemplateKind; 19] = [
+    pub const ALL: [TemplateKind; 20] = [
         TemplateKind::Blank,
         TemplateKind::Lined,
         TemplateKind::Grid,
@@ -49,6 +51,7 @@ impl TemplateKind {
         TemplateKind::YearPlan,
         TemplateKind::MonthPlan,
         TemplateKind::WeekPlan,
+        TemplateKind::Cover,
     ];
 
     /// Auswählbare Vorlagen (Planer-Seiten entstehen nur über den Jahresplaner).
@@ -77,6 +80,7 @@ impl TemplateKind {
             TemplateKind::YearPlan => "plan-year",
             TemplateKind::MonthPlan => "plan-month",
             TemplateKind::WeekPlan => "plan-week",
+            TemplateKind::Cover => "cover",
         }
     }
 
@@ -109,6 +113,7 @@ impl TemplateKind {
             TemplateKind::YearPlan => "Jahresübersicht",
             TemplateKind::MonthPlan => "Monat (Planer)",
             TemplateKind::WeekPlan => "Woche (Planer)",
+            TemplateKind::Cover => "Deckblatt",
         }
     }
 
@@ -184,6 +189,14 @@ pub enum Prim {
     Fill { x: f32, y: f32, w: f32, h: f32, r: f32, color: Rgba },
     /// Beschriftung ab Grundlinie (x, y); `color: None` = Linienfarbe des Papiers
     Label { x: f32, y: f32, size: f32, text: String, color: Option<Rgba>, bold: bool },
+    /// Farbverlauf diagonal von links oben (c1) nach rechts unten (c2)
+    Grad { x: f32, y: f32, w: f32, h: f32, c1: Rgba, c2: Rgba },
+    /// gefüllter Kreis
+    Circle { x: f32, y: f32, r: f32, color: Rgba },
+    /// farbige Linie mit eigener Breite (optional gestrichelt)
+    Seg { x0: f32, y0: f32, x1: f32, y1: f32, w: f32, color: Rgba, dash: bool },
+    /// durchgehender Linienzug (runde Ecken)
+    Poly { pts: Vec<(f32, f32)>, w: f32, color: Rgba },
 }
 
 /// Eine abhakbare Zeile: Zeilenband (y0..y1), Kästchen, Schreibbereich text_x..x1.
@@ -666,6 +679,7 @@ impl Template {
                 }
             }
             TemplateKind::YearPlan | TemplateKind::MonthPlan | TemplateKind::WeekPlan => self.build_plan(&mut b, w, h),
+            TemplateKind::Cover => b.v = super::covers::cover_page_prims(self.plan.idx as usize, w, h),
         }
         b
     }

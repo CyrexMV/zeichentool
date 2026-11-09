@@ -11,6 +11,7 @@ mod ruler;
 mod stats;
 mod study;
 mod storage;
+mod svg;
 mod tools;
 mod zoomwin;
 mod ui;
@@ -324,11 +325,13 @@ pub struct NewNb {
     pub template: Template,
     pub paper: Color,
     pub format: u8,
+    /// Deckblatt mit dem Cover als erste Seite
+    pub cover_page: bool,
 }
 
 impl Default for NewNb {
     fn default() -> Self {
-        NewNb { cover: 0, template: Template::new(TemplateKind::Lined, 1), paper: Color::WHITE, format: 0 }
+        NewNb { cover: 0, template: Template::new(TemplateKind::Lined, 1), paper: Color::WHITE, format: 0, cover_page: true }
     }
 }
 

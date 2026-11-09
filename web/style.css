@@ -574,3 +574,27 @@ b.due { color: #ff7a1a; }
 .deck-face .cover-lock { top: 10px; left: 10px; right: auto; }
 .deck-face .due-badge { right: 48px; }
 .pop-card .mi.hidden, #pop-card .mi.hidden { display: none; }
+
+/* Gemusterte Cover */
+.cover-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.cover > .cover-band, .cover > .cover-label, .cover > .cover-star, .cover > .cover-lock, .cover > .card-more { z-index: 1; }
+.cover.patterned .cover-label { left: 15%; right: 9%; top: 24%; bottom: auto; padding: 9px 11px; border-radius: 10px; background: rgba(255,255,255,.94); color: #1c1e2c; text-shadow: none; box-shadow: 0 3px 10px rgba(0,0,0,.18); }
+.cover.patterned .cover-label b { font-size: 15px; }
+.cover.patterned .cover-label small { color: #6b6f80; opacity: 1; }
+#new-cover-art { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; }
+#new-cover-art:empty { display: none; }
+#new-cover { position: relative; overflow: hidden; }
+#new-cover > span { position: relative; z-index: 1; }
+#new-cover.patterned > span { align-self: flex-start; margin-top: 18%; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.94); color: #1c1e2c; }
+.cover-dot { position: relative; overflow: hidden; }
+.cover-dot .cover-art { border-radius: 50%; }
+.dlg-cover .cover-art { z-index: 0; }
+.dlg-cover span { z-index: 1; }
+.dlg-cover.patterned span { top: 22%; bottom: auto; left: 14%; right: 10%; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.94); color: #1c1e2c; }
+.deck-face { overflow: hidden; }
+.deck-face > b, .deck-face > small, .deck-face > .due-badge, .deck-face > .cover-lock { position: relative; z-index: 1; }
+.deck-face > .due-badge, .deck-face > .cover-lock { position: absolute; }
+.deck-face.patterned > b, .deck-face.patterned > small { align-self: flex-start; background: rgba(255,255,255,.94); color: #1c1e2c; text-shadow: none; padding: 1px 8px; }
+.deck-face.patterned > b { border-radius: 8px 8px 0 0; padding-top: 5px; max-width: 100%; }
+.deck-face.patterned > small { border-radius: 0 0 8px 8px; padding-bottom: 5px; opacity: 1; }
+.cover-page-toggle { margin-top: 12px; padding: 8px 12px; border-radius: 12px; background: var(--hover); }
