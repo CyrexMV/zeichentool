@@ -559,8 +559,10 @@ impl Editor {
             let version = self.nb.pages[i].version;
             if use_bmp && !is_live {
                 let valid = self.bmps.get(&pid).map(|b| (b.scale - px_scale).abs() < 1e-6 && b.version == version && b.dark == dark && b.canvas.width() == (w as f64 * px_scale).ceil() as u32).unwrap_or(false);
-                if !valid && self.zooming && self.bmps.contains_key(&pid) {
-                    // während des Zoomens altes Bild skaliert verwenden
+                // Während des Zoomens ein vorhandenes Bild nur skaliert weiterverwenden, wenn es den
+                // aktuellen Inhalt zeigt – sonst fehlte kurz, was zwischendurch gezeichnet wurde.
+                let current = self.bmps.get(&pid).is_some_and(|b| b.version == version && b.dark == dark);
+                if !valid && self.zooming && current {
                 } else if !valid {
                     let entry = self.bmps.remove(&pid);
                     let (canvas, bctx) = match entry {
