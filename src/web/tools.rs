@@ -402,7 +402,14 @@ impl App {
                     let kinds = (self.prefs.lasso_ink, self.prefs.lasso_text, self.prefs.lasso_img);
                     match mode {
                         // Linie: alles, was die gezogene Linie berührt
-                        1 => ed.select_touching(page, &pts, kinds, (7.0 / ed.view.s() as f32).max(2.0)),
+                        1 => {
+                            ed.select_touching(page, &pts, kinds, (9.0 / ed.view.s() as f32).max(2.5));
+                            if ed.selection.is_none() {
+                                set_timeout(0, || {
+                                    with_app(|a| a.toast("Die Linie hat nichts berührt – zieh sie direkt durch die Schrift oder Bilder"));
+                                });
+                            }
+                        }
                         // Rechteck vom Start- bis zum Endpunkt
                         2 => {
                             let (a, b) = (pts[0], *pts.last().unwrap());
@@ -877,6 +884,22 @@ impl Editor {
         }
         if ids.is_empty() {
             (ids, bbox) = (pins, pbox);
+        }
+        // Nichts getroffen, aber die Seite hat einen Hintergrund (importiertes PDF): den Streifen
+        // entlang der Linie auswählen – wie Text in einem PDF markieren.
+        if ids.is_empty() && self.nb.pages[pi].bg.is_some() && line.len() > 1 {
+            let mut r0 = Rect::EMPTY;
+            for &(x, y) in line {
+                r0.add(x, y);
+            }
+            let band = 9.0;
+            let (pw, ph) = self.nb.page_size(pi);
+            let rr = Rect::new((r0.x0 - band).max(0.0), (r0.y0 - band).max(0.0), (r0.x1 + band).min(pw), (r0.y1 + band).min(ph));
+            if rr.w() > 4.0 && rr.h() > 4.0 {
+                let poly = vec![(rr.x0, rr.y0), (rr.x1, rr.y0), (rr.x1, rr.y1), (rr.x0, rr.y1)];
+                self.selection = Some(Selection { page, ids, bbox: rr, poly });
+                return;
+            }
         }
         self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox, poly: Vec::new() }) };
     }
