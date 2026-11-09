@@ -319,6 +319,14 @@ impl Default for NewNb {
     }
 }
 
+/// Aktion, die auf die Bestätigung im Dialog wartet.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pending {
+    DeleteNotebook(String),
+    RenameNotebook(String),
+    DeletePage(usize),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Screen {
     Library,
@@ -372,6 +380,7 @@ pub struct App {
     pub last_change: f64,
     pub dark: bool,
     pub last_ui_rects: String,
+    pub pending: Option<Pending>,
 }
 
 impl App {
@@ -413,6 +422,7 @@ impl App {
             last_change: 0.0,
             dark: false,
             last_ui_rects: String::new(),
+            pending: None,
         }
     }
 

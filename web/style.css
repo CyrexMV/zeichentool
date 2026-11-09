@@ -130,7 +130,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .card:hover .cover { transform: translateY(-4px) rotate(-.4deg); box-shadow: 0 22px 40px rgba(25,28,60,.28); }
 .cover-band { position: absolute; left: 0; top: 0; bottom: 0; width: 9%; background: rgba(0,0,0,.14); box-shadow: 1px 0 0 rgba(255,255,255,.18); }
 .cover-label { position: absolute; left: 16%; right: 10%; bottom: 14%; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.25); }
-.cover-label b { display: block; font-size: 17px; line-height: 1.2; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cover-label b { display: block; font-size: 17px; line-height: 1.2; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .cover-label small { opacity: .85; font-size: 12px; }
 .cover-star { position: absolute; left: 16%; top: 10%; width: 20px; height: 20px; fill: #ffd34d; stroke: #ffd34d; }
 .card-more { position: absolute; right: 8px; top: 8px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.22); color: #fff; backdrop-filter: blur(8px); opacity: .9; }
@@ -323,3 +323,31 @@ input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; bo
 #loading.done { display: none; }
 .spinner { width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--line2); border-top-color: var(--accent); animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Bestätigungsdialog ---------- */
+.modal-card.dialog { width: min(420px, 100%); text-align: center; padding: 28px 24px 22px; }
+.dialog h2 { margin: 16px 0 6px; font-size: 20px; letter-spacing: -0.01em; }
+.dialog p { margin: 0 auto; max-width: 320px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+.dialog p b { color: var(--text); font-weight: 650; }
+.dlg-visual { display: flex; justify-content: center; }
+.dlg-icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; }
+.dlg-icon svg { width: 30px; height: 30px; }
+.dlg-icon.danger { background: rgba(229, 72, 77, .14); color: var(--danger); box-shadow: 0 0 0 8px rgba(229, 72, 77, .06); }
+.dlg-icon.accent { background: rgba(109, 92, 255, .14); color: var(--accent); box-shadow: 0 0 0 8px rgba(109, 92, 255, .06); }
+.dlg-cover { position: relative; width: 104px; aspect-ratio: 3 / 4; border-radius: 4px 12px 12px 4px; overflow: hidden;
+  background: linear-gradient(140deg, var(--c1), var(--c2)); box-shadow: 0 14px 30px rgba(25,28,60,.28); }
+.dlg-cover::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 10%; background: rgba(0,0,0,.15); }
+.dlg-cover span { position: absolute; left: 18%; right: 8%; bottom: 12%; color: #fff; font-weight: 700; font-size: 11.5px; line-height: 1.2; text-align: left; hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; }
+.dlg-cover .badge { position: absolute; right: -10px; bottom: -10px; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; border: 3px solid var(--glass-strong); }
+.dlg-cover-wrap { position: relative; padding: 0 10px 10px 0; }
+.dlg-cover-wrap .badge { position: absolute; right: 0; bottom: 0; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; border: 3px solid var(--surface); }
+.dlg-cover-wrap .badge svg { width: 18px; height: 18px; }
+.dlg-cover-wrap .badge.danger { background: var(--danger); }
+.dlg-cover-wrap .badge.accent { background: var(--accent); }
+.dlg-input { display: block; width: 100%; height: 48px; margin: 18px 0 0; padding: 0 14px; border-radius: 13px; border: 1px solid var(--line2);
+  background: var(--surface); font-size: 16px; color: var(--text); outline: none; text-align: left; user-select: text; -webkit-user-select: text; }
+.dlg-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(109,92,255,.15); }
+.dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
+.dlg-actions .btn { flex: 1; justify-content: center; height: 46px; }
+.btn.danger { background: var(--danger); color: #fff; box-shadow: 0 6px 20px rgba(229, 72, 77, .35); }
+.btn.danger:hover { filter: brightness(1.05); }

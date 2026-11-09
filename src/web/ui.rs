@@ -13,7 +13,7 @@ thread_local! {
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
 const POPS: [&str; 3] = ["pop-tool", "pop-more", "pop-card"];
-const MODALS: [&str; 4] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover"];
+const MODALS: [&str; 5] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -68,6 +68,12 @@ pub fn bind_ui() {
     };
     on(&dom(), "input", input_handler);
     on(&dom(), "change", input_handler);
+    on(&el("dlg-input"), "keydown", |e: web_sys::KeyboardEvent| {
+        if e.key() == "Enter" {
+            e.prevent_default();
+            with_app(|a| a.dialog_ok());
+        }
+    });
     // Textfeld: Höhe mitwachsen lassen
     on(&el("text-editor"), "input", |_: Event| super::tools::autosize(&el("text-editor")));
     // S-Pen-Testfeld
@@ -227,15 +233,18 @@ impl App {
             }
             "del-page" => {
                 self.close_popovers();
-                let ok = window().confirm_with_message("Diese Seite löschen? (Rückgängig ist möglich)").unwrap_or(false);
-                if ok {
-                    let done = self.ed.as_mut().map(|ed| ed.delete_page(ed.cur_page)).unwrap_or(false);
-                    if !done {
+                if let Some(ed) = &self.ed {
+                    let (i, n) = (ed.cur_page, ed.nb.pages.len());
+                    if n <= 1 {
                         self.toast("Die letzte Seite kann nicht gelöscht werden");
+                    } else {
+                        let visual = "<div class=\"dlg-icon danger\"><svg><use href=\"#i-trash\"/></svg></div>";
+                        let text = format!("<b>Seite {} von {}</b> wird gelöscht. Mit „Rückgängig“ kannst du sie wiederherstellen.", i + 1, n);
+                        self.open_dialog(visual, "Seite löschen?", &text, "Löschen", true, None, Pending::DeletePage(i));
                     }
-                    self.after_pages_change();
                 }
             }
+            "dlg-ok" => self.dialog_ok(),
             "page-up" | "page-down" => {
                 if let Some(ed) = &mut self.ed {
                     let i = ed.cur_page;
@@ -759,6 +768,9 @@ impl App {
     }
 
     pub fn close_modals(&mut self) {
+        if !el("modal-confirm").class_list().contains("hidden") {
+            self.pending = None;
+        }
         for m in MODALS {
             show(m, false);
         }

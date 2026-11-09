@@ -126,12 +126,8 @@ impl App {
             "card-open" => self.open_notebook(id),
             "card-rename" => {
                 let cur = self.library.iter().find(|m| m.id == id).map(|m| m.title.clone()).unwrap_or_default();
-                if let Ok(Some(t)) = window().prompt_with_message_and_default("Notizbuch umbenennen", &cur) {
-                    let t: String = t.trim().chars().take(80).collect();
-                    if !t.is_empty() {
-                        self.modify_stored(id, move |nb| nb.title = t);
-                    }
-                }
+                let visual = self.cover_visual(&id, "accent", "i-text");
+                self.open_dialog(&visual, "Notizbuch umbenennen", "Gib dem Notizbuch einen neuen Namen.", "Speichern", false, Some(&cur), Pending::RenameNotebook(id));
             }
             "card-fav" => self.modify_stored(id, |nb| nb.favorite = !nb.favorite),
             "card-cover" => {
@@ -151,13 +147,82 @@ impl App {
             "card-pdf" => self.with_stored(id, |a, nb| a.export_notebook_pdf(&nb, None)),
             "card-znote" => self.with_stored(id, |a, nb| a.export_znote(Some(&nb))),
             "card-delete" => {
-                let title = self.library.iter().find(|m| m.id == id).map(|m| m.title.clone()).unwrap_or_default();
-                if window().confirm_with_message(&format!("„{}“ endgültig löschen?", title)).unwrap_or(false) {
-                    self.delete_stored(&id);
-                    self.toast("Notizbuch gelöscht");
-                }
+                let meta = self.library.iter().find(|m| m.id == id).cloned();
+                let (title, pages) = meta.map(|m| (m.title, m.pages)).unwrap_or_default();
+                let visual = self.cover_visual(&id, "danger", "i-trash");
+                let text = format!(
+                    "<b>„{}“</b> mit {} {} wird endgültig gelöscht. Das kann nicht rückgängig gemacht werden.",
+                    esc(&title),
+                    pages,
+                    if pages == 1 { "Seite" } else { "Seiten" }
+                );
+                self.open_dialog(&visual, "Notizbuch löschen?", &text, "Löschen", true, None, Pending::DeleteNotebook(id));
             }
             _ => {}
+        }
+    }
+
+    /// Mini-Cover mit Symbol-Plakette für Dialoge.
+    pub fn cover_visual(&self, id: &str, kind: &str, icon: &str) -> String {
+        let m = self.library.iter().find(|m| m.id == id);
+        let (title, cover) = m.map(|m| (m.title.clone(), m.cover)).unwrap_or_default();
+        format!(
+            "<div class=\"dlg-cover-wrap\"><div class=\"dlg-cover\" style=\"{}\"><span>{}</span></div><div class=\"badge {}\"><svg><use href=\"#{}\"/></svg></div></div>",
+            cover_css(cover),
+            esc(&title),
+            kind,
+            icon
+        )
+    }
+
+    /// Eigener Dialog statt Browser-Fenster. `input` = Textfeld mit Vorgabewert.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_dialog(&mut self, visual: &str, title: &str, text_html: &str, ok: &str, danger: bool, input: Option<&str>, pending: Pending) {
+        self.close_popovers();
+        el("dlg-visual").set_inner_html(visual);
+        set_text("dlg-title", title);
+        el("dlg-text").set_inner_html(text_html);
+        let okb = el("dlg-ok");
+        okb.set_text_content(Some(ok));
+        set_class(&okb, "danger", danger);
+        set_class(&okb, "primary", !danger);
+        let inp = input_el("dlg-input");
+        set_class(&inp, "hidden", input.is_none());
+        inp.set_value(input.unwrap_or(""));
+        self.pending = Some(pending);
+        self.open_modal("modal-confirm");
+        if input.is_some() {
+            let _ = inp.focus();
+            inp.select();
+        }
+    }
+
+    /// Bestätigt den Dialog.
+    pub fn dialog_ok(&mut self) {
+        let value = input_el("dlg-input").value();
+        let pending = self.pending.take();
+        self.close_modals();
+        match pending {
+            Some(Pending::DeleteNotebook(id)) => {
+                self.delete_stored(&id);
+                self.toast("Notizbuch gelöscht");
+            }
+            Some(Pending::RenameNotebook(id)) => {
+                let t: String = value.trim().chars().take(80).collect();
+                if !t.is_empty() {
+                    self.modify_stored(id, move |nb| nb.title = t);
+                }
+            }
+            Some(Pending::DeletePage(i)) => {
+                let done = self.ed.as_mut().map(|ed| ed.delete_page(i)).unwrap_or(false);
+                if done {
+                    self.toast("Seite gelöscht – Rückgängig ist möglich");
+                } else {
+                    self.toast("Die letzte Seite kann nicht gelöscht werden");
+                }
+                self.after_pages_change();
+            }
+            None => {}
         }
     }
 }
