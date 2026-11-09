@@ -48,17 +48,18 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 **APK:** Link oben öffnen → Installieren (beim ersten Mal „Unbekannte Apps installieren“ erlauben).
 **Web-App:** Seite in Samsung Internet/Chrome öffnen → „Zum Startbildschirm hinzufügen“.
 
-**Signatur (wichtig für Updates):** Android installiert ein Update nur, wenn es mit demselben Schlüssel
-signiert ist. Ohne eigene Secrets signiert die CI mit einem *temporären* Schlüssel – dann vor einem Update
-die alte App deinstallieren (vorher Backups über ⋯ → „Backup speichern“ sichern). Für dauerhafte Updates einmalig
-einen Schlüssel erzeugen und unter *Settings → Secrets and variables → Actions* hinterlegen:
+**Signatur (wichtig für Updates):** Android installiert ein Update nur, wenn es mit demselben
+Schlüssel signiert ist. Einmalig einrichten:
 
-```bash
-keytool -genkeypair -keystore zeichentool.jks -alias zeichentool -keyalg RSA -keysize 4096 -validity 36500
-base64 -w0 zeichentool.jks   # Ausgabe als Secret ZT_KEYSTORE_B64
-```
+1. GitHub → Repository → *Settings → Secrets and variables → Actions → New repository secret*
+2. Name: `ZT_SIGNING_PASSWORD`, Wert: ein langes, eigenes Passwort (mindestens 12, besser 20+ Zeichen) –
+   im Passwort-Manager aufbewahren und **nie ändern**.
+3. Beim nächsten Build erzeugt GitHub den Schlüssel und legt ihn **nur verschlüsselt** (AES-256) im Branch
+   `signing` ab. Ab dann ist jede APK gleich signiert – Updates einfach über die alte App installieren.
 
-Secrets: `ZT_KEYSTORE_B64`, `ZT_KEYSTORE_PASSWORD`, `ZT_KEY_ALIAS` (= `zeichentool`), `ZT_KEY_PASSWORD`.
+Ohne dieses Secret wird mit einem temporären Schlüssel signiert (dann vor jedem Update neu installieren).
+Alternativ kann ein eigener Keystore als `ZT_KEYSTORE_B64` (+ `ZT_KEYSTORE_PASSWORD`, `ZT_KEY_ALIAS`,
+`ZT_KEY_PASSWORD`) hinterlegt werden.
 
 ## Selbst bauen
 

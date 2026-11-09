@@ -40,25 +40,67 @@ jobs:
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" | tail -n 20
-      - name: APK bauen
+      - name: APK bauen (mit festem Signaturschlüssel)
         working-directory: android
         env:
-          # Optional: eigener Signaturschlüssel über Repository-Secrets
+          # Einfachster Weg: nur ein Passwort als Secret anlegen. Der Schlüssel wird beim ersten
+          # Lauf erzeugt und NUR VERSCHLÜSSELT (AES-256) im Branch „signing“ abgelegt.
+          ZT_SIGNING_PASSWORD: ${{ secrets.ZT_SIGNING_PASSWORD }}
+          # Alternative: kompletter eigener Keystore als Secrets
           ZT_KEYSTORE_B64: ${{ secrets.ZT_KEYSTORE_B64 }}
           ZT_KEYSTORE_PASSWORD: ${{ secrets.ZT_KEYSTORE_PASSWORD }}
           ZT_KEY_ALIAS: ${{ secrets.ZT_KEY_ALIAS }}
           ZT_KEY_PASSWORD: ${{ secrets.ZT_KEY_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          KS="$RUNNER_TEMP/release.jks"
           if [ -n "$ZT_KEYSTORE_B64" ]; then
-            echo "$ZT_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            export ZT_KEYSTORE="$RUNNER_TEMP/release.jks"
+            echo "$ZT_KEYSTORE_B64" | base64 -d > "$KS"
+            export ZT_KEYSTORE="$KS"
+            echo "Signiere mit Keystore aus ZT_KEYSTORE_B64."
+          elif [ -n "$ZT_SIGNING_PASSWORD" ]; then
+            if [ ${#ZT_SIGNING_PASSWORD} -lt 12 ]; then
+              echo "::error::ZT_SIGNING_PASSWORD ist zu kurz – bitte mindestens 12 Zeichen (besser 20+) verwenden."
+              exit 1
+            fi
+            ENC="$RUNNER_TEMP/keystore.enc"
+            if git ls-remote --exit-code --heads origin signing >/dev/null 2>&1; then
+              git fetch -q origin signing
+              git show FETCH_HEAD:keystore.enc > "$ENC"
+              if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 1000000 -in "$ENC" -out "$KS" -pass env:ZT_SIGNING_PASSWORD; then
+                echo "::error::Signaturschlüssel konnte nicht entschlüsselt werden. Wurde ZT_SIGNING_PASSWORD geändert? Altes Passwort wieder eintragen (oder Branch „signing“ löschen, um einen neuen Schlüssel zu erzeugen – dann muss die App einmal neu installiert werden)."
+                exit 1
+              fi
+              echo "Fester Signaturschlüssel geladen."
+            else
+              echo "Erzeuge neuen festen Signaturschlüssel …"
+              keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias notion -keyalg RSA -keysize 4096 \
+                -validity 36500 -storepass "$ZT_SIGNING_PASSWORD" -keypass "$ZT_SIGNING_PASSWORD" \
+                -dname "CN=Notion, O=Privat, C=DE"
+              openssl enc -aes-256-cbc -pbkdf2 -iter 1000000 -salt -in "$KS" -out "$ENC" -pass env:ZT_SIGNING_PASSWORD
+              (
+                mkdir -p "$RUNNER_TEMP/signing" && cp "$ENC" "$RUNNER_TEMP/signing/keystore.enc" && cd "$RUNNER_TEMP/signing"
+                printf '%s\n' "# Signaturschlüssel (verschlüsselt)" "" \
+                  "keystore.enc ist der APK-Signaturschlüssel, verschlüsselt mit AES-256 (PBKDF2, 1.000.000 Runden)." \
+                  "Ohne das Passwort aus dem Secret ZT_SIGNING_PASSWORD ist die Datei nutzlos." \
+                  "Diesen Branch nicht löschen – sonst muss die App einmal neu installiert werden." > README.md
+                git init -q -b signing
+                git add -A
+                git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                  commit -q -m "Verschlüsselter Signaturschlüssel"
+                git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" signing
+              )
+              echo "Neuer fester Signaturschlüssel erzeugt und verschlüsselt gespeichert."
+            fi
+            export ZT_KEYSTORE="$KS" ZT_KEY_ALIAS=notion ZT_KEYSTORE_PASSWORD="$ZT_SIGNING_PASSWORD" ZT_KEY_PASSWORD="$ZT_SIGNING_PASSWORD"
           else
-            echo "::warning::Kein Signatur-Secret (ZT_KEYSTORE_B64) gesetzt – APK wird mit temporärem Debug-Schlüssel signiert. Updates erfordern dann eine Neuinstallation."
+            echo "::warning::Kein Secret ZT_SIGNING_PASSWORD gesetzt – APK wird mit temporärem Schlüssel signiert. Updates erfordern dann eine Neuinstallation."
           fi
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../web/zeichentool.apk
           ls -la ../web/zeichentool.apk
+          rm -f "$KS"
 
       - uses: actions/upload-artifact@v4
         with:
