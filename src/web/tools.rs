@@ -1,559 +1,728 @@
-//! Werkzeuge: Malen, Radieren, Wischen, Formen, Lasso, Füllen, Pipette, Verschieben, QuickShape.
+//! Werkzeuge: Stifte, Textmarker, Formen, Radierer, Lasso/Auswahl, Text, Bilder, Laserpointer.
 
+use super::editor::{Op, Selection, TextEdit};
 use super::*;
-use crate::engine::brush::render_dab;
-use crate::engine::fill::{fill_polygon, flood_fill};
-use crate::engine::smudge::Smudger;
-use crate::engine::stroke::{detect_quickshape, ellipse_points, QuickShape};
-use crate::engine::{Action, InputPoint, StrokeEngine};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StrokeKind {
-    Paint,
-    Erase,
-    Smudge,
-    Shape,
-    Lasso,
-    Move,
-    Picker,
-}
-
-pub struct Stroke {
-    pub pointer: i32,
-    pub kind: StrokeKind,
-    pub layer: usize,
-    pub engine: StrokeEngine,
-    pub color: Color,
-    pub opacity: f32,
-    pub start: (f32, f32),
-    pub cur: (f32, f32),
-    pub start_t: f64,
-    pub hold_t: f64,
-    pub hold_pos: (f32, f32),
-    pub quick: Option<QuickShape>,
-    pub quick_pressure: f32,
-    pub lasso: Vec<(f32, f32)>,
-    pub smudger: Option<Smudger>,
-    pub touch: bool,
-    /// Inhaltsbereich der Ebene beim Verschieben
-    pub move_bounds: IRect,
-}
-
-impl Stroke {
-    pub fn move_offset(&self) -> (i32, i32) {
-        ((self.cur.0 - self.start.0).round() as i32, (self.cur.1 - self.start.1).round() as i32)
-    }
-}
+use crate::engine::geom::{dist, point_in_polygon, Rect, Xf};
+use crate::engine::history::Action;
+use crate::engine::note::hash_bytes;
+use crate::engine::shapes::{recognize, Shape};
+use crate::engine::{Content, ImageItem, Item, Pt, Smoother, Stroke, TextBox};
+use std::rc::Rc;
+use web_sys::HtmlTextAreaElement;
 
 impl App {
-    pub fn slot(&self) -> &Slot {
-        match self.tool {
-            Tool::Eraser => &self.eraser,
-            Tool::Smudge => &self.smudge,
-            _ => &self.brush,
-        }
-    }
-
-    pub fn slot_mut(&mut self) -> &mut Slot {
-        match self.tool {
-            Tool::Eraser => &mut self.eraser,
-            Tool::Smudge => &mut self.smudge,
-            _ => &mut self.brush,
-        }
-    }
-
-    fn slot_for(&self, t: Tool) -> Slot {
-        match t {
-            Tool::Eraser => self.eraser,
-            Tool::Smudge => self.smudge,
-            _ => self.brush,
-        }
-    }
-
-    fn make_engine(&self, slot: &Slot, smoothing: bool) -> StrokeEngine {
-        StrokeEngine::new(
-            self.presets[slot.preset].clone(),
-            slot.size,
-            self.settings.gamma,
-            if smoothing { self.settings.smoothing } else { 0.0 },
-            self.settings.symmetry,
-            self.doc.w as f32 * 0.5,
-            self.doc.h as f32 * 0.5,
-        )
-    }
-
-    /// Prüft, ob auf der aktiven Ebene gemalt werden darf.
-    fn layer_editable(&mut self) -> bool {
-        let l = &self.doc.active_layer().props;
-        if l.locked {
-            self.toast("Ebene ist gesperrt");
-            false
-        } else if !l.visible {
-            self.toast("Ebene ist ausgeblendet");
-            false
+    pub fn effective_tool(&self) -> Tool {
+        if self.hold_eraser {
+            Tool::Eraser
         } else {
-            true
+            self.tool
         }
     }
 
-    pub fn begin_stroke(&mut self, pointer: i32, p: InputPoint, ov: Option<Tool>, touch: bool) {
-        if self.stroke.is_some() {
-            return;
-        }
-        let tool = self.tool_for(ov);
-        let t = now();
-        let layer = self.doc.active;
-        let kind = match tool {
-            Tool::Picker => StrokeKind::Picker,
-            Tool::Fill => {
-                self.fill_at(p.x, p.y);
-                return;
+    fn ink_params(&self, tool: Tool) -> (PenKind, [u8; 4], f32) {
+        let p = &self.prefs;
+        match tool {
+            Tool::Highlighter => (PenKind::Highlighter, p.hl_colors[p.hl_ci], p.hl_sizes[p.hl_si]),
+            _ => {
+                let mut c = p.pen_colors[p.pen_ci];
+                if p.pen_kind == PenKind::Pencil {
+                    c[3] = 215;
+                }
+                (p.pen_kind, c, p.pen_sizes[p.pen_si])
             }
-            Tool::Move => StrokeKind::Move,
-            Tool::Brush => StrokeKind::Paint,
-            Tool::Eraser => StrokeKind::Erase,
-            Tool::Smudge => StrokeKind::Smudge,
-            Tool::Shape => {
-                if self.settings.shape == ShapeKind::Lasso {
-                    StrokeKind::Lasso
-                } else {
-                    StrokeKind::Shape
+        }
+    }
+
+    pub fn eraser_radius(&self) -> f32 {
+        self.prefs.er_sizes[self.prefs.er_si] * 0.5
+    }
+
+    /// Beginn einer Eingabe (Stift aufgesetzt / Finger zeichnet / Maus gedrückt).
+    pub fn begin_op(&mut self, pointer: i32, sx: f64, sy: f64, pressure: f32) {
+        self.close_popovers();
+        if self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false) {
+            self.commit_text();
+        }
+        self.hide_paste();
+        let tool = self.effective_tool();
+        let pressure = if self.settings.pressure { pressure } else { 0.55 };
+        let smoothing = self.settings.smoothing;
+        let ink = self.ink_params(tool);
+        let er = (self.prefs.er_mode == EraserMode::Precise, self.prefs.er_hl_only, self.eraser_radius());
+        let straight = tool == Tool::Highlighter && self.prefs.hl_straight;
+        let Some(ed) = &mut self.ed else { return };
+        if tool != Tool::Lasso {
+            ed.selection = None;
+            show("sel-menu", false);
+        }
+        match tool {
+            Tool::Laser => {
+                ed.op = Some(Op::Laser { pointer });
+                ed.laser.push((sx, sy, now()));
+            }
+            Tool::Text => {
+                if let Some((i, x, y)) = ed.hit_page(sx, sy, 0.0) {
+                    let hit = ed.nb.pages[i].items.iter().rev().find(|it| match &it.content {
+                        Content::Text(t) => {
+                            let lines = ed.wraps.get(&it.id).map(|w| w.1.len()).unwrap_or(1);
+                            t.approx_rect(lines).expand(4.0).contains(x, y)
+                        }
+                        _ => false,
+                    });
+                    let id = hit.map(|it| it.id);
+                    self.start_text(i, x, y, id);
                 }
             }
-        };
-        if kind != StrokeKind::Picker && !self.layer_editable() {
-            return;
-        }
-        let slot = self.slot_for(tool);
-        let engine = self.make_engine(&slot, matches!(kind, StrokeKind::Paint | StrokeKind::Erase | StrokeKind::Smudge));
-        let copies = engine.symmetry_count();
-        self.mask.clear();
-        let mut s = Stroke {
-            pointer,
-            kind,
-            layer,
-            engine,
-            color: self.color,
-            opacity: slot.opacity,
-            start: (p.x, p.y),
-            cur: (p.x, p.y),
-            start_t: t,
-            hold_t: t,
-            hold_pos: (p.x, p.y),
-            quick: None,
-            quick_pressure: 1.0,
-            lasso: vec![(p.x, p.y)],
-            smudger: None,
-            touch,
-            move_bounds: IRect::EMPTY,
-        };
-        if kind == StrokeKind::Move {
-            s.move_bounds = self.doc.content_bounds(layer);
-        }
-        if kind == StrokeKind::Smudge {
-            let data = &self.doc.layers[layer].data;
-            self.smudge_snapshot.clear();
-            self.smudge_snapshot.extend_from_slice(data);
-            s.smudger = Some(Smudger::new(copies));
-        }
-        set_class(&dom().body().unwrap(), "drawing", true);
-        let mut dabs = std::mem::take(&mut self.dabs);
-        dabs.clear();
-        match kind {
-            StrokeKind::Paint | StrokeKind::Erase | StrokeKind::Smudge => s.engine.begin(p, &mut dabs),
-            StrokeKind::Picker => {}
-            _ => {}
-        }
-        self.stroke = Some(s);
-        self.apply_dabs(&dabs);
-        self.dabs = dabs;
-        if kind == StrokeKind::Picker {
-            self.pick_doc(p.x, p.y);
+            Tool::Lasso => {
+                // Auswahl verschieben/skalieren?
+                if let Some(sel) = &ed.selection {
+                    if let Some(i) = ed.page_index(sel.page) {
+                        let b = sel.bbox;
+                        let (x0, y0) = ed.page_to_screen(i, b.x0, b.y0);
+                        let (x1, y1) = ed.page_to_screen(i, b.x1, b.y1);
+                        let (_, px, py) = ed.hit_page(sx, sy, 1e6).unwrap_or((i, 0.0, 0.0));
+                        let (nx, ny) = ed.to_nb(sx, sy);
+                        let local = (nx as f32, (ny - ed.page_top(i)) as f32);
+                        let _ = (px, py);
+                        if dist((x1 + 6.0) as f32, (y1 + 6.0) as f32, sx as f32, sy as f32) < 26.0 {
+                            ed.op = Some(Op::MoveSel { pointer, start: local, scale: true, xf: Xf::IDENTITY });
+                            return;
+                        }
+                        if sx >= x0 - 14.0 && sx <= x1 + 14.0 && sy >= y0 - 14.0 && sy <= y1 + 14.0 {
+                            ed.op = Some(Op::MoveSel { pointer, start: local, scale: false, xf: Xf::IDENTITY });
+                            show("sel-menu", false);
+                            return;
+                        }
+                    }
+                }
+                ed.selection = None;
+                show("sel-menu", false);
+                if let Some((i, x, y)) = ed.hit_page(sx, sy, 40.0) {
+                    let page = ed.nb.pages[i].id;
+                    ed.op = Some(Op::Lasso { page, pointer, pts: vec![(x, y)] });
+                }
+                ed.dirty = true;
+            }
+            Tool::Eraser => {
+                if let Some((i, x, y)) = ed.hit_page(sx, sy, 40.0) {
+                    let page = ed.nb.pages[i].id;
+                    let before = ed.nb.pages[i].items.clone();
+                    ed.live_page = Some(page);
+                    ed.op = Some(Op::Erase { page, pointer, last: (x, y), before, precise: er.0, hl_only: er.1, radius: er.2 });
+                    ed.erase_segment((x, y), (x, y));
+                }
+            }
+            Tool::Pen | Tool::Highlighter | Tool::Shape => {
+                if let Some((i, x, y)) = ed.hit_page(sx, sy, 30.0) {
+                    let page = ed.nb.pages[i].id;
+                    let (pen, color, width) = ink;
+                    let p = Pt::new(x, y, pressure);
+                    let mut smoother = Smoother::new(if straight { 0.0 } else { smoothing });
+                    let first = smoother.push(p);
+                    ed.op = Some(Op::Ink {
+                        page,
+                        pointer,
+                        stroke: Stroke { pen, color, width, pts: vec![first] },
+                        smoother,
+                        raw: vec![p],
+                        hold_t: now(),
+                        hold_pos: (x, y),
+                        quick: None,
+                        shape_tool: tool == Tool::Shape,
+                        straight,
+                        predicted: Vec::new(),
+                    });
+                    ed.draw_live(None);
+                }
+            }
         }
         self.request_frame();
     }
 
-    /// Stempel in Maske bzw. (Wischfinger) direkt in die Ebene schreiben.
-    fn apply_dabs(&mut self, dabs: &[crate::engine::Dab]) {
-        if dabs.is_empty() {
+    /// Weitere Eingabepunkte (Bildschirmkoordinaten + Druck).
+    pub fn move_op(&mut self, pointer: i32, pts: &[(f64, f64, f32)], predicted: &[(f64, f64, f32)]) {
+        let pressure_on = self.settings.pressure;
+        let er_cursor = self.eraser_radius();
+        let Some(ed) = &mut self.ed else { return };
+        let s = ed.view.s();
+        let Some(op) = &ed.op else { return };
+        let page_idx = match op {
+            Op::Ink { page, .. } | Op::Erase { page, .. } | Op::Lasso { page, .. } => ed.page_index(*page),
+            Op::MoveSel { .. } => ed.selection.as_ref().and_then(|sel| ed.page_index(sel.page)),
+            Op::Laser { .. } => None,
+        };
+        let top = page_idx.map(|i| ed.page_top(i)).unwrap_or(0.0);
+        let to_page = |sx: f64, sy: f64, ed: &Editor| {
+            let (x, y) = ed.to_nb(sx, sy);
+            (x as f32, (y - top) as f32)
+        };
+        let local: Vec<(f32, f32, f32)> = pts.iter().map(|&(sx, sy, p)| {
+            let (x, y) = to_page(sx, sy, ed);
+            (x, y, if pressure_on { p } else { 0.55 })
+        }).collect();
+        let pred: Vec<Pt> = predicted.iter().map(|&(sx, sy, p)| {
+            let (x, y) = to_page(sx, sy, ed);
+            Pt::new(x, y, if pressure_on { p } else { 0.55 })
+        }).collect();
+        let t = now();
+        let mut erase_segs = Vec::new();
+        let mut cursor = None;
+        match ed.op.as_mut() {
+            Some(Op::Ink { pointer: pid, stroke, smoother, raw, hold_t, hold_pos, quick, straight, predicted, .. }) if *pid == pointer => {
+                for &(x, y, p) in &local {
+                    let pt = Pt::new(x, y, p);
+                    raw.push(pt);
+                    if dist(hold_pos.0, hold_pos.1, x, y) * s as f32 > 4.0 {
+                        *hold_pos = (x, y);
+                        *hold_t = t;
+                    }
+                    if *straight || *quick == Some(Shape::Line) {
+                        let first = stroke.pts[0];
+                        stroke.pts = vec![first, Pt::new(x, y, first.p)];
+                    } else if quick.is_none() {
+                        stroke.pts.push(smoother.push(pt));
+                    }
+                }
+                *predicted = if quick.is_none() && !*straight { pred } else { Vec::new() };
+            }
+            Some(Op::Erase { pointer: pid, last, .. }) if *pid == pointer => {
+                for &(x, y, _) in &local {
+                    erase_segs.push((*last, (x, y)));
+                    *last = (x, y);
+                }
+                if let Some(&(sx, sy, _)) = pts.last() {
+                    cursor = Some((sx, sy, er_cursor as f64 * s));
+                }
+            }
+            Some(Op::Lasso { pointer: pid, pts: lp, .. }) if *pid == pointer => {
+                for &(x, y, _) in &local {
+                    let l = *lp.last().unwrap();
+                    if dist(l.0, l.1, x, y) * s as f32 > 3.0 {
+                        lp.push((x, y));
+                    }
+                }
+            }
+            Some(Op::MoveSel { pointer: pid, start, scale, xf }) if *pid == pointer => {
+                if let (Some(&(x, y, _)), Some(sel)) = (local.last(), &ed.selection) {
+                    if *scale {
+                        let (ax, ay) = (sel.bbox.x0, sel.bbox.y0);
+                        let d0 = dist(ax, ay, start.0, start.1).max(1.0);
+                        let f = (dist(ax, ay, x, y) / d0).clamp(0.1, 10.0);
+                        *xf = Xf::scale_about(f, f, ax, ay);
+                    } else {
+                        *xf = Xf::translate(x - start.0, y - start.1);
+                    }
+                    ed.dirty = true;
+                }
+            }
+            Some(Op::Laser { pointer: pid }) if *pid == pointer => {
+                for &(sx, sy, _) in pts {
+                    ed.laser.push((sx, sy, t));
+                }
+            }
+            _ => return,
+        }
+        for (a, b) in erase_segs {
+            ed.erase_segment(a, b);
+        }
+        if !matches!(ed.op, Some(Op::Laser { .. }) | Some(Op::MoveSel { .. })) {
+            ed.draw_live(cursor);
+        }
+        self.request_frame();
+    }
+
+    /// Ende der Eingabe.
+    pub fn end_op(&mut self, pointer: i32) {
+        let Some(ed) = &mut self.ed else { return };
+        let mine = match &ed.op {
+            Some(Op::Ink { pointer: p, .. } | Op::Erase { pointer: p, .. } | Op::Lasso { pointer: p, .. } | Op::MoveSel { pointer: p, .. } | Op::Laser { pointer: p }) => *p == pointer,
+            None => false,
+        };
+        if !mine {
             return;
         }
-        let Some(s) = &mut self.stroke else { return };
-        let mut r = IRect::EMPTY;
-        match s.kind {
-            StrokeKind::Smudge => {
-                let (w, h) = (self.doc.w, self.doc.h);
-                let strength = s.opacity.clamp(0.02, 1.0);
-                if let Some(sm) = &mut s.smudger {
-                    let data = &mut self.doc.layers[s.layer].data;
-                    for d in dabs {
-                        sm.dab(data, w, h, d, strength);
-                        r = r.union(&d.bounds());
-                    }
-                }
-            }
-            _ => {
-                let buildup = s.engine.preset.buildup;
-                for d in dabs {
-                    render_dab(&mut self.mask, d, buildup, &self.noise);
-                    r = r.union(&d.bounds());
-                }
-            }
-        }
-        self.invalidate(r);
-    }
-
-    pub fn stroke_move(&mut self, pts: &[InputPoint]) {
-        let Some(kind) = self.stroke.as_ref().map(|s| s.kind) else { return };
-        let Some(last) = pts.last().copied() else { return };
-        let hold_thr = (5.0 / self.view.zoom()) as f32;
-        match kind {
-            StrokeKind::Paint | StrokeKind::Erase | StrokeKind::Smudge => {
-                let quick = self.stroke.as_ref().and_then(|s| s.quick);
-                if let Some(q) = quick {
-                    if let QuickShape::Line { .. } = q {
-                        if let Some(s) = &mut self.stroke {
-                            s.cur = (last.x, last.y);
-                        }
-                        self.render_quickshape();
-                    }
-                    return;
-                }
-                let mut dabs = std::mem::take(&mut self.dabs);
-                dabs.clear();
-                let t = now();
-                if let Some(s) = &mut self.stroke {
-                    for p in pts {
-                        s.engine.add(*p, &mut dabs);
-                        let (hx, hy) = s.hold_pos;
-                        if ((p.x - hx).powi(2) + (p.y - hy).powi(2)).sqrt() > hold_thr {
-                            s.hold_pos = (p.x, p.y);
-                            s.hold_t = t;
+        let op = ed.op.take().unwrap();
+        let mut auto_back = false;
+        match op {
+            Op::Ink { page, mut stroke, raw, quick, shape_tool, straight, .. } => {
+                // Glättung zum letzten echten Punkt aufholen, damit Striche nicht zu kurz enden
+                if quick.is_none() && !straight {
+                    if let (Some(l), Some(r)) = (stroke.pts.last().copied(), raw.last().copied()) {
+                        if dist(l.x, l.y, r.x, r.y) > 0.3 {
+                            let mut m = r;
+                            m.p = l.p;
+                            stroke.pts.push(Pt::new((l.x + r.x) * 0.5, (l.y + r.y) * 0.5, l.p));
+                            stroke.pts.push(m);
                         }
                     }
-                    s.cur = (last.x, last.y);
                 }
-                self.apply_dabs(&dabs);
-                self.dabs = dabs;
-            }
-            StrokeKind::Shape => {
-                if let Some(s) = &mut self.stroke {
-                    s.cur = (last.x, last.y);
-                }
-                self.render_shape();
-            }
-            StrokeKind::Lasso => {
-                if let Some(s) = &mut self.stroke {
-                    for p in pts {
-                        let l = *s.lasso.last().unwrap();
-                        if ((p.x - l.0).powi(2) + (p.y - l.1).powi(2)).sqrt() > 1.5 {
-                            s.lasso.push((p.x, p.y));
-                        }
-                    }
-                    s.cur = (last.x, last.y);
-                }
-                self.render_lasso();
-            }
-            StrokeKind::Move => {
-                let Some(s) = &mut self.stroke else { return };
-                let (ox, oy) = s.move_offset();
-                s.cur = (last.x, last.y);
-                let (nx, ny) = s.move_offset();
-                if (ox, oy) != (nx, ny) {
-                    // nur alten und neuen Bereich des Ebeneninhalts neu zeichnen
-                    let b = s.move_bounds;
-                    let shift = |dx: i32, dy: i32| IRect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
-                    let r = shift(ox, oy).union(&shift(nx, ny));
-                    self.invalidate(r);
-                }
-            }
-            StrokeKind::Picker => self.pick_doc(last.x, last.y),
-        }
-    }
-
-    fn pick_doc(&mut self, x: f32, y: f32) {
-        if let Some(c) = self.doc.sample(x.floor() as i32, y.floor() as i32) {
-            self.set_color(c, false);
-        }
-        let (sx, sy) = self.view.apply(x as f64, y as f64);
-        self.show_picker_cursor(sx, sy);
-    }
-
-    /// Übernimmt die Maske als Patch in die Ebene (mit Rückgängig-Eintrag).
-    fn commit_mask(&mut self, kind: StrokeKind, layer: usize, color: Color, opacity: f32) {
-        let r = self.mask.dirty.clamp(self.doc.w, self.doc.h);
-        if r.is_empty() {
-            return;
-        }
-        let before = self.doc.read_region(layer, r);
-        {
-            let ov = match kind {
-                StrokeKind::Erase => Overlay::Erase { layer, mask: &self.mask, opacity },
-                _ => Overlay::Paint { layer, mask: &self.mask, color, opacity },
-            };
-            self.doc.commit_overlay(&ov);
-        }
-        let after = self.doc.read_region(layer, r);
-        let id = self.doc.layers[layer].id;
-        self.history.push(Action::patch(id, r, &before, &after));
-        self.mask.clear();
-        self.invalidate(r);
-    }
-
-    pub fn end_stroke(&mut self) {
-        set_class(&dom().body().unwrap(), "drawing", false);
-        let Some(mut s) = self.stroke.take() else { return };
-        match s.kind {
-            StrokeKind::Paint | StrokeKind::Erase => {
-                if s.quick.is_none() {
-                    let mut dabs = std::mem::take(&mut self.dabs);
-                    dabs.clear();
-                    s.engine.end(&mut dabs);
-                    let buildup = s.engine.preset.buildup;
-                    for d in &dabs {
-                        render_dab(&mut self.mask, d, buildup, &self.noise);
-                    }
-                    self.dabs = dabs;
-                }
-                self.commit_mask(s.kind, s.layer, s.color, s.opacity);
-                if s.kind == StrokeKind::Paint {
-                    self.push_recent(s.color);
-                }
-            }
-            StrokeKind::Shape | StrokeKind::Lasso => {
-                self.stroke = Some(s);
-                if self.stroke.as_ref().unwrap().kind == StrokeKind::Lasso {
-                    self.render_lasso();
-                }
-                let s = self.stroke.take().unwrap();
-                self.commit_mask(StrokeKind::Paint, s.layer, s.color, s.opacity);
-                self.push_recent(s.color);
-            }
-            StrokeKind::Smudge => {
-                if let Some(sm) = &s.smudger {
-                    let r = sm.touched.clamp(self.doc.w, self.doc.h);
-                    if !r.is_empty() {
-                        let before = region_of(&self.smudge_snapshot, self.doc.w, r);
-                        let after = self.doc.read_region(s.layer, r);
-                        let id = self.doc.layers[s.layer].id;
-                        self.history.push(Action::patch(id, r, &before, &after));
-                        self.doc.layers[s.layer].touch();
+                if shape_tool && quick.is_none() {
+                    if let Some((shape, pts)) = recognize(&raw) {
+                        stroke.pts = pts;
+                        let name = shape.name_de();
+                        set_timeout(0, move || {
+                            with_app(|a| a.toast(name));
+                        });
                     }
                 }
-            }
-            StrokeKind::Move => {
-                let (dx, dy) = s.move_offset();
-                if dx != 0 || dy != 0 {
-                    let full = self.doc.bounds();
-                    let before = self.doc.read_region(s.layer, full);
-                    self.doc.commit_overlay(&Overlay::Offset { layer: s.layer, dx, dy });
-                    let after = self.doc.read_region(s.layer, full);
-                    let id = self.doc.layers[s.layer].id;
-                    self.history.push(Action::patch(id, full, &before, &after));
+                if let Some(p) = ed.nb.page_mut(page) {
+                    let order = p.max_order() + 1.0;
+                    let _ = p;
+                    let id = ed.nb.alloc_id();
+                    let item = Item { id, order, content: Content::Stroke(stroke) };
+                    if let Some(p) = ed.nb.page_mut(page) {
+                        p.insert([item.clone()]);
+                    }
+                    ed.push(Action::Items { page, removed: vec![], added: vec![item] });
                 }
-                let b = s.move_bounds;
-                self.invalidate(b.union(&IRect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy)));
             }
-            StrokeKind::Picker => {
-                self.hide_cursor();
-                self.push_recent(self.color);
-                return;
-            }
-        }
-        self.after_change();
-    }
-
-    /// Bricht den laufenden Strich ohne Änderung ab.
-    pub fn cancel_stroke(&mut self) {
-        set_class(&dom().body().unwrap(), "drawing", false);
-        let Some(s) = self.stroke.take() else { return };
-        match s.kind {
-            StrokeKind::Smudge => {
-                if let Some(sm) = &s.smudger {
-                    let r = sm.touched.clamp(self.doc.w, self.doc.h);
-                    if !r.is_empty() {
-                        let before = region_of(&self.smudge_snapshot, self.doc.w, r);
-                        self.doc.write_region(s.layer, r, &before);
-                        self.invalidate(r);
+            Op::Erase { page, before, .. } => {
+                ed.live_page = None;
+                if let Some(p) = ed.nb.page_mut(page) {
+                    let now_ids: Vec<u32> = p.items.iter().map(|i| i.id).collect();
+                    let before_ids: Vec<u32> = before.iter().map(|i| i.id).collect();
+                    let removed: Vec<Item> = before.into_iter().filter(|i| !now_ids.contains(&i.id)).collect();
+                    let added: Vec<Item> = p.items.iter().filter(|i| !before_ids.contains(&i.id)).cloned().collect();
+                    if !removed.is_empty() || !added.is_empty() {
+                        ed.push(Action::Items { page, removed, added });
                     }
                 }
+                ed.dirty = true;
+                auto_back = true;
             }
-            StrokeKind::Move => {
-                let (dx, dy) = s.move_offset();
-                let b = s.move_bounds;
-                self.invalidate(b.union(&IRect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy)));
+            Op::Lasso { page, pts, .. } => {
+                let len: f32 = pts.windows(2).map(|w| dist(w[0].0, w[0].1, w[1].0, w[1].1)).sum();
+                if len * (ed.view.s() as f32) < 12.0 {
+                    if !ed.clipboard.is_empty() {
+                        ed.paste_at = Some((page, pts[0].0, pts[0].1));
+                    }
+                } else {
+                    ed.select_in(page, &pts, (self.prefs.lasso_ink, self.prefs.lasso_text, self.prefs.lasso_img));
+                }
+                ed.dirty = true;
             }
-            _ => {
-                let r = self.mask.dirty;
-                self.mask.clear();
-                self.invalidate(r);
+            Op::MoveSel { xf, .. } => {
+                if xf != Xf::IDENTITY {
+                    ed.transform_selection(&xf);
+                }
+                ed.dirty = true;
+            }
+            Op::Laser { .. } => {}
+        }
+        ed.clear_live();
+        if auto_back && self.prefs.er_auto_back && self.tool == Tool::Eraser && !self.hold_eraser {
+            let back = if self.prev_tool == Tool::Eraser { Tool::Pen } else { self.prev_tool };
+            self.set_tool(back);
+        }
+        self.after_edit();
+    }
+
+    /// Abbrechen (z. B. Handballen erkannt).
+    pub fn cancel_op(&mut self) {
+        let Some(ed) = &mut self.ed else { return };
+        if let Some(Op::Erase { page, before, .. }) = ed.op.take() {
+            if let Some(p) = ed.nb.page_mut(page) {
+                p.items = before;
+                p.touch();
             }
         }
-        self.hide_cursor();
+        ed.live_page = None;
+        ed.clear_live();
+        ed.dirty = true;
+        self.request_frame();
     }
 
-    // ----- Formen -----
-
-    fn shape_points(&self) -> (Vec<(f32, f32)>, bool) {
-        let s = self.stroke.as_ref().unwrap();
-        let ((x0, y0), (x1, y1)) = (s.start, s.cur);
-        match self.settings.shape {
-            ShapeKind::Line | ShapeKind::Lasso => (vec![(x0, y0), (x1, y1)], false),
-            ShapeKind::Rect => (vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1)], true),
-            ShapeKind::Ellipse => (ellipse_points((x0 + x1) * 0.5, (y0 + y1) * 0.5, (x1 - x0).abs() * 0.5, (y1 - y0).abs() * 0.5), true),
-        }
+    /// Nach jeder Änderung: Oberfläche, Autospeichern.
+    pub fn after_edit(&mut self) {
+        self.mark_unsaved();
+        self.refresh_history_buttons();
+        self.position_overlays();
+        self.request_frame();
     }
 
-    fn clear_mask_invalidate(&mut self) {
-        let r = self.mask.dirty;
-        self.mask.clear();
-        self.invalidate(r);
-    }
-
-    fn render_shape(&mut self) {
-        self.clear_mask_invalidate();
-        let (pts, closed) = self.shape_points();
-        let fill = self.settings.shape_fill && closed;
-        self.render_path(&pts, closed, fill, 1.0);
-    }
-
-    fn render_lasso(&mut self) {
-        self.clear_mask_invalidate();
-        let pts = self.stroke.as_ref().unwrap().lasso.clone();
-        self.render_path(&pts, true, true, 1.0);
-    }
-
-    fn render_path(&mut self, pts: &[(f32, f32)], closed: bool, fill: bool, pressure: f32) {
-        let Some(s) = &mut self.stroke else { return };
-        if fill {
-            for poly in s.engine.symmetric_polygons(pts) {
-                fill_polygon(&mut self.mask, &poly);
-            }
-        } else {
-            let mut dabs = std::mem::take(&mut self.dabs);
-            dabs.clear();
-            s.engine.path(pts, closed, pressure, &mut dabs);
-            let buildup = s.engine.preset.buildup;
-            for d in &dabs {
-                render_dab(&mut self.mask, d, buildup, &self.noise);
-            }
-            self.dabs = dabs;
-        }
-        let r = self.mask.dirty;
-        self.invalidate(r);
-    }
-
-    // ----- QuickShape -----
-
+    /// QuickShape: Stift am Strichende halten → saubere Form.
     pub fn check_quickshape(&mut self) {
         if !self.settings.quickshape {
             return;
         }
-        let zoom = self.view.zoom() as f32;
-        let ready = match &self.stroke {
-            Some(s) => matches!(s.kind, StrokeKind::Paint | StrokeKind::Erase) && s.quick.is_none() && now() - s.hold_t > 550.0 && s.engine.path_len * zoom > 40.0,
-            None => false,
-        };
-        if !ready {
-            return;
+        let Some(ed) = &mut self.ed else { return };
+        let s = ed.view.s() as f32;
+        let mut found = None;
+        if let Some(Op::Ink { stroke, raw, hold_t, quick, straight, .. }) = &mut ed.op {
+            if quick.is_none() && !*straight && now() - *hold_t > 600.0 && raw.len() > 5 && stroke.length() * s > 30.0 {
+                match recognize(raw) {
+                    Some((shape, pts)) => {
+                        stroke.pts = pts;
+                        found = Some(shape.name_de());
+                        *quick = Some(shape);
+                    }
+                    None => *hold_t = f64::MAX / 2.0,
+                }
+            }
         }
-        let s = self.stroke.as_mut().unwrap();
-        let Some(q) = detect_quickshape(&s.engine.raw) else {
-            s.hold_t = f64::MAX / 2.0; // nicht erneut prüfen
-            return;
-        };
-        let n = s.engine.raw.len().max(1) as f32;
-        let avg = s.engine.raw.iter().map(|p| p.pressure).sum::<f32>() / n;
-        s.quick_pressure = avg.clamp(0.3, 1.0);
-        s.quick = Some(q);
-        self.render_quickshape();
-        let _ = window().navigator().vibrate_with_duration(15);
+        if let Some(name) = found {
+            ed.draw_live(None);
+            vibrate(12);
+            self.toast(name);
+        }
     }
 
-    fn render_quickshape(&mut self) {
-        let Some(s) = &self.stroke else { return };
-        let Some(q) = s.quick else { return };
-        let pr = s.quick_pressure;
-        let cur = s.cur;
-        self.clear_mask_invalidate();
-        match q {
-            QuickShape::Line { x0, y0 } => self.render_path(&[(x0, y0), cur], false, false, pr),
-            QuickShape::Ellipse { cx, cy, rx, ry } => {
-                let pts = ellipse_points(cx, cy, rx, ry);
-                self.render_path(&pts, true, false, pr)
+    // -----------------------------------------------------------------------
+    // Auswahl
+    // -----------------------------------------------------------------------
+
+    pub fn selection_action(&mut self, act: &str, arg: &str) {
+        let Some(ed) = &mut self.ed else { return };
+        match act {
+            "sel-delete" => ed.delete_selection(),
+            "sel-copy" => {
+                ed.copy_selection();
+                self.toast("Kopiert");
+            }
+            "sel-cut" => {
+                ed.copy_selection();
+                ed.delete_selection();
+            }
+            "sel-dup" => ed.duplicate_selection(),
+            "sel-color" => {
+                if let Some(c) = Color::from_hex(arg) {
+                    ed.recolor_selection(c);
+                }
+            }
+            "paste" => {
+                if let Some((page, x, y)) = ed.paste_at.take() {
+                    ed.paste(page, x, y);
+                    self.tool = Tool::Lasso;
+                    self.refresh_toolbar();
+                }
+                self.hide_paste();
+            }
+            _ => {}
+        }
+        self.after_edit();
+    }
+
+    pub fn hide_paste(&mut self) {
+        show("paste-btn", false);
+        if let Some(ed) = &mut self.ed {
+            if self.screen == Screen::Editor && ed.op.is_none() {
+                ed.paste_at = None;
             }
         }
     }
 
-    // ----- Füllen -----
+    /// Auswahlmenü, Einfügen-Knopf und Textfeld an die Ansicht anpassen.
+    pub fn position_overlays(&mut self) {
+        let Some(ed) = &self.ed else { return };
+        let menu = el("sel-menu");
+        match (&ed.selection, &ed.op) {
+            (Some(sel), None) => {
+                if let Some(i) = ed.page_index(sel.page) {
+                    let (x0, y0) = ed.page_to_screen(i, sel.bbox.x0, sel.bbox.y0);
+                    let (x1, _) = ed.page_to_screen(i, sel.bbox.x1, sel.bbox.y1);
+                    let left = ((x0 + x1) * 0.5).clamp(170.0, ed.vw - 170.0);
+                    let top = (y0 - 64.0).max(ed.top_pad);
+                    style(&menu, "left", &format!("{}px", left));
+                    style(&menu, "top", &format!("{}px", top));
+                    set_class(&menu, "hidden", false);
+                }
+            }
+            _ => set_class(&menu, "hidden", true),
+        }
+        if let Some((page, x, y)) = ed.paste_at {
+            if let Some(i) = ed.page_index(page) {
+                let (sx, sy) = ed.page_to_screen(i, x, y);
+                let b = el("paste-btn");
+                style(&b, "left", &format!("{}px", sx));
+                style(&b, "top", &format!("{}px", sy - 52.0));
+                set_class(&b, "hidden", false);
+            }
+        }
+        if let Some(te) = &ed.text_edit {
+            if let Some(i) = ed.page_index(te.page) {
+                let s = ed.view.s();
+                let (sx, sy) = ed.page_to_screen(i, te.x, te.y);
+                let ta = el("text-editor");
+                style(&ta, "left", &format!("{}px", sx));
+                style(&ta, "top", &format!("{}px", sy));
+                style(&ta, "width", &format!("{}px", te.w as f64 * s));
+                style(&ta, "font-size", &format!("{}px", te.size as f64 * s));
+                style(&ta, "font-weight", if te.bold { "650" } else { "420" });
+                style(&ta, "color", &rgba_css(te.color));
+                autosize(&ta);
+            }
+        }
+    }
 
-    pub fn fill_at(&mut self, x: f32, y: f32) {
-        if !self.layer_editable() {
-            return;
-        }
-        let (w, h) = (self.doc.w, self.doc.h);
-        let (ix, iy) = (x.floor() as i32, y.floor() as i32);
-        if ix < 0 || iy < 0 || ix >= w as i32 || iy >= h as i32 {
-            return;
-        }
-        let layer = self.doc.active;
-        self.mask.clear();
-        let r = if self.settings.fill_all {
-            let mut src = Vec::new();
-            self.doc.composite(self.doc.bounds(), &Overlay::None, false, &mut src);
-            flood_fill(&src, w, h, ix, iy, self.settings.fill_tol, 1, &mut self.mask)
-        } else {
-            let src = &self.doc.layers[layer].data;
-            flood_fill(src, w, h, ix, iy, self.settings.fill_tol, 1, &mut self.mask)
+    // -----------------------------------------------------------------------
+    // Text
+    // -----------------------------------------------------------------------
+
+    pub fn start_text(&mut self, page_idx: usize, x: f32, y: f32, existing: Option<u32>) {
+        let p = &self.prefs;
+        let (color, size, bold) = (p.text_colors[p.text_ci], p.text_size, p.text_bold);
+        let Some(ed) = &mut self.ed else { return };
+        let page = &ed.nb.pages[page_idx];
+        let te = match existing.and_then(|id| page.get(id)).map(|it| (it.id, it.content.clone())) {
+            Some((id, Content::Text(t))) => {
+                set_textarea(&t.text);
+                TextEdit { page: page.id, item: Some(id), x: t.x, y: t.y, w: t.w, size: t.size, color: t.color, bold: t.bold }
+            }
+            _ => {
+                set_textarea("");
+                let w = (ed.nb.format.w - x - 16.0).clamp(80.0, 320.0);
+                TextEdit { page: page.id, item: None, x, y: y - size * 0.5, w, size, color, bold }
+            }
         };
-        if r.is_empty() {
-            return;
-        }
-        let color = self.color;
-        let opacity = self.brush.opacity;
-        self.commit_mask(StrokeKind::Paint, layer, color, opacity);
-        self.push_recent(color);
-        self.after_change();
-    }
-
-    // ----- Verlauf -----
-
-    pub fn undo(&mut self) {
-        if self.stroke.is_some() {
-            return;
-        }
-        if self.history.undo(&mut self.doc) {
-            self.redraw_all();
-            self.after_change();
-            self.toast("Rückgängig");
-        }
-    }
-
-    pub fn redo(&mut self) {
-        if self.stroke.is_some() {
-            return;
-        }
-        if self.history.redo(&mut self.doc) {
-            self.redraw_all();
-            self.after_change();
-            self.toast("Wiederholt");
-        }
-    }
-
-    /// Nach jeder Dokumentänderung: Oberfläche und Autospeichern anstoßen.
-    pub fn after_change(&mut self) {
-        self.ui_layers_dirty = true;
-        self.refresh_history_buttons();
-        self.mark_unsaved();
+        ed.text_edit = Some(te);
+        ed.dirty = true;
+        show("text-editor", true);
+        self.position_overlays();
+        let ta: HtmlTextAreaElement = el("text-editor").unchecked_into();
+        let _ = ta.focus();
         self.request_frame();
+    }
+
+    pub fn commit_text(&mut self) {
+        let ta: HtmlTextAreaElement = el("text-editor").unchecked_into();
+        let text = ta.value().trim_end().to_string();
+        show("text-editor", false);
+        let _ = ta.blur();
+        let Some(ed) = &mut self.ed else { return };
+        let Some(te) = ed.text_edit.take() else { return };
+        let Some(page) = ed.nb.page_mut(te.page) else { return };
+        let old = te.item.and_then(|id| page.get(id).cloned());
+        let tb = TextBox { x: te.x, y: te.y, w: te.w, size: te.size, color: te.color, bold: te.bold, text };
+        let mut added = Vec::new();
+        if !tb.text.is_empty() {
+            let (id, order) = match &old {
+                Some(o) => (o.id, o.order),
+                None => (0, page.max_order() + 1.0),
+            };
+            let id = if id == 0 { ed.nb.alloc_id() } else { id };
+            added.push(Item { id, order, content: Content::Text(tb) });
+        }
+        let removed: Vec<Item> = old.into_iter().collect();
+        if removed.is_empty() && added.is_empty() {
+            ed.dirty = true;
+            return;
+        }
+        if removed.first().map(|r| &r.content) == added.first().map(|a| &a.content) {
+            ed.dirty = true;
+            return;
+        }
+        if let Some(page) = ed.nb.page_mut(te.page) {
+            let ids: Vec<u32> = removed.iter().map(|i| i.id).collect();
+            page.remove_ids(&ids);
+            page.insert(added.clone());
+        }
+        ed.push(Action::Items { page: te.page, removed, added });
+        self.after_edit();
+    }
+
+    // -----------------------------------------------------------------------
+    // Bilder
+    // -----------------------------------------------------------------------
+
+    /// Fügt ein Bild (PNG) auf der aktuellen Seite ein und wählt es aus.
+    pub fn insert_image(&mut self, png: Vec<u8>, pw: f32, ph: f32) {
+        let Some(ed) = &mut self.ed else { return };
+        let i = ed.cur_page;
+        let (w, h) = (ed.nb.format.w, ed.nb.format.h);
+        let mut iw = pw * 0.75;
+        let mut ih = ph * 0.75;
+        let f = (w * 0.7 / iw).min(h * 0.6 / ih).min(1.0);
+        iw *= f;
+        ih *= f;
+        // Mitte des sichtbaren Bereichs der Seite
+        let (cx, cy) = ed.to_nb(ed.vw * 0.5, ed.vh * 0.5);
+        let cy = cy - ed.page_top(i);
+        let x = (cx as f32 - iw * 0.5).clamp(0.0, (w - iw).max(0.0));
+        let y = (cy as f32 - ih * 0.5).clamp(0.0, (h - ih).max(0.0));
+        let key = hash_bytes(&png);
+        let id = ed.nb.alloc_id();
+        let page = &mut ed.nb.pages[i];
+        let item = Item { id, order: page.max_order() + 1.0, content: Content::Image(ImageItem { x, y, w: iw, h: ih, png: Rc::new(png), key }) };
+        page.insert([item.clone()]);
+        let pid = page.id;
+        ed.push(Action::Items { page: pid, removed: vec![], added: vec![item.clone()] });
+        ed.selection = Some(Selection { page: pid, ids: vec![id], bbox: item.bbox() });
+        self.tool = Tool::Lasso;
+        self.refresh_toolbar();
+        self.after_edit();
+        self.toast("Bild eingefügt – ziehen zum Verschieben, Ecke zum Skalieren");
     }
 }
 
-pub fn region_of(buf: &[u8], w: usize, r: IRect) -> Vec<u8> {
-    let mut out = Vec::with_capacity(r.area() * 4);
-    for y in r.y0..r.y1 {
-        let s = (y as usize * w + r.x0 as usize) * 4;
-        out.extend_from_slice(&buf[s..s + r.width() * 4]);
+fn set_textarea(v: &str) {
+    let ta: HtmlTextAreaElement = el("text-editor").unchecked_into();
+    ta.set_value(v);
+}
+
+pub fn autosize(ta: &HtmlElement) {
+    style(ta, "height", "auto");
+    let h = ta.scroll_height();
+    style(ta, "height", &format!("{}px", h + 2));
+}
+
+impl Editor {
+    /// Radiert entlang der Strecke a→b (Seitenkoordinaten).
+    pub fn erase_segment(&mut self, a: (f32, f32), b: (f32, f32)) {
+        let Some(Op::Erase { page, precise, hl_only, radius, .. }) = &self.op else { return };
+        let (page, precise, hl_only, radius) = (*page, *precise, *hl_only, *radius);
+        let Some(pi) = self.page_index(page) else { return };
+        let mut changes: Vec<(u32, f64, Vec<Stroke>)> = Vec::new();
+        for it in &self.nb.pages[pi].items {
+            if let Content::Stroke(s) = &it.content {
+                if hl_only && s.pen != PenKind::Highlighter {
+                    continue;
+                }
+                if precise {
+                    if let Some(pieces) = s.erase_part(a, b, radius) {
+                        changes.push((it.id, it.order, pieces));
+                    }
+                } else if s.hit(a, b, radius) {
+                    changes.push((it.id, it.order, Vec::new()));
+                }
+            }
+        }
+        if changes.is_empty() {
+            return;
+        }
+        let mut new_items = Vec::new();
+        for (_, order, pieces) in &changes {
+            for (k, s) in pieces.iter().enumerate() {
+                let id = self.nb.alloc_id();
+                new_items.push(Item { id, order: order + (k as f64 + 1.0) * 1e-7, content: Content::Stroke(s.clone()) });
+            }
+        }
+        let ids: Vec<u32> = changes.iter().map(|c| c.0).collect();
+        let p = &mut self.nb.pages[pi];
+        p.remove_ids(&ids);
+        p.insert(new_items);
+        self.dirty = true;
     }
-    out
+
+    pub fn select_in(&mut self, page: u32, poly: &[(f32, f32)], kinds: (bool, bool, bool)) {
+        let Some(pi) = self.page_index(page) else { return };
+        let mut ids = Vec::new();
+        let mut bbox = Rect::EMPTY;
+        for it in &self.nb.pages[pi].items {
+            let take = match &it.content {
+                Content::Stroke(s) if kinds.0 => {
+                    let inside = s.pts.iter().filter(|p| point_in_polygon(p.x, p.y, poly)).count();
+                    inside * 2 >= s.pts.len().max(1)
+                }
+                Content::Text(_) | Content::Image(_) if (kinds.1 && matches!(it.content, Content::Text(_))) || (kinds.2 && matches!(it.content, Content::Image(_))) => {
+                    let (cx, cy) = it.bbox().center();
+                    point_in_polygon(cx, cy, poly)
+                }
+                _ => false,
+            };
+            if take {
+                ids.push(it.id);
+                bbox = bbox.union(&it.bbox());
+            }
+        }
+        self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox }) };
+    }
+
+    fn selected_items(&self) -> Vec<Item> {
+        let Some(sel) = &self.selection else { return Vec::new() };
+        let Some(pi) = self.page_index(sel.page) else { return Vec::new() };
+        self.nb.pages[pi].items.iter().filter(|i| sel.ids.contains(&i.id)).cloned().collect()
+    }
+
+    fn replace_selected(&mut self, new_items: Vec<Item>) {
+        let Some(sel) = &self.selection else { return };
+        let page = sel.page;
+        let old = self.selected_items();
+        if let Some(p) = self.nb.page_mut(page) {
+            let ids: Vec<u32> = old.iter().map(|i| i.id).collect();
+            p.remove_ids(&ids);
+            p.insert(new_items.clone());
+        }
+        let mut bbox = Rect::EMPTY;
+        for i in &new_items {
+            bbox = bbox.union(&i.bbox());
+        }
+        if let Some(sel) = &mut self.selection {
+            sel.bbox = bbox;
+        }
+        self.push(Action::Items { page, removed: old, added: new_items });
+    }
+
+    pub fn transform_selection(&mut self, xf: &Xf) {
+        let items: Vec<Item> = self.selected_items().iter().map(|i| i.transformed(xf)).collect();
+        self.replace_selected(items);
+    }
+
+    pub fn recolor_selection(&mut self, c: Color) {
+        let items: Vec<Item> = self
+            .selected_items()
+            .into_iter()
+            .map(|mut it| {
+                match &mut it.content {
+                    Content::Stroke(s) => {
+                        let a = s.color[3];
+                        s.color = color4(c, a);
+                    }
+                    Content::Text(t) => t.color = color4(c, 255),
+                    _ => {}
+                }
+                it
+            })
+            .collect();
+        self.replace_selected(items);
+    }
+
+    pub fn delete_selection(&mut self) {
+        let Some(sel) = self.selection.take() else { return };
+        let old = {
+            let Some(pi) = self.page_index(sel.page) else { return };
+            self.nb.pages[pi].remove_ids(&sel.ids)
+        };
+        self.push(Action::Items { page: sel.page, removed: old, added: vec![] });
+    }
+
+    pub fn copy_selection(&mut self) {
+        self.clipboard = self.selected_items();
+    }
+
+    pub fn duplicate_selection(&mut self) {
+        let Some(sel) = &self.selection else { return };
+        let page = sel.page;
+        let (x, y) = (sel.bbox.x0 + 16.0, sel.bbox.y0 + 16.0);
+        self.clipboard = self.selected_items();
+        self.paste(page, x, y);
+    }
+
+    pub fn paste(&mut self, page: u32, x: f32, y: f32) {
+        if self.clipboard.is_empty() {
+            return;
+        }
+        let mut bb = Rect::EMPTY;
+        for i in &self.clipboard {
+            bb = bb.union(&i.bbox());
+        }
+        let xf = Xf::translate(x - bb.x0, y - bb.y0);
+        let Some(pi) = self.page_index(page) else { return };
+        let mut order = self.nb.pages[pi].max_order();
+        let mut items = Vec::new();
+        for it in self.clipboard.clone() {
+            order += 1.0;
+            let id = self.nb.alloc_id();
+            let mut n = it.transformed(&xf);
+            n.id = id;
+            n.order = order;
+            items.push(n);
+        }
+        self.nb.pages[pi].insert(items.clone());
+        let mut bbox = Rect::EMPTY;
+        for i in &items {
+            bbox = bbox.union(&i.bbox());
+        }
+        self.selection = Some(Selection { page, ids: items.iter().map(|i| i.id).collect(), bbox });
+        self.push(Action::Items { page, removed: vec![], added: items });
+    }
 }

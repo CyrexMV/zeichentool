@@ -1,24 +1,18 @@
-pub mod brush;
-pub mod color;
-pub mod doc;
-pub mod fill;
-pub mod history;
-pub mod layer;
-pub mod mask;
-pub mod noise;
-pub mod paper;
-pub mod project;
-pub mod rect;
-pub mod smudge;
-pub mod stroke;
+//! Plattformunabhängige Notiz-Engine (reines Rust, ohne Browser-Abhängigkeiten).
 
-pub use brush::{presets, BrushPreset, Dab};
+pub mod color;
+pub mod format;
+pub mod geom;
+pub mod history;
+pub mod ink;
+pub mod note;
+pub mod paper;
+pub mod pdf;
+pub mod shapes;
+
 pub use color::Color;
-pub use doc::{Document, Overlay};
-pub use history::{Action, History};
-pub use layer::{BlendMode, Layer, LayerProps};
-pub use mask::Mask;
-pub use noise::Noise;
-pub use paper::{Template, TemplateKind};
-pub use rect::IRect;
-pub use stroke::{InputPoint, StrokeEngine, Symmetry};
+pub use geom::{Rect, Xf};
+pub use history::{Action, History, PageMeta};
+pub use ink::{PenKind, Pt, Smoother, Stroke};
+pub use note::{Content, Format, ImageItem, Item, Notebook, Page, TextBox, COVERS};
+pub use paper::{Prim, Template, TemplateKind};

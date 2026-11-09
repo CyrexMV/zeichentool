@@ -1,149 +1,111 @@
-use super::doc::Document;
-use super::layer::{Layer, LayerProps};
-use super::rect::IRect;
-use miniz_oxide::deflate::compress_to_vec;
-use miniz_oxide::inflate::decompress_to_vec;
+//! Rückgängig/Wiederholen für Notizbücher.
 
-pub fn pack(bytes: &[u8]) -> Vec<u8> {
-    compress_to_vec(bytes, 1)
+use super::color::Color;
+use super::note::{Item, Notebook, Page};
+use super::paper::Template;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageMeta {
+    pub template: Template,
+    pub paper: Color,
+    pub bookmark: bool,
 }
 
-pub fn unpack(bytes: &[u8]) -> Vec<u8> {
-    decompress_to_vec(bytes).unwrap_or_default()
-}
-
-/// Eine gespeicherte Ebene (komprimiert) für Löschen/Wiederherstellen.
-#[derive(Clone, Debug)]
-pub struct StoredLayer {
-    pub id: u32,
-    pub props: LayerProps,
-    pub data: Vec<u8>,
-}
-
-impl StoredLayer {
-    pub fn from_layer(l: &Layer) -> Self {
-        StoredLayer { id: l.id, props: l.props.clone(), data: pack(&l.data) }
+impl PageMeta {
+    pub fn of(p: &Page) -> PageMeta {
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark }
     }
 
-    pub fn to_layer(&self, w: usize, h: usize) -> Layer {
-        let mut data = unpack(&self.data);
-        data.resize(w * h * 4, 0);
-        Layer { id: self.id, props: self.props.clone(), data, rev: 1 }
+    fn apply(&self, p: &mut Page) {
+        p.template = self.template;
+        p.paper = self.paper;
+        p.bookmark = self.bookmark;
+        p.touch();
     }
 }
 
-/// Ein rückgängig machbarer Schritt.
 #[derive(Clone, Debug)]
 pub enum Action {
-    Patch { layer: u32, rect: IRect, before: Vec<u8>, after: Vec<u8> },
-    AddLayer { index: usize, layer: StoredLayer },
-    RemoveLayer { index: usize, layer: StoredLayer },
-    MoveLayer { from: usize, to: usize },
-    Props { layer: u32, before: LayerProps, after: LayerProps },
-    Compound(Vec<Action>),
+    /// Elemente einer Seite ersetzt: `removed` (alte Fassungen) ↔ `added` (neue Fassungen)
+    Items { page: u32, removed: Vec<Item>, added: Vec<Item> },
+    AddPage { index: usize, page: Page },
+    RemovePage { index: usize, page: Page },
+    MovePage { from: usize, to: usize },
+    PageMeta { page: u32, before: PageMeta, after: PageMeta },
+    Group(Vec<Action>),
 }
 
 impl Action {
-    fn bytes(&self) -> usize {
+    /// Seite, die nach Rückgängig/Wiederholen angezeigt werden sollte.
+    pub fn focus_page(&self, nb: &Notebook) -> Option<usize> {
         match self {
-            Action::Patch { before, after, .. } => before.len() + after.len() + 64,
-            Action::AddLayer { layer, .. } | Action::RemoveLayer { layer, .. } => layer.data.len() + 64,
-            Action::Compound(v) => v.iter().map(|a| a.bytes()).sum(),
-            _ => 64,
+            Action::Items { page, .. } | Action::PageMeta { page, .. } => nb.page_index(*page),
+            Action::AddPage { index, .. } | Action::RemovePage { index, .. } => Some((*index).min(nb.pages.len().saturating_sub(1))),
+            Action::MovePage { to, .. } => Some(*to),
+            Action::Group(v) => v.iter().rev().find_map(|a| a.focus_page(nb)),
         }
     }
 
-    /// Erstellt einen Patch aus Vorher/Nachher-Pixeln eines Bereichs.
-    pub fn patch(layer: u32, rect: IRect, before: &[u8], after: &[u8]) -> Action {
-        Action::Patch { layer, rect, before: pack(before), after: pack(after) }
-    }
-
-    fn apply(&self, doc: &mut Document, undo: bool) {
+    fn apply(&self, nb: &mut Notebook, undo: bool) {
         match self {
-            Action::Patch { layer, rect, before, after } => {
-                if let Some(i) = doc.index_of(*layer) {
-                    let bytes = unpack(if undo { before } else { after });
-                    if bytes.len() == rect.area() * 4 {
-                        doc.write_region(i, *rect, &bytes);
-                    }
+            Action::Items { page, removed, added } => {
+                if let Some(p) = nb.page_mut(*page) {
+                    let (take, put) = if undo { (added, removed) } else { (removed, added) };
+                    let ids: Vec<u32> = take.iter().map(|i| i.id).collect();
+                    p.remove_ids(&ids);
+                    p.insert(put.iter().cloned());
                 }
             }
-            Action::AddLayer { index, layer } | Action::RemoveLayer { index, layer } => {
-                let insert = matches!(self, Action::AddLayer { .. }) != undo;
+            Action::AddPage { index, page } | Action::RemovePage { index, page } => {
+                let insert = matches!(self, Action::AddPage { .. }) != undo;
                 if insert {
-                    let idx = (*index).min(doc.layers.len());
-                    doc.layers.insert(idx, layer.to_layer(doc.w, doc.h));
-                    doc.active = idx;
-                } else if let Some(i) = doc.index_of(layer.id) {
-                    doc.layers.remove(i);
-                    if doc.layers.is_empty() {
-                        doc.add_layer("Ebene 1", 0);
+                    let i = (*index).min(nb.pages.len());
+                    let mut p = page.clone();
+                    p.touch();
+                    nb.pages.insert(i, p);
+                } else if let Some(i) = nb.page_index(page.id) {
+                    if nb.pages.len() > 1 {
+                        nb.pages.remove(i);
                     }
-                    doc.active = i.saturating_sub(1).min(doc.layers.len() - 1);
                 }
             }
-            Action::MoveLayer { from, to } => {
+            Action::MovePage { from, to } => {
                 let (f, t) = if undo { (*to, *from) } else { (*from, *to) };
-                if f < doc.layers.len() && t < doc.layers.len() {
-                    let l = doc.layers.remove(f);
-                    doc.layers.insert(t, l);
-                    doc.active = t;
+                if f < nb.pages.len() && t < nb.pages.len() {
+                    let p = nb.pages.remove(f);
+                    nb.pages.insert(t, p);
                 }
             }
-            Action::Props { layer, before, after } => {
-                if let Some(i) = doc.index_of(*layer) {
-                    doc.layers[i].props = if undo { before.clone() } else { after.clone() };
+            Action::PageMeta { page, before, after } => {
+                if let Some(p) = nb.page_mut(*page) {
+                    if undo { before } else { after }.apply(p);
                 }
             }
-            Action::Compound(list) => {
+            Action::Group(v) => {
                 if undo {
-                    for a in list.iter().rev() {
-                        a.apply(doc, true);
-                    }
+                    v.iter().rev().for_each(|a| a.apply(nb, true));
                 } else {
-                    for a in list {
-                        a.apply(doc, false);
-                    }
+                    v.iter().for_each(|a| a.apply(nb, false));
                 }
             }
-        }
-    }
-
-    /// Ebene, die nach dem Schritt aktiv sein sollte.
-    fn focus_layer(&self) -> Option<u32> {
-        match self {
-            Action::Patch { layer, .. } | Action::Props { layer, .. } => Some(*layer),
-            Action::Compound(v) => v.iter().rev().find_map(|a| a.focus_layer()),
-            _ => None,
         }
     }
 }
 
-/// Verlauf mit Speicherbegrenzung.
+#[derive(Default)]
 pub struct History {
     undo: Vec<Action>,
     redo: Vec<Action>,
-    bytes: usize,
-    pub max_bytes: usize,
-    pub max_steps: usize,
-}
-
-impl Default for History {
-    fn default() -> Self {
-        History { undo: Vec::new(), redo: Vec::new(), bytes: 0, max_bytes: 384 << 20, max_steps: 120 }
-    }
 }
 
 impl History {
+    const MAX: usize = 300;
+
     pub fn push(&mut self, a: Action) {
-        self.bytes += a.bytes();
         self.undo.push(a);
-        for r in self.redo.drain(..) {
-            self.bytes = self.bytes.saturating_sub(r.bytes());
-        }
-        while (self.bytes > self.max_bytes || self.undo.len() > self.max_steps) && self.undo.len() > 1 {
-            let old = self.undo.remove(0);
-            self.bytes = self.bytes.saturating_sub(old.bytes());
+        self.redo.clear();
+        if self.undo.len() > Self::MAX {
+            self.undo.remove(0);
         }
     }
 
@@ -155,76 +117,74 @@ impl History {
         !self.redo.is_empty()
     }
 
-    pub fn undo(&mut self, doc: &mut Document) -> bool {
-        match self.undo.pop() {
-            Some(a) => {
-                a.apply(doc, true);
-                focus(doc, &a);
-                self.redo.push(a);
-                true
-            }
-            None => false,
-        }
+    /// Gibt die Seite zurück, die betroffen war.
+    pub fn undo(&mut self, nb: &mut Notebook) -> Option<Option<usize>> {
+        let a = self.undo.pop()?;
+        a.apply(nb, true);
+        let f = a.focus_page(nb);
+        self.redo.push(a);
+        Some(f)
     }
 
-    pub fn redo(&mut self, doc: &mut Document) -> bool {
-        match self.redo.pop() {
-            Some(a) => {
-                a.apply(doc, false);
-                focus(doc, &a);
-                self.undo.push(a);
-                true
-            }
-            None => false,
-        }
+    pub fn redo(&mut self, nb: &mut Notebook) -> Option<Option<usize>> {
+        let a = self.redo.pop()?;
+        a.apply(nb, false);
+        let f = a.focus_page(nb);
+        self.undo.push(a);
+        Some(f)
     }
 
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
-        self.bytes = 0;
     }
-}
-
-fn focus(doc: &mut Document, a: &Action) {
-    if let Some(i) = a.focus_layer().and_then(|id| doc.index_of(id)) {
-        doc.active = i;
-    }
-    doc.active = doc.active.min(doc.layers.len().saturating_sub(1));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::ink::{PenKind, Pt, Stroke};
+    use crate::engine::note::{Content, Format};
 
-    #[test]
-    fn patch_undo_redo() {
-        let mut d = Document::new(8, 8);
-        let id = d.layers[0].id;
-        let r = IRect::new(1, 1, 3, 3);
-        let before = d.read_region(0, r);
-        let after = vec![200u8; r.area() * 4];
-        d.write_region(0, r, &after);
-        let mut h = History::default();
-        h.push(Action::patch(id, r, &before, &after));
-        assert!(h.undo(&mut d));
-        assert_eq!(d.read_region(0, r), before);
-        assert!(h.redo(&mut d));
-        assert_eq!(d.read_region(0, r), after);
+    fn nb() -> Notebook {
+        Notebook::new("a".into(), "T", 0, Format::A4_PORTRAIT, Template::default(), Color::WHITE, 0.0)
+    }
+
+    fn item(id: u32, x: f32) -> Item {
+        Item { id, order: id as f64, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0; 4], width: 1.0, pts: vec![Pt::new(x, 0.0, 1.0)] }) }
     }
 
     #[test]
-    fn add_remove_layer_undo() {
-        let mut d = Document::new(4, 4);
-        let idx = d.add_layer("Neu", 1);
-        let stored = StoredLayer::from_layer(&d.layers[idx]);
+    fn items_undo_redo_and_move() {
+        let mut n = nb();
+        let pid = n.pages[0].id;
         let mut h = History::default();
-        h.push(Action::AddLayer { index: idx, layer: stored });
-        assert_eq!(d.layers.len(), 2);
-        h.undo(&mut d);
-        assert_eq!(d.layers.len(), 1);
-        h.redo(&mut d);
-        assert_eq!(d.layers.len(), 2);
-        assert_eq!(d.layers[1].props.name, "Neu");
+        n.pages[0].insert([item(10, 0.0)]);
+        h.push(Action::Items { page: pid, removed: vec![], added: vec![item(10, 0.0)] });
+        // verschieben (gleiche ID, neue Fassung)
+        n.pages[0].remove_ids(&[10]);
+        n.pages[0].insert([item(10, 5.0)]);
+        h.push(Action::Items { page: pid, removed: vec![item(10, 0.0)], added: vec![item(10, 5.0)] });
+        h.undo(&mut n);
+        assert_eq!(n.pages[0].items[0], item(10, 0.0));
+        h.undo(&mut n);
+        assert!(n.pages[0].items.is_empty());
+        h.redo(&mut n);
+        h.redo(&mut n);
+        assert_eq!(n.pages[0].items[0], item(10, 5.0));
+    }
+
+    #[test]
+    fn pages_undo() {
+        let mut n = nb();
+        let p = n.new_page_like(0);
+        n.pages.push(p.clone());
+        let mut h = History::default();
+        h.push(Action::AddPage { index: 1, page: p });
+        assert_eq!(n.pages.len(), 2);
+        h.undo(&mut n);
+        assert_eq!(n.pages.len(), 1);
+        h.redo(&mut n);
+        assert_eq!(n.pages.len(), 2);
     }
 }

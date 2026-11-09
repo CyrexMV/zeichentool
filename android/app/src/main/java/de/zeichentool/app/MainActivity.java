@@ -450,7 +450,7 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Zurück-Taste: offenes Panel schließen, sonst App verlassen (Zeichnung ist autogespeichert). */
+    /** Zurück-Taste: Menü schließen → zurück zur Bibliothek → App verlassen (alles ist autogespeichert). */
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
@@ -459,8 +459,10 @@ public class MainActivity extends Activity {
             return;
         }
         web.evaluateJavascript(
-                "(function(){if(document.querySelector('.panel.open,.modal.open')){"
-                        + "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return 1;}return 0;})()",
+                "(function(){if(document.querySelector('.popover:not(.hidden),.modal:not(.hidden)')){"
+                        + "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return 1;}"
+                        + "var e=document.getElementById('editor');if(e&&!e.classList.contains('hidden')){"
+                        + "document.querySelector('[data-act=back]').click();return 1;}return 0;})()",
                 result -> {
                     if (!"1".equals(result)) {
                         finish();

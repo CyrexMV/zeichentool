@@ -1,8 +1,8 @@
 [package]
 name = "zeichentool"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
-description = "Modernes Zeichentool in Rust (WebAssembly/PWA) mit S-Pen-Unterstützung"
+description = "Moderne Notiz-App in Rust (WebAssembly/Android) mit S-Pen-Unterstützung"
 license = "MIT"
 
 [lib]
@@ -31,6 +31,7 @@ features = [
   "IdbFactory", "IdbDatabase", "IdbOpenDbRequest", "IdbRequest", "IdbObjectStore",
   "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent",
   "VisibilityState", "DomStringList",
+  "Path2d", "TextMetrics", "MediaQueryList", "HtmlTextAreaElement", "HtmlDivElement",
 ]
 
 [profile.release]

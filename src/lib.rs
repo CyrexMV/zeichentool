@@ -1,9 +1,7 @@
-//! Zeichentool – ein modernes Zeichenprogramm in Rust.
+//! Notizen – ein modernes Notiz- und Zeichenprogramm in Rust (WebAssembly + Android).
 //!
-//! * `engine` enthält die komplette, plattformunabhängige Zeichen-Engine
-//!   (Pinsel, Ebenen, Mischmodi, Füllen, Verlauf, Projektformat).
-//! * `web` verbindet die Engine mit dem Browser (Canvas, S-Pen/Pointer-Events,
-//!   Gesten, Oberfläche, Speicherung) und wird nur für WebAssembly gebaut.
+//! * `engine`: Notizbücher, Vektor-Tinte, Formerkennung, Vorlagen, Verlauf, Dateiformat, PDF-Export.
+//! * `web`: Browser-Anbindung (Canvas, S-Pen, Gesten, Oberfläche, Speicherung) – nur für WebAssembly.
 
 pub mod engine;
 

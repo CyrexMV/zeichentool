@@ -1,14 +1,13 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0e0f13">
+<meta name="theme-color" content="#f3f4f8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Modernes Zeichentool mit S-Pen-Unterstützung – geschrieben in Rust.">
-<title>Zeichentool</title>
+<meta name="description" content="Notizen – moderne Notiz-App mit S-Pen, geschrieben in Rust.">
+<title>Notizen</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -17,315 +16,278 @@
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-pages" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
     <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
-    <symbol id="i-brush" viewBox="0 0 24 24"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></symbol>
-    <symbol id="i-smudge" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></symbol>
+    <symbol id="i-highlighter" viewBox="0 0 24 24"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></symbol>
     <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
-    <symbol id="i-fill" viewBox="0 0 24 24"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></symbol>
-    <symbol id="i-picker" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+    <symbol id="i-lasso" viewBox="0 0 24 24"><path d="M7 22a5 5 0 0 1-2-4"/><path d="M3.34 14A6.8 6.8 0 0 1 2 10c0-4.42 4.48-8 10-8s10 3.58 10 8c0 2.2-1.1 4.2-2.9 5.6"/><path d="M7 16.9c1.5.7 3.2 1.1 5 1.1"/><circle cx="5" cy="18" r="2"/></symbol>
     <symbol id="i-shapes" viewBox="0 0 24 24"><path d="M8.3 10a.7.7 0 0 1-.63-1.08L11.4 3a.7.7 0 0 1 1.2-.04l3.7 5.94a.7.7 0 0 1-.57 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></symbol>
-    <symbol id="i-move" viewBox="0 0 24 24"><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/></symbol>
-    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
-    <symbol id="i-sym" viewBox="0 0 24 24"><path d="M12 2v20" stroke-dasharray="2 2.5"/><path d="M9 6 3 12l6 6Z"/><path d="m15 6 6 6-6 6Z"/></symbol>
-    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
-    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.8 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-laser" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.59 7.59"/><circle cx="11" cy="11" r="2"/></symbol>
+    <symbol id="i-page-plus" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6M9 15h6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.6l-5.8 3 1.1-6.4-4.7-4.6 6.5-.9z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></symbol>
+    <symbol id="i-dup" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/><path d="M14.5 11.5v6M11.5 14.5h6"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-nib" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.59 7.59"/><circle cx="11" cy="11" r="2"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/></symbol>
   </defs>
 </svg>
 
-<main id="stage" aria-label="Zeichenfläche">
-  <div id="doc-wrap">
-    <canvas id="doc"></canvas>
-    <svg id="guides" preserveAspectRatio="none"></svg>
-  </div>
-</main>
-<div id="cursor"></div>
-
-<header class="bar bar-left glass">
-  <button id="btn-menu" class="ib" title="Menü"><svg><use href="#i-menu"/></svg></button>
-  <button id="btn-undo" class="ib" title="Rückgängig (Strg+Z · Zwei-Finger-Tipp)"><svg><use href="#i-undo"/></svg></button>
-  <button id="btn-redo" class="ib" title="Wiederholen (Strg+Y · Drei-Finger-Tipp)"><svg><use href="#i-redo"/></svg></button>
-  <button id="btn-zoom" class="pill" title="Ansicht einpassen">100%</button>
-  <button id="btn-symmetry" class="ib" title="Symmetrie"><svg><use href="#i-sym"/></svg></button>
-  <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-pen"/></svg></span>
-</header>
-
-<nav class="bar bar-right glass" aria-label="Werkzeuge">
-  <button class="ib tool" data-tool="brush" title="Pinsel (B)"><svg><use href="#i-brush"/></svg></button>
-  <button class="ib tool" data-tool="smudge" title="Wischfinger (S)"><svg><use href="#i-smudge"/></svg></button>
-  <button class="ib tool" data-tool="eraser" title="Radierer (E)"><svg><use href="#i-eraser"/></svg></button>
-  <button class="ib tool" data-tool="fill" title="Füllen (G)"><svg><use href="#i-fill"/></svg></button>
-  <button class="ib tool" data-tool="picker" title="Pipette (I)"><svg><use href="#i-picker"/></svg></button>
-  <button class="ib tool" data-tool="shape" title="Formen (U)"><svg><use href="#i-shapes"/></svg></button>
-  <button class="ib tool" data-tool="move" title="Ebene verschieben (V)"><svg><use href="#i-move"/></svg></button>
-  <span class="sep"></span>
-  <button id="btn-layers" class="ib" title="Ebenen (L)"><svg><use href="#i-layers"/></svg></button>
-  <button id="btn-color" class="color-btn" title="Farbe (C)"><span id="color-dot"></span></button>
-</nav>
-
-<aside id="side" class="glass" aria-label="Größe und Deckkraft">
-  <div class="vslider" id="vs-size" title="Pinselgröße"><div class="vs-fill"></div><div class="vs-thumb"></div></div>
-  <div class="vs-label" id="vs-size-label">10</div>
-  <div class="side-gap"></div>
-  <div class="vslider" id="vs-opacity" title="Deckkraft"><div class="vs-fill"></div><div class="vs-thumb"></div></div>
-  <div class="vs-label" id="vs-opacity-label">100%</div>
-</aside>
-<div id="bubble"></div>
-
-<!-- Pinsel-Bibliothek -->
-<section id="panel-brush" class="panel glass" data-anchor="right">
-  <div class="panel-head"><h3 id="brush-title">Pinsel</h3></div>
-  <div id="brush-list" class="brush-list"></div>
-  <details class="adv">
-    <summary>Pinsel anpassen</summary>
-    <label class="row"><span>Stabilisierung</span><input type="range" id="br-smoothing" min="0" max="95"><output id="br-smoothing-v"></output></label>
-    <label class="row"><span>Härte</span><input type="range" id="br-hardness" min="0" max="100"><output id="br-hardness-v"></output></label>
-    <label class="row"><span>Abstand</span><input type="range" id="br-spacing" min="2" max="100"><output id="br-spacing-v"></output></label>
-    <label class="row"><span>Fluss</span><input type="range" id="br-flow" min="1" max="100"><output id="br-flow-v"></output></label>
-    <label class="row"><span>Druck → Größe</span><input type="range" id="br-psize" min="0" max="100"><output id="br-psize-v"></output></label>
-    <label class="row"><span>Druck → Deckkraft</span><input type="range" id="br-popacity" min="0" max="100"><output id="br-popacity-v"></output></label>
-    <label class="row"><span>Körnung</span><input type="range" id="br-grain" min="0" max="100"><output id="br-grain-v"></output></label>
-    <label class="row"><span>Neigung (S-Pen)</span><input type="range" id="br-tilt" min="0" max="100"><output id="br-tilt-v"></output></label>
-    <button id="br-reset" class="btn ghost">Pinsel zurücksetzen</button>
-  </details>
-</section>
-
-<!-- Farbe -->
-<section id="panel-color" class="panel glass" data-anchor="right">
-  <div id="sv" class="sv"><div class="sv-w"></div><div class="sv-b"></div><div id="sv-knob" class="knob"></div></div>
-  <div id="hue" class="hue"><div id="hue-knob" class="knob"></div></div>
-  <div class="color-row">
-    <div class="cmp"><span id="col-old" title="Vorherige Farbe"></span><span id="col-new"></span></div>
-    <input id="hex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex-Farbe">
-  </div>
-  <h4>Zuletzt verwendet</h4>
-  <div id="recent" class="swatches"></div>
-  <h4>Palette</h4>
-  <div id="palette" class="swatches"></div>
-</section>
-
-<!-- Ebenen -->
-<section id="panel-layers" class="panel glass" data-anchor="right">
-  <div class="panel-head"><h3>Ebenen</h3><button id="ly-add" class="ib small" title="Neue Ebene"><svg><use href="#i-plus"/></svg></button></div>
-  <div id="layers-list"></div>
-  <div class="paper-row">
-    <span>Hintergrund</span>
-    <input type="color" id="paper-color" aria-label="Hintergrundfarbe">
-    <label class="switch" title="Hintergrund anzeigen"><input type="checkbox" id="paper-on"><span></span></label>
-  </div>
-  <button id="ly-paper" class="btn wide-btn">Papier &amp; Vorlage ändern …</button>
-  <div class="layer-props">
-    <label class="row"><span>Deckkraft</span><input type="range" id="ly-opacity" min="0" max="100"><output id="ly-opacity-v"></output></label>
-    <label class="row"><span>Modus</span><select id="ly-blend"></select></label>
-    <label class="row toggle"><span>Transparenz sperren</span><span class="switch"><input type="checkbox" id="ly-alpha"><span></span></span></label>
-    <label class="row toggle"><span>Ebene sperren</span><span class="switch"><input type="checkbox" id="ly-lock"><span></span></span></label>
-  </div>
-  <div class="btn-grid">
-    <button id="ly-up" class="btn">Nach oben</button>
-    <button id="ly-down" class="btn">Nach unten</button>
-    <button id="ly-dup" class="btn">Duplizieren</button>
-    <button id="ly-merge" class="btn">Zusammenfügen</button>
-    <button id="ly-flip-h" class="btn">Horizontal spiegeln</button>
-    <button id="ly-flip-v" class="btn">Vertikal spiegeln</button>
-    <button id="ly-clear" class="btn">Leeren</button>
-    <button id="ly-del" class="btn danger">Löschen</button>
-    <button id="ly-import" class="btn wide">Bild als Ebene importieren …</button>
+<!-- ================= Bibliothek ================= -->
+<section id="library" class="screen">
+  <header class="lib-head">
+    <div class="lib-brand">
+      <div class="logo"><svg><use href="#i-nib"/></svg></div>
+      <div>
+        <h1>Notizen</h1>
+        <span id="lib-count" class="muted">–</span>
+      </div>
+    </div>
+    <div class="lib-tools">
+      <label class="search"><svg><use href="#i-search"/></svg><input id="lib-search" data-input="lib-search" placeholder="Notizbücher suchen" autocomplete="off"></label>
+      <div class="seg small" id="lib-sort">
+        <button data-act="lib-sort" data-arg="modified">Zuletzt</button>
+        <button data-act="lib-sort" data-arg="title">Name</button>
+        <button data-act="lib-sort" data-arg="created">Erstellt</button>
+      </div>
+      <button class="chip" id="lib-fav" data-act="lib-fav"><svg><use href="#i-star"/></svg>Favoriten</button>
+      <button class="icon-btn" data-act="import" title="Importieren (.znote, Bild, alte Zeichnung)"><svg><use href="#i-import"/></svg></button>
+      <button class="icon-btn" data-act="settings" title="Einstellungen"><svg><use href="#i-settings"/></svg></button>
+      <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Neues Notizbuch</button>
+    </div>
+  </header>
+  <div id="lib-grid" class="lib-grid"></div>
+  <div id="lib-empty" class="lib-empty hidden">
+    <div class="empty-art"><svg><use href="#i-nib"/></svg></div>
+    <h2>Noch keine Notizbücher</h2>
+    <p class="muted">Lege dein erstes Notizbuch an – liniert, kariert, gepunktet oder blanko.</p>
+    <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Notizbuch erstellen</button>
   </div>
 </section>
 
-<!-- Formen -->
-<section id="panel-shape" class="panel glass" data-anchor="right">
-  <div class="panel-head"><h3>Formen</h3></div>
-  <div class="seg" id="shape-seg">
-    <button data-shape="line">Linie</button>
-    <button data-shape="rect">Rechteck</button>
-    <button data-shape="ellipse">Ellipse</button>
-    <button data-shape="lasso">Lasso-Füllung</button>
+<!-- ================= Editor ================= -->
+<section id="editor" class="screen hidden">
+  <canvas id="view"></canvas>
+  <canvas id="live"></canvas>
+  <textarea id="text-editor" class="text-editor hidden" spellcheck="true" placeholder="Text eingeben …"></textarea>
+
+  <header class="ed-top" id="ed-top">
+    <div class="ed-left glass">
+      <button class="icon-btn" data-act="back" title="Bibliothek"><svg><use href="#i-back"/></svg></button>
+      <button class="icon-btn" id="btn-nav" data-act="nav" title="Seitenübersicht"><svg><use href="#i-pages"/></svg></button>
+      <input id="ed-title" class="title-input" data-input="title" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="toolbar glass" id="toolbar">
+      <button class="tb" id="btn-undo" data-act="undo" title="Rückgängig"><svg><use href="#i-undo"/></svg></button>
+      <button class="tb" id="btn-redo" data-act="redo" title="Wiederholen"><svg><use href="#i-redo"/></svg></button>
+      <span class="sep"></span>
+      <button class="tb tool" data-act="tool" data-arg="pen" title="Stift (P)"><svg><use href="#i-pen"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="highlighter" title="Textmarker (H)"><svg><use href="#i-highlighter"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="eraser" title="Radierer (E)"><svg><use href="#i-eraser"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="lasso" title="Lasso (L)"><svg><use href="#i-lasso"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="shape" title="Formen (S)"><svg><use href="#i-shapes"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="text" title="Text (T)"><svg><use href="#i-text"/></svg></button>
+      <button class="tb" data-act="image" title="Bild einfügen"><svg><use href="#i-image"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="laser" title="Laserpointer"><svg><use href="#i-laser"/></svg></button>
+      <span class="sep" id="fav-sep"></span>
+      <div id="favs" class="favs"></div>
+    </div>
+    <div class="ed-right glass">
+      <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-nib"/></svg></span>
+      <button class="icon-btn" data-act="add-page" title="Seite hinzufügen"><svg><use href="#i-page-plus"/></svg></button>
+      <button class="icon-btn" data-act="more" title="Mehr"><svg><use href="#i-more"/></svg></button>
+    </div>
+  </header>
+
+  <aside id="navigator" class="navigator glass">
+    <div class="nav-head">
+      <div class="seg small">
+        <button id="nav-all" data-act="nav-filter" data-arg="all">Alle</button>
+        <button id="nav-bm" data-act="nav-filter" data-arg="bm">Lesezeichen</button>
+      </div>
+      <button class="icon-btn small" data-act="nav" title="Schließen"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div id="nav-list" class="nav-list"></div>
+  </aside>
+
+  <div class="page-pill glass">
+    <button data-act="page-prev" title="Vorherige Seite">‹</button>
+    <span id="page-label">1 / 1</span>
+    <button data-act="page-next" title="Nächste Seite">›</button>
+    <span class="dot"></span>
+    <button id="zoom-label" data-act="fit" title="Seitenbreite">100%</button>
   </div>
-  <label class="row toggle"><span>Gefüllt</span><span class="switch"><input type="checkbox" id="shape-fill"><span></span></span></label>
-  <p class="hint">Tipp: Beim normalen Zeichnen den Stift am Ende eines Strichs kurz <b>halten</b> – daraus wird automatisch eine gerade Linie oder ein Kreis (QuickShape).</p>
-</section>
 
-<!-- Füllen -->
-<section id="panel-fill" class="panel glass" data-anchor="right">
-  <div class="panel-head"><h3>Füllen</h3></div>
-  <label class="row"><span>Toleranz</span><input type="range" id="fill-tol" min="0" max="100"><output id="fill-tol-v"></output></label>
-  <label class="row toggle"><span>Alle Ebenen berücksichtigen</span><span class="switch"><input type="checkbox" id="fill-all"><span></span></span></label>
-</section>
-
-<!-- Symmetrie -->
-<section id="panel-sym" class="panel glass" data-anchor="left">
-  <div class="panel-head"><h3>Symmetrie</h3></div>
-  <div class="seg" id="sym-seg">
-    <button data-sym="off">Aus</button>
-    <button data-sym="vertical">Vertikal</button>
-    <button data-sym="horizontal">Horizontal</button>
-    <button data-sym="quad">Vierfach</button>
-    <button data-sym="radial">Radial</button>
+  <div id="sel-menu" class="sel-menu glass hidden">
+    <div class="sel-colors" id="sel-colors"></div>
+    <span class="sep"></span>
+    <button data-act="sel-copy" title="Kopieren"><svg><use href="#i-copy"/></svg></button>
+    <button data-act="sel-cut" title="Ausschneiden"><svg><use href="#i-cut"/></svg></button>
+    <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
+    <button data-act="sel-delete" class="danger" title="Löschen"><svg><use href="#i-trash"/></svg></button>
   </div>
-  <label class="row"><span>Radial-Segmente</span><input type="range" id="sym-n" min="2" max="24"><output id="sym-n-v"></output></label>
+  <button id="paste-btn" class="paste-btn glass hidden" data-act="paste"><svg><use href="#i-paste"/></svg>Einfügen</button>
+  <div id="cursor"></div>
 </section>
 
-<!-- Menü -->
-<section id="panel-menu" class="panel glass menu" data-anchor="left">
-  <button id="m-new" class="mi">Neue Leinwand …</button>
-  <button id="m-open" class="mi">Projekt öffnen …</button>
-  <button id="m-save" class="mi">Projekt speichern (.zeichen)</button>
-  <button id="m-export" class="mi">Als PNG exportieren</button>
-  <button id="m-export-t" class="mi">Als PNG exportieren (transparent)</button>
+<!-- Werkzeug-Optionen -->
+<div id="pop-tool" class="popover glass hidden"></div>
+
+<!-- Mehr-Menü -->
+<div id="pop-more" class="popover menu glass hidden">
+  <button class="mi" data-act="export-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
+  <button class="mi" data-act="export-page-pdf"><svg><use href="#i-export"/></svg>Diese Seite als PDF</button>
+  <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
+  <button class="mi" data-act="export-znote"><svg><use href="#i-copy"/></svg>Backup speichern (.znote)</button>
   <hr>
-  <button id="m-paper" class="mi">Papier &amp; Vorlage …</button>
-  <button id="m-fit" class="mi">Ansicht einpassen</button>
-  <button id="m-flip" class="mi">Ansicht spiegeln (Kontrolle)</button>
-  <button id="m-fullscreen" class="mi">Vollbild</button>
+  <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier ändern …</button>
+  <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
+  <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
+  <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
   <hr>
-  <a id="m-apk" class="mi" href="zeichentool.apk" download>Android-App (APK) herunterladen</a>
-  <button id="m-settings" class="mi">Einstellungen &amp; S-Pen</button>
-  <button id="m-help" class="mi">Gesten &amp; Tastenkürzel</button>
-  <div class="menu-foot">Zeichentool · Rust + WebAssembly · <span id="save-state">gespeichert</span></div>
-</section>
+  <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+</div>
 
-<!-- Einstellungen -->
-<section id="panel-settings" class="panel glass" data-anchor="left">
-  <div class="panel-head"><h3>Einstellungen</h3></div>
-  <h4>S-Pen</h4>
-  <label class="row toggle"><span>Nur mit Stift zeichnen<br><small>Finger zoomen, drehen und verschieben</small></span><span class="switch"><input type="checkbox" id="set-pen-only"><span></span></span></label>
-  <label class="row"><span>Druckkurve<br><small id="set-gamma-desc">normal</small></span><input type="range" id="set-gamma" min="30" max="250"><output id="set-gamma-v"></output></label>
-  <label class="row"><span>S-Pen-Taste</span>
-    <select id="set-pen-button">
-      <option value="select">Drücken: Radierer wählen (nochmal: zurück)</option>
-      <option value="hold">Beim Zeichnen halten: Radierer</option>
-      <option value="picker">Beim Zeichnen halten: Pipette</option>
-      <option value="undo">Drücken (schwebend): Rückgängig</option>
-    </select>
-  </label>
-  <h4>Handballen</h4>
-  <label class="row"><span>Sperre nach Stift<br><small>Finger/Handballen bewegen nichts, solange der Stift schwebt und so lange danach</small></span><input type="range" id="set-palm" min="0" max="50"><output id="set-palm-v"></output></label>
-  <label class="row toggle"><span>Große Auflageflächen ignorieren<br><small>Handballen wird nie als Finger erkannt</small></span><span class="switch"><input type="checkbox" id="set-ignore-large"><span></span></span></label>
-  <label class="row toggle"><span>Mit einem Finger verschieben<br><small>Wie in GoodNotes – die Hand wird ignoriert, solange der Stift in der Nähe ist</small></span><span class="switch"><input type="checkbox" id="set-one-finger"><span></span></span></label>
-  <h4>Zeichnen</h4>
-  <label class="row toggle"><span>QuickShape (Stift halten = Form)</span><span class="switch"><input type="checkbox" id="set-quickshape"><span></span></span></label>
-  <label class="row toggle"><span>Pinselvorschau beim Schweben</span><span class="switch"><input type="checkbox" id="set-hover"><span></span></span></label>
-  <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf zeichnen …</div><div id="pen-native"></div></div>
-  <h4>Oberfläche</h4>
-  <label class="row toggle"><span>Regler rechts (Linkshänder: aus)</span><span class="switch"><input type="checkbox" id="set-side-right"><span></span></span></label>
-</section>
+<!-- Kontextmenü Bibliothek -->
+<div id="pop-card" class="popover menu glass hidden">
+  <button class="mi" data-act="card-open"><svg><use href="#i-pen"/></svg>Öffnen</button>
+  <button class="mi" data-act="card-rename"><svg><use href="#i-text"/></svg>Umbenennen</button>
+  <button class="mi" data-act="card-fav"><svg><use href="#i-star"/></svg><span id="card-fav-label">Favorit</span></button>
+  <button class="mi" data-act="card-cover"><svg><use href="#i-palette"/></svg>Cover ändern</button>
+  <button class="mi" data-act="card-dup"><svg><use href="#i-dup"/></svg>Duplizieren</button>
+  <button class="mi" data-act="card-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
+  <button class="mi" data-act="card-znote"><svg><use href="#i-copy"/></svg>Backup speichern</button>
+  <hr>
+  <button class="mi danger" data-act="card-delete"><svg><use href="#i-trash"/></svg>Löschen</button>
+</div>
 
-<!-- Papier & Vorlage -->
-<section id="panel-paper" class="panel glass" data-anchor="left">
-  <div class="panel-head"><h3>Papier &amp; Vorlage</h3></div>
-    <h4>Vorlage</h4>
-    <div class="tpl-grid" id="pp-tpl">
-      <button data-tpl="blank"><span class="tpl-prev tpl-blank"></span>Blanko</button>
-      <button data-tpl="lined"><span class="tpl-prev tpl-lined"></span>Liniert</button>
-      <button data-tpl="grid"><span class="tpl-prev tpl-kariert"></span>Kariert</button>
-      <button data-tpl="dots"><span class="tpl-prev tpl-dots"></span>Gepunktet</button>
-      <button data-tpl="cornell"><span class="tpl-prev tpl-cornell"></span>Cornell</button>
-      <button data-tpl="music"><span class="tpl-prev tpl-music"></span>Notenlinien</button>
-    </div>
-    <h4>Linienabstand</h4>
-    <div class="seg" id="pp-sp">
-      <button data-sp="0">Eng</button>
-      <button data-sp="1">Mittel</button>
-      <button data-sp="2">Weit</button>
-    </div>
-    <h4>Papier</h4>
-    <div class="paper-sw" id="pp-col">
-      <button data-paper="#ffffff" style="background:#ffffff" title="Weiß"></button>
-      <button data-paper="#fbf6e9" style="background:#fbf6e9" title="Creme"></button>
-      <button data-paper="#fff8c4" style="background:#fff8c4" title="Notizgelb"></button>
-      <button data-paper="#e9eef5" style="background:#e9eef5" title="Hellblau"></button>
-      <button data-paper="#2a2b31" style="background:#2a2b31" title="Dunkelgrau"></button>
-      <button data-paper="#111214" style="background:#111214" title="Schwarz"></button>
-      <button data-paper="#1f3b2d" style="background:#1f3b2d" title="Tafelgrün"></button>
-      <button data-paper="none" class="transparent" title="Transparent"></button>
-    </div>
-  <p class="hint">Die Linien gehören zum Papier: Sie liegen unter allen Ebenen und werden beim Radieren nicht entfernt. Beim PNG-Export „transparent“ werden sie weggelassen.</p>
-</section>
-
-<!-- Hilfe -->
-<section id="panel-help" class="panel glass" data-anchor="left">
-  <div class="panel-head"><h3>Gesten &amp; Kürzel</h3></div>
-  <ul class="help">
-    <li><b>S-Pen</b> zeichnet mit Druck &amp; Neigung – Finger werden beim Zeichnen ignoriert (Handballen).</li>
-    <li><b>S-Pen-Taste drücken</b> → Radierer, nochmal drücken → zurück (einstellbar).</li>
-    <li><b>Handballen</b>: Solange der Stift über dem Bildschirm schwebt (Stift-Symbol oben links leuchtet), bewegen Hand und Finger nichts.</li>
-    <li><b>Zwei Finger</b> → Zoomen, Drehen, Verschieben (wenn der Stift weg ist).</li>
-    <li><b>Zwei-Finger-Tipp</b> → Rückgängig · <b>Drei-Finger-Tipp</b> → Wiederholen.</li>
-    <li><b>Finger lange halten</b> → Pipette.</li>
-    <li><b>Stift am Strichende halten</b> → gerade Linie / Kreis.</li>
-    <li>Tastatur: B Pinsel · E Radierer · S Wischen · G Füllen · I Pipette · U Formen · V Verschieben · L Ebenen · [ ] Größe · Strg+Z / Strg+Y · 0 Einpassen · Leertaste+Ziehen = Hand.</li>
-  </ul>
-</section>
-
-<!-- Neue Leinwand -->
-<div id="modal-new" class="modal">
+<!-- Neues Notizbuch -->
+<div id="modal-new" class="modal hidden">
   <div class="modal-card glass">
-    <h3>Neue Leinwand</h3>
-    <h4>Format</h4>
-    <div class="preset-grid" id="new-presets">
-      <button data-w="0" data-h="0">Vollbild<br><small>wie Bildschirm</small></button>
-      <button data-w="2480" data-h="3508">A4 Hoch<br><small>300 dpi</small></button>
-      <button data-w="3508" data-h="2480">A4 Quer<br><small>300 dpi</small></button>
-      <button data-w="2048" data-h="2048">Quadrat<br><small>2048 px</small></button>
-      <button data-w="3840" data-h="2160">4K<br><small>3840×2160</small></button>
-      <button data-w="1080" data-h="1920">Story<br><small>1080×1920</small></button>
-      <button data-w="256" data-h="256">Pixel-Art<br><small>256 px</small></button>
-      <button data-w="4096" data-h="4096">Groß<br><small>4096 px</small></button>
-    </div>
-    <div class="size-row">
-      <label>Breite <input type="number" id="new-w" min="16" max="8192"></label>
-      <span>×</span>
-      <label>Höhe <input type="number" id="new-h" min="16" max="8192"></label>
-    </div>
-    <h4>Vorlage</h4>
-    <div class="tpl-grid" id="new-tpl">
-      <button data-tpl="blank"><span class="tpl-prev tpl-blank"></span>Blanko</button>
-      <button data-tpl="lined"><span class="tpl-prev tpl-lined"></span>Liniert</button>
-      <button data-tpl="grid"><span class="tpl-prev tpl-kariert"></span>Kariert</button>
-      <button data-tpl="dots"><span class="tpl-prev tpl-dots"></span>Gepunktet</button>
-      <button data-tpl="cornell"><span class="tpl-prev tpl-cornell"></span>Cornell</button>
-      <button data-tpl="music"><span class="tpl-prev tpl-music"></span>Notenlinien</button>
-    </div>
-    <h4>Linienabstand</h4>
-    <div class="seg" id="new-sp">
-      <button data-sp="0">Eng</button>
-      <button data-sp="1">Mittel</button>
-      <button data-sp="2">Weit</button>
+    <div class="modal-head"><h2>Neues Notizbuch</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="new-grid">
+      <div class="new-preview">
+        <div id="new-cover" class="cover big"><span id="new-cover-title">Notizbuch</span></div>
+      </div>
+      <div class="new-opts">
+        <label class="field"><span>Titel</span><input id="new-title" data-input="new-title" placeholder="z. B. Mathe, Ideen, Tagebuch" autocomplete="off"></label>
+        <h4>Cover</h4>
+        <div id="new-covers" class="cover-row"></div>
+        <h4>Format</h4>
+        <div class="seg" id="new-format">
+          <button data-act="new-format" data-arg="0">A4 Hoch</button>
+          <button data-act="new-format" data-arg="1">A4 Quer</button>
+          <button data-act="new-format" data-arg="2">Quadrat</button>
+          <button data-act="new-format" data-arg="3">Bildschirm</button>
+        </div>
+      </div>
     </div>
     <h4>Papier</h4>
-    <div class="paper-sw" id="new-col">
-      <button data-paper="#ffffff" style="background:#ffffff" title="Weiß"></button>
-      <button data-paper="#fbf6e9" style="background:#fbf6e9" title="Creme"></button>
-      <button data-paper="#fff8c4" style="background:#fff8c4" title="Notizgelb"></button>
-      <button data-paper="#e9eef5" style="background:#e9eef5" title="Hellblau"></button>
-      <button data-paper="#2a2b31" style="background:#2a2b31" title="Dunkelgrau"></button>
-      <button data-paper="#111214" style="background:#111214" title="Schwarz"></button>
-      <button data-paper="#1f3b2d" style="background:#1f3b2d" title="Tafelgrün"></button>
-      <button data-paper="none" class="transparent" title="Transparent"></button>
+    <div id="new-tpl" class="tpl-grid"></div>
+    <div class="paper-line">
+      <div class="seg small" id="new-sp">
+        <button data-act="new-sp" data-arg="0">Eng</button>
+        <button data-act="new-sp" data-arg="1">Mittel</button>
+        <button data-act="new-sp" data-arg="2">Weit</button>
+      </div>
+      <div id="new-paper" class="paper-sw"></div>
     </div>
-    <p class="hint">Die aktuelle Zeichnung wird ersetzt. Speichere sie vorher, falls du sie behalten möchtest.</p>
     <div class="modal-actions">
-      <button id="new-cancel" class="btn ghost">Abbrechen</button>
-      <button id="new-create" class="btn primary">Erstellen</button>
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="new-create">Erstellen</button>
     </div>
   </div>
 </div>
 
-<div id="loading"><div class="spinner"></div><span>Zeichentool wird geladen …</span></div>
+<!-- Vorlage ändern -->
+<div id="modal-tpl" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Vorlage &amp; Papier</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <div id="tpl-tpl" class="tpl-grid"></div>
+    <div class="paper-line">
+      <div class="seg small" id="tpl-sp">
+        <button data-act="tpl-sp" data-arg="0">Eng</button>
+        <button data-act="tpl-sp" data-arg="1">Mittel</button>
+        <button data-act="tpl-sp" data-arg="2">Weit</button>
+      </div>
+      <div id="tpl-paper" class="paper-sw"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn" data-act="tpl-apply" data-arg="all">Alle Seiten</button>
+      <button class="btn primary" data-act="tpl-apply" data-arg="page">Diese Seite</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cover ändern -->
+<div id="modal-cover" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><h2>Cover ändern</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <div id="cover-pick" class="cover-row wrap"></div>
+  </div>
+</div>
+
+<!-- Einstellungen -->
+<div id="modal-settings" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Einstellungen</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <h4>Darstellung</h4>
+    <div class="seg" id="set-theme">
+      <button data-act="set-theme" data-arg="system">System</button>
+      <button data-act="set-theme" data-arg="light">Hell</button>
+      <button data-act="set-theme" data-arg="dark">Dunkel</button>
+    </div>
+    <h4>Schreiben</h4>
+    <label class="row toggle"><span>Druckempfindlichkeit<br><small>Strichstärke folgt dem Druck des S-Pens</small></span><span class="switch"><input type="checkbox" id="set-pressure" data-input="set-pressure"><span></span></span></label>
+    <label class="row"><span>Stabilisierung<br><small>ruhigere, glattere Linien</small></span><input type="range" id="set-smooth" data-input="set-smooth" min="0" max="90"><output id="set-smooth-v"></output></label>
+    <label class="row toggle"><span>Formen erkennen<br><small>Stift am Strichende kurz halten → Linie, Kreis, Rechteck …</small></span><span class="switch"><input type="checkbox" id="set-quick" data-input="set-quick"><span></span></span></label>
+    <h4>S-Pen &amp; Handballen</h4>
+    <label class="row"><span>S-Pen-Taste</span>
+      <select id="set-button" data-input="set-button">
+        <option value="select">Drücken: Radierer ↔ Stift</option>
+        <option value="hold">Halten: Radierer</option>
+        <option value="undo">Drücken: Rückgängig</option>
+      </select>
+    </label>
+    <label class="row"><span>Handballen-Sperre<br><small>Hand und Finger bewegen nichts, solange der Stift in der Nähe ist – und so lange danach</small></span><input type="range" id="set-palm" data-input="set-palm" min="0" max="50"><output id="set-palm-v"></output></label>
+    <label class="row toggle"><span>Mit einem Finger scrollen</span><span class="switch"><input type="checkbox" id="set-scroll" data-input="set-scroll"><span></span></span></label>
+    <label class="row toggle"><span>Mit dem Finger schreiben<br><small>Aus: nur der S-Pen schreibt (empfohlen)</small></span><span class="switch"><input type="checkbox" id="set-finger" data-input="set-finger"><span></span></span></label>
+    <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf schreiben …</div><div id="pen-native"></div></div>
+    <h4>Gesten</h4>
+    <ul class="help">
+      <li><b>Zwei Finger</b>: zoomen und verschieben · <b>Zwei-Finger-Tipp</b>: rückgängig · <b>Drei-Finger-Tipp</b>: wiederholen</li>
+      <li><b>Lasso</b>: einkreisen → verschieben, Ecke ziehen zum Skalieren, Farbe ändern, kopieren · leerer Tipp → Einfügen</li>
+      <li><b>Tastatur</b>: P Stift · H Textmarker · E Radierer · L Lasso · S Formen · T Text · Strg+Z/Y · Entf</li>
+    </ul>
+    <p class="muted small-print">Notizen · Rust + WebAssembly · <span id="save-state">gespeichert</span></p>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span>Notizen werden geladen …</span></div>
 <div id="toast"></div>
-<input type="file" id="file-open" accept=".zeichen,application/octet-stream" hidden>
-<input type="file" id="file-import" accept="image/*" hidden>
+<input type="file" id="file-image" accept="image/*" hidden>
+<input type="file" id="file-import" accept=".znote,.zeichen,image/*,application/octet-stream" hidden>
 
 <script type="module">
   import init from './pkg/zeichentool.js';
   init().catch((e) => {
-    document.getElementById('loading').innerHTML =
-      '<span>Fehler beim Laden: ' + e + '</span>';
+    document.getElementById('loading').innerHTML = '<span>Fehler beim Laden: ' + e + '</span>';
   });
 </script>
 </body>

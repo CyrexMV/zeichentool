@@ -1,7 +1,6 @@
-//! Eingabe: S-Pen (Druck, Neigung, Schweben, Seitentaste), Finger-Gesten, Maus, Tastatur.
+//! Eingabe: S-Pen (Druck, Schweben, Seitentaste), Handballen-Sperre, Finger-Gesten mit Schwung, Maus, Tastatur.
 
 use super::*;
-use crate::engine::InputPoint;
 use web_sys::{KeyboardEvent, PointerEvent, WheelEvent};
 
 #[derive(Clone, Copy, Debug)]
@@ -13,19 +12,18 @@ pub struct TouchPt {
     pub sy: f64,
 }
 
-/// Laufende Mehrfinger-Geste.
 pub struct Gesture {
-    /// Ansicht beim ersten Finger – wird wiederhergestellt, falls sich die Geste als Handballen entpuppt
-    pub origin_view: Affine,
-    pub start_view: Affine,
+    pub origin: (f64, f64, f64),
+    pub base: (f64, f64, f64),
     pub anchors: Vec<(i32, f64, f64)>,
     pub max_fingers: usize,
     pub t0: f64,
     pub moved: f64,
-    pub picker: bool,
+    /// letzte Bewegungen für den Schwung (dx, dy, dt)
+    pub vel: Vec<(f64, f64, f64)>,
+    pub last: (f64, f64, f64),
 }
 
-/// Fließkomma-Koordinaten (web-sys liefert sonst nur ganze CSS-Pixel).
 pub fn client_xy(e: &PointerEvent) -> (f64, f64) {
     let get = |k: &str| js_sys::Reflect::get(e, &k.into()).ok().and_then(|v| v.as_f64());
     match (get("clientX"), get("clientY")) {
@@ -34,14 +32,47 @@ pub fn client_xy(e: &PointerEvent) -> (f64, f64) {
     }
 }
 
+fn samples(e: &PointerEvent) -> Vec<(f64, f64, f32)> {
+    let list = e.get_coalesced_events();
+    let pen = e.pointer_type() == "pen";
+    let conv = |pe: &PointerEvent| {
+        let (x, y) = client_xy(pe);
+        (x, y, if pen { pe.pressure().clamp(0.0, 1.0) } else { 0.55 })
+    };
+    if list.length() == 0 {
+        vec![conv(e)]
+    } else {
+        (0..list.length()).map(|i| conv(&list.get(i).unchecked_into::<PointerEvent>())).collect()
+    }
+}
+
+fn predicted(e: &PointerEvent) -> Vec<(f64, f64, f32)> {
+    let Ok(f) = js_sys::Reflect::get(e, &"getPredictedEvents".into()) else { return Vec::new() };
+    let Some(f) = f.dyn_ref::<js_sys::Function>() else { return Vec::new() };
+    let Ok(arr) = f.call0(e) else { return Vec::new() };
+    let arr: js_sys::Array = arr.unchecked_into();
+    (0..arr.length().min(3))
+        .map(|i| {
+            let pe: PointerEvent = arr.get(i).unchecked_into();
+            let (x, y) = client_xy(&pe);
+            (x, y, pe.pressure().clamp(0.0, 1.0))
+        })
+        .collect()
+}
+
 pub fn bind_input() {
-    let stage = el("stage");
+    let stage = el("editor");
     on(&stage, "pointerdown", |e: PointerEvent| {
+        if !is_canvas_target(&e) {
+            return;
+        }
         e.prevent_default();
         with_app(|a| a.pointer_down(&e));
     });
     on(&stage, "pointermove", |e: PointerEvent| {
-        e.prevent_default();
+        if !is_canvas_target(&e) && e.buttons() == 0 {
+            return;
+        }
         with_app(|a| a.pointer_move(&e));
     });
     on(&stage, "pointerup", |e: PointerEvent| {
@@ -51,27 +82,43 @@ pub fn bind_input() {
         with_app(|a| a.pointer_up(&e, true));
     });
     on(&stage, "pointerleave", |e: PointerEvent| {
-        with_app(|a| {
-            if e.pointer_type() == "pen" {
+        if e.pointer_type() == "pen" {
+            with_app(|a| {
                 a.pen_left();
-            }
-            if a.stroke.as_ref().map(|s| s.pointer) != Some(e.pointer_id()) {
                 a.hide_cursor();
-            }
-        });
+            });
+        }
     });
     on(&stage, "wheel", |e: WheelEvent| {
         e.prevent_default();
         with_app(|a| a.wheel(&e));
     });
-    // S-Pen-Taste und langes Drücken öffnen sonst ein Kontextmenü.
-    // Manche Browser melden die S-Pen-Taste nur als Kontextmenü-Ereignis → als Tastendruck werten.
     on(&dom(), "contextmenu", |e: Event| {
-        e.prevent_default();
+        let tag = e.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()).map(|el| el.tag_name()).unwrap_or_default();
+        if tag != "INPUT" && tag != "TEXTAREA" {
+            e.prevent_default();
+        }
         let pen = js_sys::Reflect::get(&e, &"pointerType".into()).ok().and_then(|v| v.as_string()).as_deref() == Some("pen");
         if pen {
             with_app(|a| a.native_pen_button(true));
         }
+    });
+    on(&window(), "keydown", |e: KeyboardEvent| {
+        with_app(|a| a.key_down(&e));
+    });
+    on(&window(), "keyup", |e: KeyboardEvent| {
+        if e.code() == "Space" {
+            with_app(|a| a.space_down = false);
+        }
+    });
+    on(&window(), "resize", |_: Event| {
+        with_app(|a| {
+            if let Some(ed) = &mut a.ed {
+                ed.resize();
+            }
+            a.position_overlays();
+            a.request_frame();
+        });
     });
     // Rückrufe der Android-App (MainActivity liest Taste und Stift-Nähe direkt aus Android)
     let w = window();
@@ -87,79 +134,34 @@ pub fn bind_input() {
     });
     let _ = js_sys::Reflect::set(&w, &"zeichentoolPenState".into(), state.as_ref());
     state.forget();
-    on(&dom(), "gesturestart", |e: Event| e.prevent_default());
-    on(&window(), "keydown", |e: KeyboardEvent| {
-        with_app(|a| a.key_down(&e));
-    });
-    on(&window(), "keyup", |e: KeyboardEvent| {
-        if e.code() == "Space" {
-            with_app(|a| {
-                a.space_down = false;
-                set_class(&a.stage, "panning", false);
-            });
-        }
-    });
-    on(&window(), "resize", |_: Event| {
-        with_app(|a| {
-            if a.view_fitted {
-                a.fit_view();
-            }
-        });
-    });
+}
+
+/// Nur Ereignisse auf der Zeichenfläche (nicht auf Leisten/Menüs) steuern das Zeichnen.
+fn is_canvas_target(e: &PointerEvent) -> bool {
+    e.target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+        .map(|el| el.id() == "live" || el.id() == "view")
+        .unwrap_or(false)
 }
 
 impl App {
-    /// Zeichnen Finger? (Nein, sobald ein S-Pen erkannt wurde und „Nur Stift“ aktiv ist.)
-    pub fn touch_draws(&self) -> bool {
-        !(self.settings.pen_only && self.pen_seen)
-    }
-
-    pub fn input_points(&self, e: &PointerEvent) -> Vec<InputPoint> {
-        let list = e.get_coalesced_events();
-        let n = list.length();
-        if n == 0 {
-            vec![self.to_input(e)]
-        } else {
-            (0..n).map(|i| self.to_input(&list.get(i).unchecked_into::<PointerEvent>())).collect()
-        }
-    }
-
-    pub fn to_input(&self, e: &PointerEvent) -> InputPoint {
-        let (sx, sy) = client_xy(e);
-        let inv = self.view.invert();
-        let (x, y) = inv.apply(sx, sy);
-        let pen = e.pointer_type() == "pen";
-        let pressure = if pen { e.pressure().clamp(0.0, 1.0) } else { 1.0 };
-        let (mut tx, mut ty) = (0.0f32, 0.0f32);
-        if pen {
-            let (rx, ry) = (e.tilt_x() as f64, e.tilt_y() as f64);
-            let mag = (rx * rx + ry * ry).sqrt();
-            if mag > 0.5 {
-                // Neigungsrichtung in Dokumentkoordinaten drehen
-                let (vx, vy) = inv.apply_vec(rx, ry);
-                let vm = (vx * vx + vy * vy).sqrt().max(1e-9);
-                tx = (vx / vm * mag) as f32;
-                ty = (vy / vm * mag) as f32;
-            }
-        }
-        InputPoint { x: x as f32, y: y as f32, pressure, tilt_x: tx, tilt_y: ty }
-    }
-
     fn pointer_down(&mut self, e: &PointerEvent) {
-        if self.open_panel.is_some() {
-            self.close_panels();
+        if self.screen != Screen::Editor {
             return;
         }
         match e.pointer_type().as_str() {
-            "pen" => self.pen_event(e, false),
+            "pen" => self.pen_event(e),
             "touch" => self.touch_down(e),
             _ => self.mouse_down(e),
         }
     }
 
     fn pointer_move(&mut self, e: &PointerEvent) {
+        if self.screen != Screen::Editor {
+            return;
+        }
         match e.pointer_type().as_str() {
-            "pen" => self.pen_event(e, false),
+            "pen" => self.pen_event(e),
             "touch" => self.touch_move(e),
             _ => self.mouse_move(e),
         }
@@ -167,115 +169,85 @@ impl App {
 
     fn pointer_up(&mut self, e: &PointerEvent, cancel: bool) {
         let id = e.pointer_id();
-        let _ = self.stage.release_pointer_capture(id);
+        let _ = el("editor").release_pointer_capture(id);
         match e.pointer_type().as_str() {
             "pen" => {
                 self.last_pen_time = now();
                 self.pen_barrel = e.buttons() & 2 != 0;
-                if self.stroke.as_ref().map(|s| s.pointer) == Some(id) {
-                    let pts = self.input_points(e);
-                    self.stroke_move(&pts);
-                    self.end_stroke();
+                if self.op_pointer() == Some(id) {
+                    let pts = samples(e);
+                    self.move_op(id, &pts, &[]);
+                    self.end_op(id);
                 }
+                self.release_hold_eraser();
             }
             "touch" => self.touch_up(e, cancel),
             _ => {
-                if self.mouse_pan.as_ref().map(|m| m.0) == Some(id) {
+                if self.mouse_pan.map(|m| m.0) == Some(id) {
                     self.mouse_pan = None;
-                }
-                if self.stroke.as_ref().map(|s| s.pointer) == Some(id) {
-                    self.end_stroke();
+                } else if self.op_pointer() == Some(id) {
+                    self.end_op(id);
                 }
             }
         }
+    }
+
+    pub fn op_pointer(&self) -> Option<i32> {
+        use super::editor::Op;
+        self.ed.as_ref().and_then(|ed| match &ed.op {
+            Some(Op::Ink { pointer, .. } | Op::Erase { pointer, .. } | Op::Lasso { pointer, .. } | Op::MoveSel { pointer, .. } | Op::Laser { pointer }) => Some(*pointer),
+            None => None,
+        })
     }
 
     // ----- S-Pen -----
 
-    fn pen_event(&mut self, e: &PointerEvent, _up: bool) {
+    fn pen_event(&mut self, e: &PointerEvent) {
         let t = now();
-        if !self.pen_seen {
-            self.pen_seen = true;
+        if !self.settings.pen_seen {
+            self.settings.pen_seen = true;
             self.save_settings();
-            if self.settings.pen_only {
-                self.toast("S-Pen erkannt – Finger steuern jetzt nur die Ansicht");
-            }
         }
         self.last_pen_time = t;
         self.pen_in_range = true;
+        self.momentum = None;
         self.update_pen_badge();
-        // Handballen lag schon auf dem Bildschirm: Finger-Aktionen abbrechen und
-        // eine versehentlich verschobene Ansicht zurücksetzen.
-        if self.gesture.is_some() || self.stroke.as_ref().map(|s| s.touch).unwrap_or(false) {
-            if self.stroke.as_ref().map(|s| s.touch).unwrap_or(false) {
-                self.cancel_stroke();
-            }
-            if let Some(g) = self.gesture.take() {
-                if t - g.t0 < 2500.0 && self.view != g.origin_view {
-                    self.view = g.origin_view;
-                    self.apply_view();
-                }
-            }
-            self.touches.clear();
+        // Hand lag schon auf: Finger-Aktionen abbrechen, verschobene Ansicht zurücksetzen
+        if self.gesture.is_some() || (!self.touches.is_empty()) {
+            self.abort_touch(true);
         }
         let id = e.pointer_id();
         let buttons = e.buttons();
         let contact = buttons & 1 != 0;
-        let barrel = buttons & 2 != 0;
-        let eraser_tip = buttons & 32 != 0;
+        let barrel = buttons & 2 != 0 || buttons & 32 != 0;
         let (sx, sy) = client_xy(e);
-
-        // S-Pen-Taste: nur beim Herunterdrücken reagieren (egal ob schwebend oder aufgesetzt)
         if barrel && !self.pen_barrel {
             self.pen_barrel = true;
-            self.pen_button_pressed(contact);
-        } else if !barrel {
+            self.pen_button_pressed();
+        } else if !barrel && !self.native_button {
             self.pen_barrel = false;
+            self.release_hold_eraser();
         }
-
-        let mine = self.stroke.as_ref().map(|s| s.pointer) == Some(id);
+        let mine = self.op_pointer() == Some(id);
         if contact {
-            if self.stroke.is_none() {
-                let ov = if eraser_tip {
-                    Some(Tool::Eraser)
-                } else if barrel {
-                    match self.settings.pen_button {
-                        PenButton::Hold => Some(Tool::Eraser),
-                        PenButton::Picker => Some(Tool::Picker),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-                let _ = self.stage.set_pointer_capture(id);
-                let p = self.to_input(e);
-                self.begin_stroke(id, p, ov, false);
-                if !matches!(self.tool_for(ov), Tool::Eraser | Tool::Smudge) {
-                    self.hide_cursor();
-                } else {
-                    self.show_cursor(sx, sy, ov);
-                }
+            if self.op_pointer().is_none() {
+                let _ = el("editor").set_pointer_capture(id);
+                self.hide_cursor();
+                self.begin_op(id, sx, sy, e.pressure());
             } else if mine {
-                let pts = self.input_points(e);
-                self.stroke_move(&pts);
-                if self.stroke.as_ref().map(|s| matches!(s.kind, StrokeKind::Erase | StrokeKind::Smudge)).unwrap_or(false) {
-                    self.show_cursor(sx, sy, None);
-                }
+                let pts = samples(e);
+                let pred = predicted(e);
+                self.move_op(id, &pts, &pred);
             }
         } else {
             if mine {
-                self.end_stroke();
+                self.end_op(id);
             }
-            // Schweben: Pinselvorschau anzeigen
-            if self.settings.hover_cursor {
-                let ov = if eraser_tip || (barrel && self.settings.pen_button == PenButton::Hold) { Some(Tool::Eraser) } else { None };
-                self.show_cursor(sx, sy, ov);
-            }
+            self.show_hover(sx, sy);
         }
     }
 
-    /// S-Pen-Taste wurde gerade gedrückt.
-    fn pen_button_pressed(&mut self, contact: bool) {
+    fn pen_button_pressed(&mut self) {
         let t = now();
         if t - self.last_barrel_press < 250.0 {
             return;
@@ -283,85 +255,81 @@ impl App {
         self.last_barrel_press = t;
         match self.settings.pen_button {
             PenButton::Select => {
-                // Läuft gerade ein Strich: abschließen, der nächste Kontakt nutzt das neue Werkzeug
-                if self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false) {
-                    self.end_stroke();
+                if let Some(p) = self.op_pointer() {
+                    self.end_op(p);
                 }
                 if self.tool == Tool::Eraser {
-                    let back = if self.prev_tool == Tool::Eraser { Tool::Brush } else { self.prev_tool };
+                    let back = if self.prev_tool == Tool::Eraser { Tool::Pen } else { self.prev_tool };
                     self.set_tool(back);
                     self.toast(back.name_de());
                 } else {
-                    self.prev_tool = self.tool;
                     self.set_tool(Tool::Eraser);
                     self.toast("Radierer");
                 }
-                let _ = window().navigator().vibrate_with_duration(8);
+                vibrate(8);
             }
-            PenButton::Undo if !contact => self.undo(),
-            _ => {}
+            PenButton::Hold => {
+                if let Some(p) = self.op_pointer() {
+                    self.end_op(p);
+                }
+                self.hold_eraser = true;
+                self.refresh_toolbar();
+            }
+            PenButton::Undo => self.undo(),
         }
     }
 
-    /// S-Pen-Taste, gemeldet von der Android-App (oder Kontextmenü-Fallback).
+    fn release_hold_eraser(&mut self) {
+        if self.hold_eraser && !self.pen_barrel {
+            if let Some(p) = self.op_pointer() {
+                self.end_op(p);
+            }
+            self.hold_eraser = false;
+            self.refresh_toolbar();
+        }
+    }
+
     pub fn native_pen_button(&mut self, down: bool) {
-        self.native_status(None, Some(down));
-        self.pen_seen = true;
+        self.native_button = down;
+        self.native_status();
+        self.settings.pen_seen = true;
         self.last_pen_time = now();
         if down {
             if !self.pen_barrel {
                 self.pen_barrel = true;
-                let contact = self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false);
-                self.pen_button_pressed(contact);
+                self.pen_button_pressed();
             }
         } else {
             self.pen_barrel = false;
+            self.release_hold_eraser();
         }
     }
 
-    /// Stift schwebt über dem Bildschirm (true) bzw. ist weg (false) – von der Android-App.
     pub fn native_pen_state(&mut self, near: bool) {
-        self.native_status(Some(near), None);
+        self.native_near = near;
+        self.native_status();
         if near {
-            self.pen_seen = true;
+            self.settings.pen_seen = true;
             self.pen_in_range = true;
             self.last_pen_time = now();
-            // eine von der Hand verschobene Ansicht zurücksetzen
-            if let Some(g) = self.gesture.take() {
-                if now() - g.t0 < 2500.0 && self.view != g.origin_view {
-                    self.view = g.origin_view;
-                    self.apply_view();
-                }
-                self.touches.clear();
-            }
+            self.abort_touch(true);
             self.update_pen_badge();
         } else {
             self.pen_left();
         }
     }
 
-    /// Anzeige im S-Pen-Testfeld (Einstellungen), was Android direkt meldet.
-    fn native_status(&mut self, near: Option<bool>, button: Option<bool>) {
-        if let Some(n) = near {
-            self.native_near = n;
-        }
-        if let Some(b) = button {
-            self.native_button = b;
-        }
-        let text = format!(
-            "Android: Stift {} · Taste {}",
-            if self.native_near { "in der Nähe" } else { "weg" },
-            if self.native_button { "GEDRÜCKT" } else { "losgelassen" }
+    fn native_status(&self) {
+        set_text(
+            "pen-native",
+            &format!("Android: Stift {} · Taste {}", if self.native_near { "in der Nähe" } else { "weg" }, if self.native_button { "GEDRÜCKT" } else { "losgelassen" }),
         );
-        el("pen-native").set_text_content(Some(&text));
     }
 
-    /// Der Stift hat den Erkennungsbereich über dem Bildschirm verlassen.
     pub fn pen_left(&mut self) {
         if self.pen_in_range {
             self.pen_in_range = false;
             self.last_pen_time = now();
-            self.pen_barrel = false;
             self.update_pen_badge();
             let ms = (self.settings.palm_lock * 1000.0) as i32 + 60;
             set_timeout(ms, || {
@@ -370,13 +338,11 @@ impl App {
         }
     }
 
-    /// Ist die Fläche gerade gegen Finger/Handballen gesperrt?
     pub fn palm_locked(&self) -> bool {
-        if !self.pen_seen {
+        if !self.settings.pen_seen {
             return false;
         }
         let dt = now() - self.last_pen_time;
-        // „im Bereich“ verfällt zur Sicherheit, falls das Verlassen nicht gemeldet wurde
         (self.pen_in_range && dt < 4_000.0) || dt < self.settings.palm_lock as f64 * 1000.0
     }
 
@@ -388,124 +354,112 @@ impl App {
         }
     }
 
-    pub fn tool_for(&self, ov: Option<Tool>) -> Tool {
-        ov.unwrap_or(self.tool)
-    }
-
-    // ----- Pinselvorschau-Kreis -----
-
-    pub fn show_cursor(&mut self, sx: f64, sy: f64, ov: Option<Tool>) {
-        let tool = self.tool_for(ov);
-        let size = match tool {
-            Tool::Brush | Tool::Shape => self.brush.size,
-            Tool::Eraser => self.eraser.size,
-            Tool::Smudge => self.smudge.size,
+    /// Schwebender Stift: Größe des Werkzeugs als Kreis anzeigen.
+    fn show_hover(&mut self, sx: f64, sy: f64) {
+        let Some(ed) = &self.ed else { return };
+        let s = ed.view.s();
+        let tool = self.effective_tool();
+        let d = match tool {
+            Tool::Pen | Tool::Shape => self.prefs.pen_sizes[self.prefs.pen_si] as f64 * s,
+            Tool::Highlighter => self.prefs.hl_sizes[self.prefs.hl_si] as f64 * s,
+            Tool::Eraser => self.prefs.er_sizes[self.prefs.er_si] as f64 * s,
             _ => {
                 self.hide_cursor();
                 return;
             }
         };
-        let d = (size as f64 * self.view.zoom()).max(4.0);
-        let c = &self.cursor;
-        style(c, "width", &format!("{}px", d));
-        style(c, "height", &format!("{}px", d));
-        style(c, "left", &format!("{}px", sx));
-        style(c, "top", &format!("{}px", sy));
-        style(c, "background", "transparent");
-        style(c, "border-color", "rgba(255,255,255,.95)");
-        set_class(c, "picker", false);
-        set_class(c, "show", true);
-    }
-
-    pub fn show_picker_cursor(&mut self, sx: f64, sy: f64) {
-        let c = &self.cursor;
-        style(c, "width", "64px");
-        style(c, "height", "64px");
-        style(c, "left", &format!("{}px", sx));
-        style(c, "top", &format!("{}px", sy - 70.0));
-        style(c, "background", &self.color.to_hex());
-        style(c, "border-color", &self.color.to_hex());
-        set_class(c, "picker", true);
-        set_class(c, "show", true);
+        let c = el("cursor");
+        let d = d.max(5.0);
+        style(&c, "width", &format!("{}px", d));
+        style(&c, "height", &format!("{}px", d));
+        style(&c, "transform", &format!("translate({}px,{}px) translate(-50%,-50%)", sx, sy));
+        set_class(&c, "eraser", tool == Tool::Eraser);
+        set_class(&c, "show", true);
     }
 
     pub fn hide_cursor(&mut self) {
-        set_class(&self.cursor, "show", false);
+        set_class(&el("cursor"), "show", false);
     }
 
     // ----- Finger -----
 
+    fn finger_draws(&self) -> bool {
+        self.settings.finger_draw || !self.settings.pen_seen
+    }
+
+    /// Finger-Eingaben verwerfen; Ansicht zurücksetzen, falls sie gerade erst verschoben wurde.
+    fn abort_touch(&mut self, restore: bool) {
+        if let Some(g) = self.gesture.take() {
+            if restore && now() - g.t0 < 2500.0 {
+                if let Some(ed) = &mut self.ed {
+                    ed.view.zoom = g.origin.0;
+                    ed.view.sx = g.origin.1;
+                    ed.view.sy = g.origin.2;
+                    ed.zooming = false;
+                    ed.clamp();
+                    ed.dirty = true;
+                }
+            }
+        }
+        let touch_op = self.touches.iter().any(|t| Some(t.id) == self.op_pointer());
+        if touch_op {
+            self.cancel_op();
+        }
+        self.touches.clear();
+        self.momentum = None;
+        self.request_frame();
+    }
+
+    fn view_tuple(&self) -> (f64, f64, f64) {
+        self.ed.as_ref().map(|e| (e.view.zoom, e.view.sx, e.view.sy)).unwrap_or((1.0, 0.0, 0.0))
+    }
+
     fn touch_down(&mut self, e: &PointerEvent) {
         let t = now();
-        // Handballen-Erkennung: während der Stift schwebt/zeichnet (und kurz danach) Finger ignorieren
-        if self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false) || self.palm_locked() {
-            return;
-        }
-        // Große Auflagefläche = Handballen
-        if self.settings.ignore_large && (e.width() > 42 || e.height() > 42) {
+        if self.palm_locked() || e.width() > 42 || e.height() > 42 {
             return;
         }
         let (x, y) = client_xy(e);
         let id = e.pointer_id();
-        let _ = self.stage.set_pointer_capture(id);
+        let _ = el("editor").set_pointer_capture(id);
+        self.momentum = None;
         self.touches.retain(|p| p.id != id);
         self.touches.push(TouchPt { id, x, y, sx: x, sy: y });
         self.hide_cursor();
-
-        if self.touches.len() == 1 && self.touch_draws() {
-            let p = self.to_input(e);
-            self.begin_stroke(id, p, None, true);
+        if self.touches.len() == 1 && self.finger_draws() && self.tool != Tool::Laser {
+            self.begin_op(id, x, y, 0.55);
             return;
         }
-        // zweiter Finger während eines Finger-Strichs → Strich war vermutlich eine Geste
-        if let Some(s) = &self.stroke {
-            if s.touch {
-                if t - s.start_t < 350.0 {
-                    self.cancel_stroke();
-                } else {
-                    self.end_stroke();
-                }
+        // zweiter Finger während eines Finger-Strichs → war eine Geste
+        if let Some(op_id) = self.op_pointer() {
+            if self.touches.iter().any(|p| p.id == op_id) {
+                self.cancel_op();
             }
         }
-        let start_t = self.gesture.as_ref().map(|g| g.t0).unwrap_or(t);
-        let max_f = self.gesture.as_ref().map(|g| g.max_fingers).unwrap_or(0).max(self.touches.len());
-        let moved = self.gesture.as_ref().map(|g| g.moved).unwrap_or(0.0);
-        let origin = self.gesture.as_ref().map(|g| g.origin_view).unwrap_or(self.view);
+        let v = self.view_tuple();
+        let (origin, t0, maxf, moved) = match &self.gesture {
+            Some(g) => (g.origin, g.t0, g.max_fingers, g.moved),
+            None => (v, t, 0, 0.0),
+        };
+        let (cx, cy) = self.centroid();
         self.gesture = Some(Gesture {
-            origin_view: origin,
-            start_view: self.view,
+            origin,
+            base: v,
             anchors: self.touches.iter().map(|p| (p.id, p.x, p.y)).collect(),
-            max_fingers: max_f,
-            t0: start_t,
+            max_fingers: maxf.max(self.touches.len()),
+            t0,
             moved,
-            picker: false,
+            vel: Vec::new(),
+            last: (cx, cy, t),
         });
-        if self.touches.len() == 1 {
-            // Langes Halten → Pipette
-            set_timeout(450, || {
-                with_app(|a| a.check_long_press());
-            });
+        if let Some(ed) = &mut self.ed {
+            ed.zooming = self.touches.len() >= 2;
         }
     }
 
-    fn check_long_press(&mut self) {
-        let ok = matches!(&self.gesture, Some(g) if g.max_fingers == 1 && g.moved < 10.0 && !g.picker) && self.touches.len() == 1;
-        if ok {
-            if let Some(g) = &mut self.gesture {
-                g.picker = true;
-            }
-            let p = self.touches[0];
-            self.pick_screen(p.x, p.y);
-            let _ = window().navigator().vibrate_with_duration(12);
-        }
-    }
-
-    fn pick_screen(&mut self, sx: f64, sy: f64) {
-        let (x, y) = self.screen_to_doc(sx, sy);
-        if let Some(c) = self.doc.sample(x.floor() as i32, y.floor() as i32) {
-            self.set_color(c, false);
-        }
-        self.show_picker_cursor(sx, sy);
+    fn centroid(&self) -> (f64, f64) {
+        let n = self.touches.len().max(1) as f64;
+        (self.touches.iter().map(|p| p.x).sum::<f64>() / n, self.touches.iter().map(|p| p.y).sum::<f64>() / n)
     }
 
     fn touch_move(&mut self, e: &PointerEvent) {
@@ -515,68 +469,61 @@ impl App {
         tp.x = x;
         tp.y = y;
         let d = ((x - tp.sx).powi(2) + (y - tp.sy).powi(2)).sqrt();
-        if self.stroke.as_ref().map(|s| s.pointer) == Some(id) {
-            let pts = self.input_points(e);
-            self.stroke_move(&pts);
+        if self.op_pointer() == Some(id) {
+            let pts = samples(e);
+            self.move_op(id, &pts, &[]);
             return;
         }
-        if let Some(g) = &mut self.gesture {
-            g.moved = g.moved.max(d);
-            if g.picker {
-                self.pick_screen(x, y);
-                return;
-            }
-        }
-        self.update_gesture();
-    }
-
-    fn update_gesture(&mut self) {
-        let Some(g) = &self.gesture else { return };
-        // kleine Bewegungen (aufgelegte Hand, Tipp-Gesten) verschieben nichts
-        if g.moved < 10.0 {
+        let one_finger = self.settings.one_finger_scroll;
+        let (cx, cy) = self.centroid();
+        let t = now();
+        let Some(g) = &mut self.gesture else { return };
+        g.moved = g.moved.max(d);
+        if g.moved < 8.0 {
             return;
         }
-        let cur: Vec<(f64, f64, f64, f64)> = g
-            .anchors
-            .iter()
-            .filter_map(|(id, ax, ay)| self.touches.iter().find(|p| p.id == *id).map(|p| (*ax, *ay, p.x, p.y)))
-            .collect();
-        let start = g.start_view;
-        let new_view = match cur.len() {
-            0 => return,
+        let dt = (t - g.last.2).max(1.0);
+        g.vel.push((cx - g.last.0, cy - g.last.1, dt));
+        if g.vel.len() > 5 {
+            g.vel.remove(0);
+        }
+        g.last = (cx, cy, t);
+        let cur: Vec<(f64, f64, f64, f64)> = g.anchors.iter().filter_map(|(id, ax, ay)| self.touches.iter().find(|p| p.id == *id).map(|p| (*ax, *ay, p.x, p.y))).collect();
+        let (z0, sx0, sy0) = g.base;
+        let Some(ed) = &mut self.ed else { return };
+        let fit = ed.view.fit;
+        match cur.len() {
+            0 => {}
             1 => {
-                if !self.settings.one_finger_pan {
+                if !one_finger {
                     return;
                 }
-                let (ax, ay, x, y) = cur[0];
-                Affine::translate(x - ax, y - ay).mul(&start)
+                let (ax, ay, qx, qy) = cur[0];
+                let s = fit * z0;
+                ed.view.zoom = z0;
+                ed.view.sx = sx0 - (qx - ax) / s;
+                ed.view.sy = sy0 - (qy - ay) / s;
             }
             _ => {
                 let (p1x, p1y, q1x, q1y) = cur[0];
                 let (p2x, p2y, q2x, q2y) = cur[1];
-                let (dpx, dpy) = (p2x - p1x, p2y - p1y);
-                let (dqx, dqy) = (q2x - q1x, q2y - q1y);
-                let lp = (dpx * dpx + dpy * dpy).sqrt().max(1.0);
-                let lq = (dqx * dqx + dqy * dqy).sqrt().max(1.0);
-                let z0 = start.zoom();
-                let s = (lq / lp).clamp(0.02 / z0, 64.0 / z0);
-                let mut th = dqy.atan2(dqx) - dpy.atan2(dpx);
-                // Einrasten bei 0°/90°/180°/270°
-                let total = start.angle() + th;
-                let q = std::f64::consts::FRAC_PI_2;
-                let snapped = (total / q).round() * q;
-                if (total - snapped).abs() < 0.06 {
-                    th += snapped - total;
-                }
+                let lp = ((p2x - p1x).powi(2) + (p2y - p1y).powi(2)).sqrt().max(1.0);
+                let lq = ((q2x - q1x).powi(2) + (q2y - q1y).powi(2)).sqrt().max(1.0);
+                let zoom = (z0 * lq / lp).clamp(0.35, 8.0);
                 let (pmx, pmy) = ((p1x + p2x) * 0.5, (p1y + p2y) * 0.5);
                 let (qmx, qmy) = ((q1x + q2x) * 0.5, (q1y + q2y) * 0.5);
-                let gm = Affine::translate(qmx, qmy).mul(&Affine::rotate(th)).mul(&Affine::scale(s)).mul(&Affine::translate(-pmx, -pmy));
-                gm.mul(&start)
+                let s0 = fit * z0;
+                let (nx, ny) = (pmx / s0 + sx0, pmy / s0 + sy0);
+                let s1 = fit * zoom;
+                ed.view.zoom = zoom;
+                ed.view.sx = nx - qmx / s1;
+                ed.view.sy = ny - qmy / s1;
             }
-        };
-        self.view = new_view;
-        self.view_fitted = false;
-        self.apply_view();
+        }
+        ed.clamp();
+        ed.dirty = true;
+        self.position_overlays();
+        self.request_frame();
     }
 
     fn touch_up(&mut self, e: &PointerEvent, cancel: bool) {
@@ -586,33 +533,78 @@ impl App {
         if was == self.touches.len() {
             return;
         }
-        if self.stroke.as_ref().map(|s| s.pointer) == Some(id) {
+        if self.op_pointer() == Some(id) {
             if cancel {
-                self.cancel_stroke();
+                self.cancel_op();
             } else {
-                self.end_stroke();
+                self.end_op(id);
             }
             return;
         }
         if self.touches.is_empty() {
             if let Some(g) = self.gesture.take() {
                 let dt = now() - g.t0;
-                if g.picker {
-                    self.hide_cursor();
-                    self.push_recent(self.color);
-                } else if !cancel && dt < 300.0 && g.moved < 14.0 {
+                if let Some(ed) = &mut self.ed {
+                    if ed.zooming {
+                        ed.zooming = false;
+                        ed.dirty = true;
+                    }
+                }
+                if !cancel && dt < 300.0 && g.moved < 14.0 {
                     match g.max_fingers {
                         2 => self.undo(),
                         3 => self.redo(),
                         _ => {}
                     }
+                } else if g.max_fingers == 1 && g.moved >= 8.0 && !cancel {
+                    // Schwung
+                    let (mut vx, mut vy, mut tt) = (0.0, 0.0, 0.0);
+                    for (dx, dy, dt) in &g.vel {
+                        vx += dx;
+                        vy += dy;
+                        tt += dt;
+                    }
+                    if tt > 0.0 && now() - g.last.2 < 80.0 {
+                        let (vx, vy) = (vx / tt, vy / tt);
+                        if (vx * vx + vy * vy).sqrt() > 0.25 {
+                            self.momentum = Some(Momentum { vx, vy, t: now() });
+                        }
+                    }
                 }
+                self.request_frame();
             }
-        } else if let Some(g) = &mut self.gesture {
-            // Neue Ausgangslage mit den verbleibenden Fingern
-            g.start_view = self.view;
-            g.anchors = self.touches.iter().map(|p| (p.id, p.x, p.y)).collect();
+        } else if self.gesture.is_some() {
+            let v = self.view_tuple();
+            let (cx, cy) = self.centroid();
+            let anchors = self.touches.iter().map(|p| (p.id, p.x, p.y)).collect();
+            if let Some(g) = &mut self.gesture {
+                g.base = v;
+                g.anchors = anchors;
+                g.last = (cx, cy, now());
+                g.vel.clear();
+            }
         }
+    }
+
+    /// Schwung-Scrollen; gibt `true` zurück, solange es weiterläuft.
+    pub fn step_momentum(&mut self, t: f64) -> bool {
+        let Some(m) = &mut self.momentum else { return false };
+        let dt = (t - m.t).clamp(0.0, 50.0);
+        m.t = t;
+        let decay = 0.995f64.powf(dt);
+        m.vx *= decay;
+        m.vy *= decay;
+        let (dx, dy) = (-m.vx * dt, -m.vy * dt);
+        let speed = (m.vx * m.vx + m.vy * m.vy).sqrt();
+        if speed < 0.02 {
+            self.momentum = None;
+            return false;
+        }
+        if let Some(ed) = &mut self.ed {
+            ed.scroll_by(dx, dy);
+        }
+        self.position_overlays();
+        true
     }
 
     // ----- Maus -----
@@ -620,50 +612,55 @@ impl App {
     fn mouse_down(&mut self, e: &PointerEvent) {
         let id = e.pointer_id();
         let (x, y) = client_xy(e);
-        let _ = self.stage.set_pointer_capture(id);
+        let _ = el("editor").set_pointer_capture(id);
         if e.button() == 1 || (e.button() == 0 && self.space_down) {
-            self.mouse_pan = Some((id, x, y, self.view));
+            self.mouse_pan = Some((id, x, y));
             return;
         }
-        let ov = if e.button() == 2 { Some(Tool::Picker) } else { None };
-        if e.button() == 0 || e.button() == 2 {
-            let p = self.to_input(e);
-            self.begin_stroke(id, p, ov, false);
+        if e.button() == 0 {
+            self.begin_op(id, x, y, 0.55);
         }
     }
 
     fn mouse_move(&mut self, e: &PointerEvent) {
         let (x, y) = client_xy(e);
-        if let Some((id, sx, sy, v)) = self.mouse_pan {
+        if let Some((id, lx, ly)) = self.mouse_pan {
             if id == e.pointer_id() {
-                self.view = Affine::translate(x - sx, y - sy).mul(&v);
-                self.view_fitted = false;
-                self.apply_view();
+                if let Some(ed) = &mut self.ed {
+                    ed.scroll_by(lx - x, ly - y);
+                }
+                self.mouse_pan = Some((id, x, y));
+                self.position_overlays();
+                self.request_frame();
                 return;
             }
         }
-        if self.stroke.as_ref().map(|s| s.pointer) == Some(e.pointer_id()) {
-            let pts = self.input_points(e);
-            self.stroke_move(&pts);
-        }
-        if self.space_down {
-            self.hide_cursor();
+        if self.op_pointer() == Some(e.pointer_id()) {
+            let pts = samples(e);
+            self.move_op(e.pointer_id(), &pts, &[]);
         } else {
-            self.show_cursor(x, y, None);
+            self.show_hover(x, y);
         }
     }
 
     fn wheel(&mut self, e: &WheelEvent) {
-        let (x, y) = (e.client_x() as f64, e.client_y() as f64);
+        let Some(ed) = &mut self.ed else { return };
         let mut dy = e.delta_y();
+        let mut dx = e.delta_x();
         if e.delta_mode() == 1 {
             dy *= 32.0;
+            dx *= 32.0;
         }
-        let z0 = self.view.zoom();
-        let f = (-dy * 0.0015).exp().clamp(0.02 / z0, 64.0 / z0);
-        self.view = Affine::translate(x, y).mul(&Affine::scale(f)).mul(&Affine::translate(-x, -y)).mul(&self.view);
-        self.view_fitted = false;
-        self.apply_view();
+        if e.ctrl_key() || e.meta_key() {
+            let f = (-dy * 0.0025).exp();
+            let z = ed.view.zoom * f;
+            ed.zoom_about(z, e.client_x() as f64, e.client_y() as f64);
+            ed.bmps.clear();
+        } else {
+            ed.scroll_by(dx, dy);
+        }
+        self.position_overlays();
+        self.request_frame();
     }
 
     // ----- Tastatur -----
@@ -672,10 +669,20 @@ impl App {
         if let Some(t) = e.target() {
             if let Some(el) = t.dyn_ref::<web_sys::Element>() {
                 let tag = el.tag_name();
-                if tag == "INPUT" || tag == "SELECT" || tag == "TEXTAREA" {
+                if tag == "INPUT" || tag == "TEXTAREA" || tag == "SELECT" {
+                    if e.key() == "Escape" && tag == "TEXTAREA" {
+                        self.commit_text();
+                    }
                     return;
                 }
             }
+        }
+        if e.key() == "Escape" {
+            self.close_popovers();
+            self.close_modals();
+        }
+        if self.screen != Screen::Editor {
+            return;
         }
         let ctrl = e.ctrl_key() || e.meta_key();
         let key = e.key().to_lowercase();
@@ -684,41 +691,36 @@ impl App {
                 "z" if e.shift_key() => self.redo(),
                 "z" => self.undo(),
                 "y" => self.redo(),
-                "s" => self.download_project(),
+                "c" => self.selection_action("sel-copy", ""),
+                "x" => self.selection_action("sel-cut", ""),
+                "d" => self.selection_action("sel-dup", ""),
                 _ => return,
             }
             e.prevent_default();
             return;
         }
         match key.as_str() {
-            "b" => self.set_tool(Tool::Brush),
+            "p" => self.set_tool(Tool::Pen),
+            "h" => self.set_tool(Tool::Highlighter),
             "e" => self.set_tool(Tool::Eraser),
-            "s" => self.set_tool(Tool::Smudge),
-            "g" => self.set_tool(Tool::Fill),
-            "i" => self.set_tool(Tool::Picker),
-            "u" => self.set_tool(Tool::Shape),
-            "v" => self.set_tool(Tool::Move),
-            "l" => self.toggle_panel("panel-layers"),
-            "c" => self.toggle_panel("panel-color"),
-            "0" => self.fit_view(),
-            "[" => self.nudge_size(1.0 / 1.15),
-            "]" => self.nudge_size(1.15),
-            "escape" => self.close_panels(),
-            " " => {
-                if !e.repeat() {
-                    self.space_down = true;
-                    set_class(&self.stage, "panning", true);
+            "l" => self.set_tool(Tool::Lasso),
+            "s" => self.set_tool(Tool::Shape),
+            "t" => self.set_tool(Tool::Text),
+            "delete" | "backspace" => self.selection_action("sel-delete", ""),
+            "escape" => {
+                self.close_popovers();
+                if let Some(ed) = &mut self.ed {
+                    ed.selection = None;
+                    ed.dirty = true;
                 }
+                self.position_overlays();
+                self.request_frame();
             }
+            "pagedown" | "arrowright" => self.goto_relative(1),
+            "pageup" | "arrowleft" => self.goto_relative(-1),
+            " " => self.space_down = true,
             _ => return,
         }
         e.prevent_default();
-    }
-
-    fn nudge_size(&mut self, f: f32) {
-        let s = self.slot_mut();
-        s.size = (s.size * f).clamp(1.0, 1000.0);
-        self.refresh_side();
-        self.save_settings();
     }
 }
