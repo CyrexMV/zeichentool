@@ -17,6 +17,9 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
   (beim Erstellen wählbar, sonst ⋯ → „Deckblatt hinzufügen“; Titel und Cover wandern beim Ändern mit)
 - Umbenennen, Cover ändern, Duplizieren, Löschen, Export – alles über das ⋯-Menü der Karte
 - Import von Backups (`.znote`), Bildern und alten Zeichnungen; die bisherige Zeichnung wird automatisch übernommen
+- **Handschrift-PDF importieren** (Startbildschirm → Import → „Handschrift-PDF (z. B. GoodNotes)“): Handschrift aus
+  exportierten PDFs wird als Vektoren übernommen – jeder Strich einzeln radier-, auswähl- und umfärbbar,
+  Papier/Karos/Text bleiben als Hintergrund
 - **PDF importieren** (Startbildschirm → Import-Symbol → „PDF als Notizbuch“): jede PDF-Seite wird zur Seite, auf der man direkt schreiben kann (auch „⋯ → PDF-Seiten einfügen“)
 - **Jahresplaner** (Neues Notizbuch → „Jahresplaner 2026/2027“): Jahresübersicht, 12 Monate und alle Wochen mit echten
   Daten; Monats-Reiter, Mini-Monate, Kalenderwochen und ‹ › sind verlinkt – auch im exportierten PDF

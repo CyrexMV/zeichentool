@@ -69,6 +69,152 @@
       doc.destroy();
       return out;
     },
+    /** Handschrift-PDF (z. B. GoodNotes-Export): Handschrift als Vektoren herauslösen.
+     *  Pro Seite: Hintergrund ohne Handschrift als JPEG + Liste der Striche
+     *  { c: [r,g,b,a], fill: bool, w: Linienbreite, p: Float32Array (x,y,…; NaN,NaN trennt Teilpfade) }
+     *  in Seitenkoordinaten (pt, oben links). */
+    async renderInk(bytes, maxPx, progress) {
+      const lib = await loadPdfJs();
+      const OPS = lib.OPS, Util = lib.Util;
+      const doc = await lib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      const out = [];
+      const canvas = document.createElement('canvas');
+      const real = canvas.getContext('2d', { alpha: false });
+      for (let pi = 1; pi <= n; pi++) {
+        const page = await doc.getPage(pi);
+        const vp1 = page.getViewport({ scale: 1 });
+        const pw = vp1.width, ph = vp1.height;
+        const ol = await page.getOperatorList();
+        // --- Zeichenbefehle durchgehen ---
+        let ctm = vp1.transform.slice();
+        const stack = [];
+        let fill = [0, 0, 0], stroke = [0, 0, 0], fa = 1, sa = 1, lw = 1, pattern = false;
+        let path = [], cur = null, curves = 0, group = 0;
+        let fillIdx = 0, strokeIdx = 0;
+        const skipFill = new Set(), skipStroke = new Set();
+        const ink = [];
+        const tp = (x, y) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
+        const rgb = (a) => {
+          if (typeof a[0] === 'string') { const h = a[0].replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+          return [a[0], a[1], a[2]].map((v) => (v <= 1 ? Math.round(v * 255) : Math.round(v)));
+        };
+        const bez = (p0, p1, p2, p3) => {
+          const len = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]) + Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) + Math.hypot(p3[0] - p2[0], p3[1] - p2[1]);
+          const k = Math.max(1, Math.min(10, Math.ceil(len / 1.2)));
+          for (let i = 1; i <= k; i++) {
+            const t = i / k, u = 1 - t;
+            cur.push([u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]);
+          }
+        };
+        const scaleOf = () => Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]));
+        const isInk = () => {
+          if (!path.length || pattern || group > 0 || curves === 0) return false;
+          let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+          for (const sp of path) for (const q of sp) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+          return (x1 - x0) < pw * 0.7 && (y1 - y0) < ph * 0.7;
+        };
+        const flat = () => {
+          let len = 0; for (const sp of path) len += sp.length * 2 + 2;
+          const a = new Float32Array(len); let o = 0;
+          for (const sp of path) { for (const q of sp) { a[o++] = q[0]; a[o++] = q[1]; } a[o++] = NaN; a[o++] = NaN; }
+          return a;
+        };
+        const fn = ol.fnArray, args = ol.argsArray;
+        for (let i = 0; i < fn.length; i++) {
+          const f = fn[i], a = args[i];
+          switch (f) {
+            case OPS.save: stack.push([ctm.slice(), fill, stroke, fa, sa, lw, pattern]); break;
+            case OPS.restore: { const s = stack.pop(); if (s) [ctm, fill, stroke, fa, sa, lw, pattern] = s; break; }
+            case OPS.transform: ctm = Util.transform(ctm, a); break;
+            case OPS.paintFormXObjectBegin: stack.push([ctm.slice(), fill, stroke, fa, sa, lw, pattern]); if (a && a[0]) ctm = Util.transform(ctm, a[0]); break;
+            case OPS.paintFormXObjectEnd: { const s = stack.pop(); if (s) [ctm, fill, stroke, fa, sa, lw, pattern] = s; break; }
+            case OPS.beginGroup: group++; break;
+            case OPS.endGroup: group = Math.max(0, group - 1); break;
+            case OPS.setLineWidth: lw = a[0]; break;
+            case OPS.setFillRGBColor: fill = rgb(a); pattern = false; break;
+            case OPS.setStrokeRGBColor: stroke = rgb(a); break;
+            case OPS.setFillGray: fill = rgb([a[0], a[0], a[0]]); pattern = false; break;
+            case OPS.setStrokeGray: stroke = rgb([a[0], a[0], a[0]]); break;
+            case OPS.setFillColorN: pattern = Array.isArray(a) && (a[0] === 'TilingPattern' || a[0] === 'Shading'); break;
+            case OPS.setGState:
+              for (const kv of a[0] || []) { if (kv[0] === 'ca') fa = kv[1]; if (kv[0] === 'CA') sa = kv[1]; }
+              break;
+            case OPS.constructPath: {
+              const ops = a[0], co = a[1];
+              let j = 0;
+              for (const op of ops) {
+                if (op === OPS.moveTo) { cur = [tp(co[j], co[j + 1])]; path.push(cur); j += 2; }
+                else if (op === OPS.lineTo) { if (!cur) { cur = []; path.push(cur); } cur.push(tp(co[j], co[j + 1])); j += 2; }
+                else if (op === OPS.curveTo) { if (!cur) { cur = [tp(co[j + 4], co[j + 5])]; path.push(cur); } bez(cur[cur.length - 1], tp(co[j], co[j + 1]), tp(co[j + 2], co[j + 3]), tp(co[j + 4], co[j + 5])); curves++; j += 6; }
+                else if (op === OPS.curveTo2) { if (!cur) { cur = [tp(co[j + 2], co[j + 3])]; path.push(cur); } const p0 = cur[cur.length - 1]; bez(p0, p0, tp(co[j], co[j + 1]), tp(co[j + 2], co[j + 3])); curves++; j += 4; }
+                else if (op === OPS.curveTo3) { if (!cur) { cur = [tp(co[j + 2], co[j + 3])]; path.push(cur); } const e = tp(co[j + 2], co[j + 3]); bez(cur[cur.length - 1], tp(co[j], co[j + 1]), e, e); curves++; j += 4; }
+                else if (op === OPS.rectangle) {
+                  const x = co[j], y = co[j + 1], w = co[j + 2], h = co[j + 3];
+                  cur = [tp(x, y), tp(x + w, y), tp(x + w, y + h), tp(x, y + h)]; path.push(cur); cur = null; j += 4;
+                } else if (op === OPS.closePath) { if (cur && cur.length) cur.push(cur[0].slice()); cur = null; }
+              }
+              break;
+            }
+            case OPS.fill: case OPS.eoFill: case OPS.fillStroke: case OPS.eoFillStroke: case OPS.closeFillStroke: case OPS.closeEOFillStroke: {
+              const main = group === 0;
+              if (isInk()) {
+                ink.push({ c: [...fill, Math.round(fa * 255)], fill: true, w: 0, p: flat() });
+                if (main) skipFill.add(fillIdx);
+              }
+              if (main) fillIdx++;
+              if (f >= OPS.fillStroke) { if (main) strokeIdx++; }
+              path = []; cur = null; curves = 0;
+              break;
+            }
+            case OPS.stroke: case OPS.closeStroke: {
+              const main = group === 0;
+              let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+              for (const sp of path) for (const q of sp) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+              if (path.length && group === 0 && (x1 - x0) < pw * 0.7 && (y1 - y0) < ph * 0.7) {
+                ink.push({ c: [...stroke, Math.round(sa * 255)], fill: false, w: Math.max(0.3, lw * scaleOf()), p: flat() });
+                if (main) skipStroke.add(strokeIdx);
+              }
+              if (main) strokeIdx++;
+              path = []; cur = null; curves = 0;
+              break;
+            }
+            case OPS.endPath: path = []; cur = null; curves = 0; break;
+            default: break;
+          }
+        }
+        // --- Hintergrund ohne Handschrift zeichnen ---
+        const scale = maxPx / Math.max(pw, ph);
+        const vp = page.getViewport({ scale });
+        canvas.width = Math.round(vp.width);
+        canvas.height = Math.round(vp.height);
+        real.fillStyle = '#fff';
+        real.fillRect(0, 0, canvas.width, canvas.height);
+        let nf = 0, ns = 0;
+        const proxy = new Proxy(real, {
+          get(t, p) {
+            if (p === 'fill') return function (...x) { const i = nf++; if (skipFill.has(i)) { t.beginPath(); return; } return t.fill(...x); };
+            if (p === 'stroke') return function (...x) { const i = ns++; if (skipStroke.has(i)) { t.beginPath(); return; } return t.stroke(...x); };
+            const v = t[p];
+            return typeof v === 'function' ? v.bind(t) : v;
+          },
+          set(t, p, v) { t[p] = v; return true; },
+        });
+        await page.render({ canvasContext: proxy, viewport: vp }).promise;
+        let inkOk = nf === fillIdx && ns === strokeIdx;
+        if (!inkOk) {
+          // Zählung passt nicht (ungewöhnliches PDF) → Seite normal als Bild, ohne Handschrift-Übernahme
+          real.fillStyle = '#fff';
+          real.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: real, viewport: vp }).promise;
+        }
+        out.push({ w: pw, h: ph, jpeg: await canvasJpeg(canvas, 0.85), ink: inkOk ? ink : [], ok: inkOk });
+        page.cleanup();
+        if (progress) progress(pi, n);
+      }
+      doc.destroy();
+      return out;
+    },
     /** Bilddatei → JPEG (längste Kante höchstens `maxPx`), für eigenes Papier. */
     async image(file, maxPx) {
       const url = URL.createObjectURL(file);

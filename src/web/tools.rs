@@ -1031,7 +1031,7 @@ impl Editor {
 
 /// Ist der Strich eine geschlossene Form (Anfang ≈ Ende)?
 pub fn is_closed(s: &Stroke) -> bool {
-    if s.pts.len() < 4 || s.pen == PenKind::Fill || s.pen == PenKind::Highlighter {
+    if s.pts.len() < 4 || s.is_area() || s.pen == PenKind::Highlighter {
         return false;
     }
     let (a, b) = (s.pts[0], s.pts[s.pts.len() - 1]);

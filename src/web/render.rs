@@ -32,6 +32,9 @@ fn fp_stroke(s: &Stroke) -> u64 {
 }
 
 pub fn outline_path(s: &Stroke) -> Path2d {
+    if s.is_area() {
+        return poly_path(&s.polys());
+    }
     let o = s.outline();
     let mut d = String::with_capacity(o.len() * 14);
     for (i, (x, y)) in o.iter().enumerate() {

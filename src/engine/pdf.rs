@@ -338,16 +338,20 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                             continue;
                         }
                         let alpha = s.color[3] as f32 / 255.0;
-                        let o = s.outline();
-                        if o.len() < 3 {
+                        // Flächen können aus mehreren Umrissen bestehen (importierte Handschrift)
+                        let polys = if s.is_area() { s.polys() } else { vec![s.outline()] };
+                        if polys.iter().all(|o| o.len() < 3) {
                             continue;
                         }
                         let _ = write!(c, "q /{} gs {} rg ", gs_name(alpha, hl), rgb8(s.color));
-                        let _ = write!(c, "{} {} m ", n(o[0].0), n(o[0].1));
-                        for p in &o[1..] {
-                            let _ = write!(c, "{} {} l ", n(p.0), n(p.1));
+                        for o in polys.iter().filter(|o| o.len() >= 3) {
+                            let _ = write!(c, "{} {} m ", n(o[0].0), n(o[0].1));
+                            for p in &o[1..] {
+                                let _ = write!(c, "{} {} l ", n(p.0), n(p.1));
+                            }
+                            c.push_str("h ");
                         }
-                        c.push_str("h f Q\n");
+                        c.push_str("f Q\n");
                     }
                     (Content::Node(nd), 0) => {
                         // Verbindung zur Elternblase (liegt unter allen Blasen)

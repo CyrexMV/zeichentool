@@ -20,6 +20,9 @@ pub enum PenKind {
     Neon = 6,
     /// Glitzerstift: Farbe mit funkelnden Partikeln
     Glitter = 7,
+    /// Importierte Handschrift (z. B. aus GoodNotes): fertige Umrisse, als Tinte gezeichnet.
+    /// Punkte mit Druck 0 beginnen einen neuen Teilumriss.
+    Outline = 8,
 }
 
 impl PenKind {
@@ -34,6 +37,7 @@ impl PenKind {
             5 => PenKind::Fill,
             6 => PenKind::Neon,
             7 => PenKind::Glitter,
+            8 => PenKind::Outline,
             _ => PenKind::Fountain,
         }
     }
@@ -48,6 +52,7 @@ impl PenKind {
             PenKind::Fill => "fill",
             PenKind::Neon => "neon",
             PenKind::Glitter => "glitter",
+            PenKind::Outline => "outline",
         }
     }
 
@@ -73,6 +78,7 @@ impl PenKind {
             PenKind::Fill => "Füllung",
             PenKind::Neon => "Neon",
             PenKind::Glitter => "Glitzer",
+            PenKind::Outline => "Handschrift",
         }
     }
 
@@ -86,7 +92,7 @@ impl PenKind {
             PenKind::Pencil => 0.6 + 0.6 * p,
             PenKind::Neon => 1.1 + 0.3 * p,
             PenKind::Glitter => 1.5 + 0.7 * p,
-            PenKind::Highlighter | PenKind::Fill => 1.0,
+            PenKind::Highlighter | PenKind::Fill | PenKind::Outline => 1.0,
         }
     }
 
@@ -100,7 +106,7 @@ impl PenKind {
     }
 
     pub fn round_caps(&self) -> bool {
-        !matches!(self, PenKind::Highlighter | PenKind::Fill)
+        !matches!(self, PenKind::Highlighter | PenKind::Fill | PenKind::Outline)
     }
 }
 
@@ -145,6 +151,7 @@ impl Stroke {
             r.add(p.x, p.y);
         }
         match self.pen {
+            PenKind::Outline | PenKind::Fill => r.expand(1.0),
             PenKind::Neon => r.expand(self.width * 1.6 + 6.0),
             PenKind::Glitter => r.expand(self.width * 1.6 + 1.5),
             _ => r.expand(self.width + 1.0),
@@ -269,8 +276,28 @@ impl Stroke {
     }
 
     /// Umriss als geschlossenes Polygon (gefüllt mit Nonzero-Regel).
+    /// Fläche aus einem oder mehreren Umrissen (Füllung, importierte Handschrift)?
+    pub fn is_area(&self) -> bool {
+        matches!(self.pen, PenKind::Fill | PenKind::Outline)
+    }
+
+    /// Umrisse einer Fläche; ein Punkt mit Druck 0 beginnt einen neuen Teilumriss.
+    pub fn polys(&self) -> Vec<Vec<(f32, f32)>> {
+        let mut out: Vec<Vec<(f32, f32)>> = Vec::new();
+        for (i, p) in self.pts.iter().enumerate() {
+            if i == 0 || p.p <= 0.001 {
+                out.push(Vec::new());
+            }
+            if let Some(last) = out.last_mut() {
+                last.push((p.x, p.y));
+            }
+        }
+        out.retain(|o| o.len() >= 3);
+        out
+    }
+
     pub fn outline(&self) -> Vec<(f32, f32)> {
-        if self.pen == PenKind::Fill {
+        if self.is_area() {
             return self.pts.iter().map(|p| (p.x, p.y)).collect();
         }
         let w = self.width.max(0.1);
@@ -352,9 +379,14 @@ impl Stroke {
         if !self.bbox().expand(r).intersects(&Rect::new(a.0, a.1, b.0, b.1)) {
             return false;
         }
-        if self.pen == PenKind::Fill {
-            let poly: Vec<(f32, f32)> = self.pts.iter().map(|p| (p.x, p.y)).collect();
-            return point_in_polygon(a.0, a.1, &poly) || point_in_polygon(b.0, b.1, &poly);
+        if self.is_area() {
+            let polys = self.polys();
+            if polys.iter().any(|poly| point_in_polygon(a.0, a.1, poly) || point_in_polygon(b.0, b.1, poly)) {
+                return true;
+            }
+            // dünne Umrisse (Handschrift): auch Berühren des Rands zählt
+            return self.pen == PenKind::Outline
+                && polys.iter().any(|poly| poly.windows(2).any(|w| dist_seg_seg(w[0], w[1], a, b) <= r));
         }
         if self.pts.len() == 1 {
             return dist_point_seg(self.pts[0].x, self.pts[0].y, a.0, a.1, b.0, b.1) <= rr;
@@ -368,7 +400,7 @@ impl Stroke {
         if !self.hit(a, b, r) {
             return None;
         }
-        if self.pen == PenKind::Fill {
+        if self.is_area() {
             return Some(Vec::new());
         }
         let rr = r + self.width * 0.35;
@@ -503,5 +535,26 @@ mod tests {
         let s = line(5).transformed(&Xf::scale_about(2.0, 2.0, 0.0, 0.0));
         assert_eq!(s.width, 4.0);
         assert_eq!(s.pts[1].x, 4.0);
+    }
+}
+
+#[cfg(test)]
+mod outline_tests {
+    use super::*;
+
+    #[test]
+    fn outline_polys_and_hit() {
+        // zwei kleine Quadrate als ein Element
+        let mut pts = Vec::new();
+        for (k, (x, y)) in [(0.0, 0.0), (10.0, 0.0), (10.0, 2.0), (0.0, 2.0), (20.0, 0.0), (30.0, 0.0), (30.0, 2.0), (20.0, 2.0)].iter().enumerate() {
+            pts.push(Pt::new(*x, *y, if k == 4 { 0.0 } else { 1.0 }));
+        }
+        let s = Stroke { pen: PenKind::Outline, color: [0, 0, 0, 255], width: 0.0, pts };
+        assert_eq!(s.polys().len(), 2);
+        assert!(s.hit((25.0, 1.0), (25.0, 1.0), 0.5));
+        // knapp daneben, aber im Radius → trifft den Rand
+        assert!(s.hit((5.0, 3.0), (6.0, 3.0), 1.5));
+        assert!(!s.hit((5.0, 9.0), (6.0, 9.0), 1.5));
+        assert_eq!(s.erase_part((25.0, 1.0), (25.0, 1.0), 1.0), Some(Vec::new()));
     }
 }

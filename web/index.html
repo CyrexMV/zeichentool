@@ -314,6 +314,7 @@
 <!-- Import-Menü (Startbildschirm) -->
 <div id="pop-import" class="popover menu glass hidden">
   <button class="mi" data-act="import-pdf"><svg><use href="#i-pdf"/></svg>PDF als Notizbuch …</button>
+  <button class="mi" data-act="import-ink"><svg><use href="#i-pen"/></svg><span>Handschrift-PDF (z. B. GoodNotes) …<small class="mi-sub">Handschrift einzeln radierbar</small></span></button>
   <button class="mi" data-act="import-image"><svg><use href="#i-image"/></svg>Bild als Notizbuch …</button>
   <button class="mi" data-act="import"><svg><use href="#i-import"/></svg>Notizbuch-Datei oder Backup …</button>
   <p class="hint menu-hint">Ein PDF wird zum eigenen Notizbuch – jede Seite zum Hineinschreiben.</p>
@@ -745,6 +746,7 @@
 <input type="file" id="file-image" accept="image/*" hidden>
 <input type="file" id="file-import-pdf" accept="application/pdf,.pdf" hidden>
 <input type="file" id="file-import-image" accept="image/*" hidden>
+<input type="file" id="file-import-ink" accept="application/pdf,.pdf" hidden>
 <input type="file" id="file-import" accept=".znote,.zbackup,.zeichen,.pdf,application/pdf,image/*,application/octet-stream" hidden>
 <input type="file" id="file-paper" accept="image/*" hidden>
 <input type="file" id="file-pdf" accept=".pdf,application/pdf" hidden>

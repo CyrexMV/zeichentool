@@ -137,9 +137,13 @@ impl App {
                 self.close_popovers();
                 set_timeout(0, || input_el("file-import").click());
             }
-            "import-pdf" | "import-image" => {
+            "import-pdf" | "import-image" | "import-ink" => {
                 self.close_popovers();
-                let id = if act == "import-pdf" { "file-import-pdf" } else { "file-import-image" };
+                let id = match act {
+                    "import-pdf" => "file-import-pdf",
+                    "import-ink" => "file-import-ink",
+                    _ => "file-import-image",
+                };
                 set_timeout(0, move || input_el(id).click());
             }
             "settings" => self.open_settings(),

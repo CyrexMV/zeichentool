@@ -766,6 +766,17 @@ pub fn bind_files() {
             with_app(|a| a.insert_image(png, w as f32, h as f32));
         });
     });
+    on(&input_el("file-import-ink"), "change", |e: Event| {
+        let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
+        let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
+        inp.set_value("");
+        let name = file.name();
+        spawn_local(async move {
+            let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
+            let bytes = Uint8Array::new(&buf).to_vec();
+            with_app(|a| a.import_pdf_ink(name, bytes));
+        });
+    });
     for id in ["file-import", "file-import-pdf", "file-import-image"] {
         on(&input_el(id), "change", |e: Event| {
             let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
