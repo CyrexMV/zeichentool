@@ -137,6 +137,7 @@ impl App {
         }
         el("lib-folders").set_inner_html(&fhtml);
         self.render_decks(folder.is_none() && !searching && !self.lib_fav && !self.show_trash);
+        self.render_school(folder.is_none() && !searching && !self.lib_fav && !self.show_trash);
         show("lib-crumb", (folder.is_some() || self.show_trash) && !searching);
         set_text("lib-crumb-name", if self.show_trash { "Papierkorb" } else { folder.as_deref().unwrap_or("") });
         show("lib-trash-empty", self.show_trash && trash_n > 0);
@@ -418,6 +419,8 @@ impl App {
                 self.toast("Endgültig gelöscht");
             }
             Some(Pending::EmptyTrash) => self.empty_trash(),
+            Some(Pending::DeleteSubject(i)) => self.delete_subject(i),
+            Some(Pending::DeletePages(v)) => self.delete_pages(&v),
             Some(Pending::RestoreBackup) => self.restore_backup(),
             Some(Pending::NewDeck) => {
                 let t: String = value.trim().chars().take(80).collect();

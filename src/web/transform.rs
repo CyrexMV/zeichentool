@@ -92,14 +92,26 @@ impl App {
 
     /// Aktuelle Seite um 90° im Uhrzeigersinn drehen (Hoch- ↔ Querformat), Inhalt dreht mit.
     pub fn rotate_page(&mut self) {
-        let images = &mut self.images;
+        let Some(i) = self.ed.as_ref().map(|e| e.cur_page) else { return };
+        let Some(action) = self.rotate_page_at(i) else { return };
         let Some(ed) = &mut self.ed else { return };
-        let i = ed.cur_page;
+        let land = ed.nb.pages[i].land;
+        ed.push(action);
+        ed.update_fit();
+        ed.bmps.clear();
+        ed.goto_page(i);
+        self.toast(if land { "Seite ins Querformat gedreht" } else { "Seite ins Hochformat gedreht" });
+        self.after_pages_change();
+    }
+
+    /// Seite `i` drehen (ohne Verlaufseintrag) und die Aktion dafür liefern.
+    pub fn rotate_page_at(&mut self, i: usize) -> Option<Action> {
+        let images = &mut self.images;
+        let ed = self.ed.as_mut()?;
+        let page = ed.nb.pages.get(i)?;
         let (_, h) = ed.nb.page_size(i);
         // (x, y) → (h − y, x)
         let xf = Xf { a: 0.0, b: 1.0, c: -1.0, d: 0.0, e: h, f: 0.0 };
-        ed.selection = None;
-        let page = &ed.nb.pages[i];
         let pid = page.id;
         let before = PageMeta::of(page);
         let mut after = before.clone();
@@ -120,16 +132,11 @@ impl App {
         }
         let removed = page.items.clone();
         let added: Vec<Item> = removed.iter().map(|it| transform_item(images, it, &xf)).collect();
+        ed.selection = None;
         let p = &mut ed.nb.pages[i];
         after.apply(p);
         p.items.clear();
         p.insert(added.clone());
-        let land = after.land;
-        ed.push(Action::Group(vec![Action::PageMeta { page: pid, before, after }, Action::Items { page: pid, removed, added }]));
-        ed.update_fit();
-        ed.bmps.clear();
-        ed.goto_page(i);
-        self.toast(if land { "Seite ins Querformat gedreht" } else { "Seite ins Hochformat gedreht" });
-        self.after_pages_change();
+        Some(Action::Group(vec![Action::PageMeta { page: pid, before, after }, Action::Items { page: pid, removed, added }]))
     }
 }

@@ -85,6 +85,8 @@ impl App {
             format!("pen_sets={}", self.pen_sets.iter().map(|s| s.encode()).collect::<Vec<_>>().join(";")),
             format!("tabs={}", self.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(",")),
             format!("tool={}", self.tool.code()),
+            format!("exams={}", crate::engine::school::encode_exams(&self.exams)),
+            format!("grades={}", crate::engine::school::encode_subjects(&self.subjects)),
         ];
         if let Ok(Some(ls)) = window().local_storage() {
             let _ = ls.set_item(SETTINGS_KEY, &lines.join("\n"));
@@ -163,6 +165,12 @@ impl App {
                 }
                 "new_cover_page" => self.new_nb.cover_page = b(v),
                 "tabs" => self.tabs = v.split(',').filter(|s| !s.is_empty()).take(8).map(|s| super::tabs::Tab { id: s.to_string(), view: None }).collect(),
+                "exams" => {
+                    // vergangene Prüfungen nach 30 Tagen aufräumen
+                    let today = super::stats::today();
+                    self.exams = crate::engine::school::decode_exams(v).into_iter().filter(|e| e.day >= today - 30).collect();
+                }
+                "grades" => self.subjects = crate::engine::school::decode_subjects(v),
                 "pen_sets" => self.pen_sets = v.split(';').filter_map(super::pensets::PenSet::decode).take(12).collect(),
                 "recent_colors" => self.recent_colors = v.split(',').filter(|h| Color::from_hex(h).is_some()).map(|h| h.to_string()).take(12).collect(),
                 "new" => {

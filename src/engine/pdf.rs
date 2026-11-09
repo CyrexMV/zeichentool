@@ -18,40 +18,182 @@ fn n(v: f32) -> String {
     }
 }
 
+/// Zeichen → WinAnsi (cp1252) für die Standardschrift Helvetica.
+fn winansi(ch: char) -> Option<u8> {
+    Some(match ch {
+        '€' => 0x80,
+        '‚' => 0x82,
+        '„' => 0x84,
+        '…' => 0x85,
+        '‘' => 0x91,
+        '’' => 0x92,
+        '“' => 0x93,
+        '”' => 0x94,
+        '•' => 0x95,
+        '–' => 0x96,
+        '—' => 0x97,
+        '™' => 0x99,
+        c if (c as u32) >= 0x20 && (c as u32) < 0x7f => c as u8,
+        c if (c as u32) >= 0xa0 && (c as u32) <= 0xff => c as u32 as u8,
+        '\t' => b' ',
+        _ => return None,
+    })
+}
+
+/// Zeichen → Standardschrift „Symbol“ (griechische Buchstaben, Mathematik, Pfeile).
+fn symbol_code(ch: char) -> Option<u8> {
+    const GREEK_UP: &str = "ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ";
+    const GREEK_LO: &str = "αβχδεφγηιϕκλμνοπθρστυϖωξψζ";
+    if let Some(i) = GREEK_UP.chars().position(|c| c == ch) {
+        return Some(0x41 + i as u8);
+    }
+    if let Some(i) = GREEK_LO.chars().position(|c| c == ch) {
+        return Some(0x61 + i as u8);
+    }
+    Some(match ch {
+        '∆' => 0x44,
+        'Ω' => 0x57,
+        '∀' => 0x22,
+        '∃' => 0x24,
+        '∋' => 0x27,
+        '∗' => 0x2a,
+        '−' => 0x2d,
+        '≅' => 0x40,
+        '⊥' => 0x5e,
+        '∼' => 0x7e,
+        '′' => 0xa2,
+        '≤' => 0xa3,
+        '∞' => 0xa5,
+        '♣' => 0xa7,
+        '♦' => 0xa8,
+        '♥' => 0xa9,
+        '♠' => 0xaa,
+        '↔' => 0xab,
+        '←' => 0xac,
+        '↑' => 0xad,
+        '→' => 0xae,
+        '↓' => 0xaf,
+        '″' => 0xb2,
+        '≥' => 0xb3,
+        '∝' => 0xb5,
+        '∂' => 0xb6,
+        '≠' => 0xb9,
+        '≡' => 0xba,
+        '≈' => 0xbb,
+        'ℵ' => 0xc0,
+        '⊗' => 0xc4,
+        '⊕' => 0xc5,
+        '∅' | '⌀' => 0xc6,
+        '∩' => 0xc7,
+        '∪' => 0xc8,
+        '⊃' => 0xc9,
+        '⊇' => 0xca,
+        '⊂' => 0xcc,
+        '⊆' => 0xcd,
+        '∈' => 0xce,
+        '∉' => 0xcf,
+        '∠' => 0xd0,
+        '∇' => 0xd1,
+        '∏' => 0xd5,
+        '√' => 0xd6,
+        '⋅' => 0xd7,
+        '¬' => 0xd8,
+        '∧' => 0xd9,
+        '∨' => 0xda,
+        '⇔' => 0xdb,
+        '⇐' => 0xdc,
+        '⇑' => 0xdd,
+        '⇒' => 0xde,
+        '⇓' => 0xdf,
+        '◊' => 0xe0,
+        '∑' => 0xe5,
+        '∫' => 0xf2,
+        _ => return None,
+    })
+}
+
+/// Zeichen → Standardschrift „ZapfDingbats“ (Häkchen, Sterne, Formen).
+fn dingbat_code(ch: char) -> Option<u8> {
+    Some(match ch {
+        '✓' => 0x33,
+        '✔' => 0x34,
+        '✗' => 0x37,
+        '✘' => 0x38,
+        '★' => 0x48,
+        '☆' => 0x49,
+        '●' => 0x6c,
+        '■' => 0x6e,
+        '▲' => 0x73,
+        '▼' => 0x74,
+        '◆' => 0x75,
+        '❤' => 0xa4,
+        '➔' => 0xd4,
+        '✎' => 0x2f,
+        '✉' => 0x29,
+        '☎' => 0x25,
+        _ => return None,
+    })
+}
+
+fn push_byte(out: &mut String, b: u8) {
+    match b {
+        b'(' | b')' | b'\\' => {
+            out.push('\\');
+            out.push(b as char);
+        }
+        0x20..=0x7e => out.push(b as char),
+        _ => {
+            let _ = write!(out, "\\{:03o}", b);
+        }
+    }
+}
+
 /// Text in WinAnsi (cp1252) für die Standardschrift Helvetica, als PDF-String-Literal.
 pub fn pdf_text(s: &str) -> String {
     let mut out = String::from("(");
     for ch in s.chars() {
-        let b: u8 = match ch {
-            '€' => 0x80,
-            '‚' => 0x82,
-            '„' => 0x84,
-            '…' => 0x85,
-            '‘' => 0x91,
-            '’' => 0x92,
-            '“' => 0x93,
-            '”' => 0x94,
-            '•' => 0x95,
-            '–' => 0x96,
-            '—' => 0x97,
-            '™' => 0x99,
-            c if (c as u32) >= 0x20 && (c as u32) < 0x7f => c as u8,
-            c if (c as u32) >= 0xa0 && (c as u32) <= 0xff => c as u32 as u8,
-            '\t' => b' ',
-            _ => b'?',
-        };
-        match b {
-            b'(' | b')' | b'\\' => {
-                out.push('\\');
-                out.push(b as char);
-            }
-            0x20..=0x7e => out.push(b as char),
-            _ => {
-                let _ = write!(out, "\\{:03o}", b);
-            }
-        }
+        push_byte(&mut out, winansi(ch).unwrap_or(b'?'));
     }
     out.push(')');
+    out
+}
+
+/// Textzeile als Folge von `Tj`-Befehlen: Sonderzeichen wechseln in die Schriften Symbol (F3)
+/// bzw. ZapfDingbats (F4), danach zurück zu `font`. Die Position läuft dabei automatisch weiter.
+pub fn pdf_runs(s: &str, font: &str, size: f32) -> String {
+    let mut out = String::new();
+    let mut cur = font;
+    let mut run = String::new();
+    let flush = |out: &mut String, run: &mut String| {
+        if !run.is_empty() {
+            let _ = write!(out, "({}) Tj ", run);
+            run.clear();
+        }
+    };
+    for ch in s.chars() {
+        let (f, b) = if let Some(b) = winansi(ch) {
+            (font, b)
+        } else if let Some(b) = symbol_code(ch) {
+            ("F3", b)
+        } else if let Some(b) = dingbat_code(ch) {
+            ("F4", b)
+        } else {
+            (font, b'?')
+        };
+        if f != cur {
+            flush(&mut out, &mut run);
+            let _ = write!(out, "/{} {} Tf ", f, n(size));
+            cur = f;
+        }
+        push_byte(&mut run, b);
+    }
+    flush(&mut out, &mut run);
+    if cur != font {
+        let _ = write!(out, "/{} {} Tf ", font, n(size));
+    }
+    if out.is_empty() {
+        out.push_str("() Tj ");
+    }
     out
 }
 
@@ -123,6 +265,10 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     let font_b = pdf.reserve();
     pdf.obj(font, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
     pdf.obj(font_b, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    let font_sym = pdf.reserve();
+    let font_ding = pdf.reserve();
+    pdf.obj(font_sym, "<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>");
+    pdf.obj(font_ding, "<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>");
 
     // Transparenzstufen (Alpha in 5%-Schritten), mit/ohne Multiplizieren
     let mut gstates: BTreeMap<(u8, bool), String> = BTreeMap::new();
@@ -171,6 +317,26 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                         if want != pass {
                             continue;
                         }
+                        if s.is_fx() {
+                            for (polys, col) in s.fx_layers() {
+                                if polys.is_empty() {
+                                    continue;
+                                }
+                                let _ = write!(c, "q /{} gs {} rg ", gs_name(col[3] as f32 / 255.0, false), rgb8(col));
+                                for o in &polys {
+                                    if o.len() < 3 {
+                                        continue;
+                                    }
+                                    let _ = write!(c, "{} {} m ", n(o[0].0), n(o[0].1));
+                                    for p in &o[1..] {
+                                        let _ = write!(c, "{} {} l ", n(p.0), n(p.1));
+                                    }
+                                    c.push_str("h ");
+                                }
+                                c.push_str("f Q\n");
+                            }
+                            continue;
+                        }
                         let alpha = s.color[3] as f32 / 255.0;
                         let o = s.outline();
                         if o.len() < 3 {
@@ -212,7 +378,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                             let lw = line.chars().count() as f32 * fs * 0.55;
                             let x = nd.x + (nd.w - lw).max(0.0) * 0.5;
                             let y = nd.y + (nd.h - total) * 0.5 + fs * (0.95 + 1.25 * i as f32);
-                            let _ = write!(c, "1 0 0 -1 {} {} Tm {} Tj ", n(x), n(y), pdf_text(line));
+                            let _ = write!(c, "1 0 0 -1 {} {} Tm {}", n(x), n(y), pdf_runs(line, "F2", fs));
                         }
                         c.push_str("ET\n");
                     }
@@ -222,7 +388,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
                         let _ = write!(c, "BT /{} {} Tf {} rg ", f, n(t.size), rgb8(t.color));
                         for (i, line) in lines.iter().enumerate() {
                             let y = t.y + t.size * (0.95 + 1.3 * i as f32);
-                            let _ = write!(c, "1 0 0 -1 {} {} Tm {} Tj ", n(t.x), n(y), pdf_text(line));
+                            let _ = write!(c, "1 0 0 -1 {} {} Tm {}", n(t.x), n(y), pdf_runs(line, f, t.size));
                         }
                         c.push_str("ET\n");
                     }
@@ -237,7 +403,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
 
     // Gemeinsame Ressourcen
     let mut res = String::from("<< /Font << /F1 ");
-    let _ = write!(res, "{} 0 R /F2 {} 0 R >> /ExtGState <<", font, font_b);
+    let _ = write!(res, "{} 0 R /F2 {} 0 R /F3 {} 0 R /F4 {} 0 R >> /ExtGState <<", font, font_b, font_sym, font_ding);
     for ((a, m), name) in &gstates {
         let _ = write!(res, " /{} << /ca {} /CA {}{} >>", name, n(*a as f32 / 20.0), n(*a as f32 / 20.0), if *m { " /BM /Multiply" } else { "" });
     }
@@ -503,7 +669,8 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
                         Some(cl) => (rgb8(cl), cl[3] as f32 / 255.0),
                         None => (rgb(line), if light { 0.9 } else { 0.7 }),
                     };
-                    let _ = writeln!(c, "q /{} gs BT /{} {} Tf {} rg 1 0 0 -1 {} {} Tm {} Tj ET Q", gs(a, false), if bold { "F2" } else { "F1" }, n(size), col, n(x), n(y), pdf_text(&text));
+                    let f = if bold { "F2" } else { "F1" };
+                    let _ = writeln!(c, "q /{} gs BT /{} {} Tf {} rg 1 0 0 -1 {} {} Tm {}ET Q", gs(a, false), f, n(size), col, n(x), n(y), pdf_runs(&text, f, size));
                 }
                 _ => {}
             }
@@ -552,6 +719,9 @@ mod tests {
     fn text_escaping() {
         assert_eq!(pdf_text("a(b)"), "(a\\(b\\))");
         assert_eq!(pdf_text("ä€"), "(\\344\\200)");
+        // Sonderzeichen wechseln die Schrift und wieder zurück
+        assert_eq!(pdf_runs("a∑b", "F1", 12.0), "(a) Tj /F3 12 Tf (\\345) Tj /F1 12 Tf (b) Tj ");
+        assert_eq!(pdf_runs("α✓", "F2", 10.0), "/F3 10 Tf (a) Tj /F4 10 Tf (3) Tj /F2 10 Tf ");
     }
 
     #[test]

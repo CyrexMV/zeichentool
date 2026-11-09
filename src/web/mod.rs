@@ -10,11 +10,14 @@ mod links;
 mod marks;
 mod mind;
 mod lock;
+mod pagesel;
 mod pensets;
 mod render;
 mod ruler;
+mod school;
 mod scrubber;
 mod stickers;
+mod symbols;
 mod stats;
 mod study;
 mod storage;
@@ -378,6 +381,10 @@ pub enum Pending {
     RemovePin(String),
     DeleteForever(String),
     EmptyTrash,
+    /// Fach der Notenübersicht löschen
+    DeleteSubject(usize),
+    /// mehrere Seiten löschen (Indizes)
+    DeletePages(Vec<usize>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -478,6 +485,14 @@ pub struct App {
     pub pen_sets: Vec<pensets::PenSet>,
     /// Seiten-Schieberegler wird gezogen
     pub scrub_active: bool,
+    /// Prüfungen (Countdown auf dem Startbildschirm)
+    pub exams: Vec<crate::engine::school::Exam>,
+    /// Fächer mit Noten
+    pub subjects: Vec<crate::engine::school::Subject>,
+    /// gerade bearbeitete Prüfung
+    pub exam_edit: Option<usize>,
+    /// Gewicht neuer Noten (1 oder 2)
+    pub grade_weight: u8,
     /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
     pub study_from_lib: bool,
 }
@@ -545,6 +560,10 @@ impl App {
             pending_backup: None,
             pen_sets: Vec::new(),
             scrub_active: false,
+            exams: Vec::new(),
+            subjects: Vec::new(),
+            exam_edit: None,
+            grade_weight: 1,
             study_from_lib: false,
         }
     }

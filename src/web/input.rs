@@ -896,6 +896,28 @@ impl App {
                     self.marks_action("tag-new", "");
                     return;
                 }
+                if tag == "INPUT" && e.key() == "Enter" {
+                    let id = el.id();
+                    let target = match id.as_str() {
+                        "exam-name" | "exam-date" => Some(("exam-save", String::new())),
+                        "subject-name" => Some(("subject-add", String::new())),
+                        _ => id.strip_prefix("grade-in-").map(|i| ("grade-add", i.to_string())),
+                    };
+                    if let Some((act, arg)) = target {
+                        e.prevent_default();
+                        if act == "exam-save" {
+                            self.exam_action(act, &arg);
+                        } else {
+                            self.grades_action(act, &arg);
+                        }
+                        return;
+                    }
+                }
+                if tag == "INPUT" && el.id() == "sym-text" && e.key() == "Enter" {
+                    e.prevent_default();
+                    self.symbol_action("sym-insert", "");
+                    return;
+                }
                 if tag == "INPUT" || tag == "TEXTAREA" || tag == "SELECT" {
                     if e.key() == "Escape" && tag == "TEXTAREA" {
                         self.commit_text();

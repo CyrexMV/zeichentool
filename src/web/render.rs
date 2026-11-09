@@ -41,6 +41,59 @@ pub fn outline_path(s: &Stroke) -> Path2d {
     Path2d::new_with_path_string(&d).unwrap_or_else(|_| Path2d::new().unwrap())
 }
 
+fn poly_path(polys: &[Vec<(f32, f32)>]) -> Path2d {
+    let mut d = String::new();
+    for o in polys {
+        for (i, (x, y)) in o.iter().enumerate() {
+            let _ = write!(d, "{}{:.2} {:.2}", if i == 0 { "M" } else { "L" }, x, y);
+        }
+        d.push('Z');
+    }
+    Path2d::new_with_path_string(&d).unwrap_or_else(|_| Path2d::new().unwrap())
+}
+
+/// Ebenen eines Effektstifts als Pfade (ohne Zwischenspeicher).
+fn fx_paths(s: &Stroke) -> Vec<(Path2d, String)> {
+    s.fx_layers().iter().filter(|(p, _)| !p.is_empty()).map(|(p, c)| (poly_path(p), rgba_css(*c))).collect()
+}
+
+type FxCache = HashMap<u32, (u64, Vec<(Path2d, String)>)>;
+
+thread_local! {
+    static FX: std::cell::RefCell<FxCache> = std::cell::RefCell::new(HashMap::new());
+}
+
+/// Strich füllen – Effektstifte (Neon, Glitzer) in mehreren Ebenen. `id` = Element (Zwischenspeicher) oder `None`.
+pub fn fill_stroke(ctx: &CanvasRenderingContext2d, s: &Stroke, id: Option<u32>, path: impl FnOnce() -> Path2d) {
+    if !s.is_fx() {
+        ctx.set_fill_style_str(&rgba_css(s.color));
+        ctx.fill_with_path_2d(&path());
+        return;
+    }
+    let layers = match id {
+        Some(id) => FX.with(|f| {
+            let mut f = f.borrow_mut();
+            let fp = fp_stroke(s);
+            if let Some((k, v)) = f.get(&id) {
+                if *k == fp {
+                    return v.clone();
+                }
+            }
+            if f.len() > 4000 {
+                f.clear();
+            }
+            let v = fx_paths(s);
+            f.insert(id, (fp, v.clone()));
+            v
+        }),
+        None => fx_paths(s),
+    };
+    for (p, c) in &layers {
+        ctx.set_fill_style_str(c);
+        ctx.fill_with_path_2d(p);
+    }
+}
+
 pub fn text_font(t: &TextBox) -> String {
     format!("{} {}px {}", if t.bold { 650 } else { 420 }, t.size, FONT)
 }
@@ -205,9 +258,7 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                     let _ = ctx.set_global_composite_operation("source-over");
                 }
                 (Content::Stroke(s), 2) if s.pen != PenKind::Highlighter && s.pen != PenKind::Fill => {
-                    let p = c.path(it.id, s);
-                    ctx.set_fill_style_str(&rgba_css(s.color));
-                    ctx.fill_with_path_2d(&p);
+                    fill_stroke(ctx, s, Some(it.id), || c.path(it.id, s));
                 }
                 (Content::Node(nd), 0) => {
                     // Verbindung zur Elternblase (unter allen Blasen)
@@ -693,12 +744,10 @@ impl Editor {
                 ctx.clip();
                 let mut s = stroke.clone();
                 s.pts.extend_from_slice(predicted);
-                let p = outline_path(&s);
                 if s.pen == PenKind::Highlighter {
                     let _ = ctx.set_global_composite_operation("multiply");
                 }
-                ctx.set_fill_style_str(&rgba_css(s.color));
-                ctx.fill_with_path_2d(&p);
+                super::render::fill_stroke(ctx, &s, None, || outline_path(&s));
                 let _ = ctx.set_global_composite_operation("source-over");
                 ctx.restore();
             }

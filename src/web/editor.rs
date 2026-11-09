@@ -126,6 +126,8 @@ pub struct Editor {
     pub zooming: bool,
     pub nav_open: bool,
     pub nav_bookmarks: bool,
+    /// Seitenübersicht im Auswahlmodus: gewählte Seiten (IDs)
+    pub nav_sel: Option<Vec<u32>>,
     /// Seitenübersicht zeigt das Inhaltsverzeichnis
     pub nav_toc: bool,
     /// Filter der Seitenübersicht: "c:<Farbe>" oder "t:<Schlagwort>"
@@ -192,6 +194,7 @@ impl Editor {
             zooming: false,
             nav_open: false,
             nav_bookmarks: false,
+            nav_sel: None,
             nav_toc: false,
             nav_filter: None,
             thumbs_dirty: true,

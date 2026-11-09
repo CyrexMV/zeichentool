@@ -59,7 +59,7 @@ fn preview_svg(items: &[Content], w: f32, h: f32) -> String {
 }
 
 impl App {
-    fn ink_color(&self) -> [u8; 4] {
+    pub fn ink_color(&self) -> [u8; 4] {
         if self.dark && self.ed.as_ref().map(|e| e.nb.pages[e.cur_page].paper.luminance() < 0.5).unwrap_or(false) {
             [235, 236, 245, 255]
         } else {

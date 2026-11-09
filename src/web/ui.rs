@@ -13,7 +13,7 @@ thread_local! {
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
 const POPS: [&str; 10] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
-const MODALS: [&str; 12] = ["modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
+const MODALS: [&str; 15] = ["modal-exam", "modal-grades", "modal-symbols", "modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -353,10 +353,24 @@ impl App {
             }
             "nav-page" => {
                 if let Some(ed) = &mut self.ed {
+                    if let Some(sel) = &mut ed.nav_sel {
+                        // Auswahlmodus: Seite an-/abwählen
+                        if let Some(id) = ed.nb.pages.get(n).map(|p| p.id) {
+                            match sel.iter().position(|x| *x == id) {
+                                Some(k) => {
+                                    sel.remove(k);
+                                }
+                                None => sel.push(id),
+                            }
+                        }
+                        self.render_nav();
+                        return;
+                    }
                     ed.goto_page(n);
                 }
                 self.after_view_change();
             }
+            "nav-sel" | "nav-sel-all" | "nav-sel-pdf" | "nav-sel-dup" | "nav-sel-rot" | "nav-sel-del" => self.page_sel_action(act),
             "undo" => self.undo(),
             "redo" => self.redo(),
             "tool" => {
@@ -373,6 +387,10 @@ impl App {
             "insert-table" => self.open_table_dialog(),
             "insert-plot" => self.open_plot_dialog(),
             "sticker-menu" => self.open_sticker_dialog(),
+            "symbol-menu" => self.open_symbol_dialog(),
+            "exam-new" | "exam-edit" | "exam-save" | "exam-delete" => self.exam_action(act, arg),
+            "grades-open" | "grade-weight" | "subject-add" | "grade-add" | "grade-del" | "subject-del" => self.grades_action(act, arg),
+            "sym-add" | "sym-back" | "sym-space" | "sym-insert" => self.symbol_action(act, arg),
             "sticker" => self.insert_sticker(arg),
             "insert-date" => {
                 self.close_popovers();
@@ -1009,6 +1027,9 @@ impl App {
         let Some(ed) = &mut self.ed else { return };
         ed.nav_open = !ed.nav_open;
         let open = ed.nav_open;
+        if !open {
+            ed.nav_sel = None;
+        }
         set_class(&el("navigator"), "open", open);
         set_class(&el("btn-nav"), "active", open);
         if open {
@@ -1052,9 +1073,15 @@ impl App {
             }
             let mark = if p.mark > 0 { format!("<span class=\"nav-mark\" style=\"background:{}\"></span>", crate::engine::note::MARK_COLORS[(p.mark - 1) as usize].1) } else { String::new() };
             let tags: String = p.tags.iter().take(3).map(|t| format!("<span class=\"nav-tag\">#{}</span>", esc(t))).collect();
+            let picked = ed.nav_sel.as_ref().map(|s| s.contains(&p.id));
             html.push_str(&format!(
-                "<button class=\"nav-item{}\" data-act=\"nav-page\" data-arg=\"{}\">{}<canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}{}</span>{}</button>",
-                if i == ed.cur_page { " current" } else { "" },
+                "<button class=\"nav-item{}{}\" data-act=\"nav-page\" data-arg=\"{}\">{}<canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}{}</span>{}</button>",
+                if i == ed.cur_page && picked.is_none() { " current" } else { "" },
+                match picked {
+                    Some(true) => " selecting picked",
+                    Some(false) => " selecting",
+                    None => "",
+                },
                 i,
                 mark,
                 p.id,
@@ -1069,8 +1096,14 @@ impl App {
         }
         let bar = self.nav_filter_bar();
         html.insert_str(0, &bar);
+        let selbar = self.nav_selbar();
         let Some(ed) = &mut self.ed else { return };
-        html.push_str("<div class=\"nav-actions\"><button class=\"btn small\" data-act=\"page-up\">Seite nach oben</button><button class=\"btn small\" data-act=\"page-down\">Seite nach unten</button></div>");
+        set_class(&el("nav-sel-btn"), "active", ed.nav_sel.is_some());
+        if ed.nav_sel.is_some() {
+            html.push_str(&selbar);
+        } else {
+            html.push_str("<div class=\"nav-actions\"><button class=\"btn small\" data-act=\"page-up\">Seite nach oben</button><button class=\"btn small\" data-act=\"page-down\">Seite nach unten</button></div>");
+        }
         el("nav-list").set_inner_html(&html);
         ed.thumb_versions.clear();
         ed.thumbs_dirty = true;

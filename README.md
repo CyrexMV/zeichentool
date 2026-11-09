@@ -71,6 +71,13 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Seite drehen** (⋯ → „Seite drehen“): einzelne Seiten ins Querformat und zurück, der Inhalt dreht mit;
   auch im PDF-Export im Querformat
 - **Winkel messen** am Geodreieck: am Nullpunkt ansetzen und zeichnen – Winkel und Gegenwinkel werden live angezeigt
+- **Neon- und Glitzerstift** (Stift-Menü): leuchtender Kern mit Schein bzw. funkelnde Partikel – auch im PDF
+- **Symbol-Palette** (Einfügen-Menü): Mathe (∑ √ ∫ ≤ ≠ π …), Griechisch, Pfeile, Einheiten, Häkchen – zu einem Text
+  zusammenstellen und einfügen; der PDF-Export nutzt dafür die Standardschriften Symbol und ZapfDingbats
+- **Mehrere Seiten auswählen** (Seitenübersicht → „Auswählen“): gemeinsam als PDF exportieren, duplizieren, drehen, löschen
+- **Prüfungs-Countdown** auf dem Startbildschirm: „noch 23 Tage bis …“, farbig nach Dringlichkeit
+- **Notenübersicht** (Startbildschirm → „Noten“): Fächer mit Noten (2, 2,5, 2+, 2-), einfach/doppelt gewichtet,
+  Fach- und Gesamtdurchschnitt
 - **Sticker & Stempel** (Einfügen-Menü): 16 Sticker (Stern, Häkchen, Ausrufezeichen, Glühbirne, Pokal …) und 12 Stempel
   („WICHTIG“, „PRÜFUNG“, „ERLEDIGT ✓“, „HAUSAUFGABE“ …) – als Bild eingefügt, frei skalier- und drehbar
 - **Datum einfügen** (Einfügen-Menü): heutiges Datum als Text, lang („Montag, 9. November 2026“) oder kurz („09.11.2026“)

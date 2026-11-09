@@ -16,10 +16,14 @@ pub enum PenKind {
     Highlighter = 4,
     /// Füllung einer geschlossenen Form (Punkte = Polygon)
     Fill = 5,
+    /// Neonstift: leuchtender Kern mit Schein
+    Neon = 6,
+    /// Glitzerstift: Farbe mit funkelnden Partikeln
+    Glitter = 7,
 }
 
 impl PenKind {
-    pub const PENS: [PenKind; 4] = [PenKind::Fountain, PenKind::Ball, PenKind::Brush, PenKind::Pencil];
+    pub const PENS: [PenKind; 6] = [PenKind::Fountain, PenKind::Ball, PenKind::Brush, PenKind::Pencil, PenKind::Neon, PenKind::Glitter];
 
     pub fn from_u8(v: u8) -> PenKind {
         match v {
@@ -28,6 +32,8 @@ impl PenKind {
             3 => PenKind::Pencil,
             4 => PenKind::Highlighter,
             5 => PenKind::Fill,
+            6 => PenKind::Neon,
+            7 => PenKind::Glitter,
             _ => PenKind::Fountain,
         }
     }
@@ -40,6 +46,8 @@ impl PenKind {
             PenKind::Pencil => "pencil",
             PenKind::Highlighter => "highlighter",
             PenKind::Fill => "fill",
+            PenKind::Neon => "neon",
+            PenKind::Glitter => "glitter",
         }
     }
 
@@ -49,6 +57,8 @@ impl PenKind {
             "brush" => PenKind::Brush,
             "pencil" => PenKind::Pencil,
             "highlighter" => PenKind::Highlighter,
+            "neon" => PenKind::Neon,
+            "glitter" => PenKind::Glitter,
             _ => PenKind::Fountain,
         }
     }
@@ -61,6 +71,8 @@ impl PenKind {
             PenKind::Pencil => "Bleistift",
             PenKind::Highlighter => "Textmarker",
             PenKind::Fill => "Füllung",
+            PenKind::Neon => "Neon",
+            PenKind::Glitter => "Glitzer",
         }
     }
 
@@ -72,6 +84,8 @@ impl PenKind {
             PenKind::Ball => 0.85 + 0.25 * p,
             PenKind::Brush => 0.08 + 1.6 * p.powf(1.2),
             PenKind::Pencil => 0.6 + 0.6 * p,
+            PenKind::Neon => 1.1 + 0.3 * p,
+            PenKind::Glitter => 1.5 + 0.7 * p,
             PenKind::Highlighter | PenKind::Fill => 1.0,
         }
     }
@@ -104,6 +118,9 @@ impl Pt {
     }
 }
 
+/// Ebene eines Effektstifts: Polygone und ihre Farbe (RGBA).
+pub type FxLayer = (Vec<Vec<(f32, f32)>>, [u8; 4]);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stroke {
     pub pen: PenKind,
@@ -127,7 +144,88 @@ impl Stroke {
         for p in &self.pts {
             r.add(p.x, p.y);
         }
-        r.expand(self.width * 1.0 + 1.0)
+        match self.pen {
+            PenKind::Neon => r.expand(self.width * 1.6 + 6.0),
+            PenKind::Glitter => r.expand(self.width * 1.6 + 1.5),
+            _ => r.expand(self.width + 1.0),
+        }
+    }
+
+    /// Effektstift (Neon/Glitzer) – wird in mehreren Ebenen gezeichnet.
+    pub fn is_fx(&self) -> bool {
+        matches!(self.pen, PenKind::Neon | PenKind::Glitter)
+    }
+
+    /// Ebenen eines Effektstifts: (Polygone, Farbe RGBA), von unten nach oben.
+    /// Leinwand und PDF zeichnen dieselben Ebenen, damit es überall gleich aussieht.
+    pub fn fx_layers(&self) -> Vec<FxLayer> {
+        let [r, g, b, _] = self.color;
+        let mix = |t: f32, to: f32| -> [u8; 3] { [r, g, b].map(|c| (c as f32 + (to - c as f32) * t).round() as u8) };
+        let widened = |f: f32| Stroke { pen: self.pen, color: self.color, width: self.width * f, pts: self.pts.clone() }.outline();
+        let w0 = self.width.max(0.3);
+        // Schein: mindestens einige pt breit, damit er auch bei dünnen Stiften leuchtet
+        let glow = |mul: f32, add: f32| widened((w0 * mul + add) / w0);
+        match self.pen {
+            PenKind::Neon => {
+                let core = mix(0.75, 255.0);
+                vec![
+                    (vec![glow(2.6, 7.0)], [r, g, b, 30]),
+                    (vec![glow(1.9, 4.0)], [r, g, b, 52]),
+                    (vec![glow(1.4, 1.8)], [r, g, b, 95]),
+                    (vec![self.outline()], [r, g, b, 255]),
+                    (vec![widened(0.42)], [core[0], core[1], core[2], 235]),
+                ]
+            }
+            PenKind::Glitter => {
+                let (dark, light) = (mix(0.4, 0.0), mix(0.65, 255.0));
+                let mut sets: [Vec<Vec<(f32, f32)>>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+                // effektive Strichbreite (siehe width_factor) – Funken verteilen sich darüber
+                let w = (self.width * 1.9).max(1.2);
+                let step = (w * 0.45).max(0.35);
+                // Startwert nur vom ersten Punkt: beim Weiterzeichnen bleiben die Funken an ihrem Platz
+                let mut seed: u32 = 0x9e37_79b9;
+                if let Some(p) = self.pts.first() {
+                    seed ^= (p.x * 31.0) as u32 ^ ((p.y * 17.0) as u32).rotate_left(16);
+                }
+                let mut rnd = move || {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    (seed % 10_000) as f32 / 10_000.0
+                };
+                let mut carry = 0.0f32;
+                for win in self.pts.windows(2) {
+                    let (a, bp) = (win[0], win[1]);
+                    let len = dist(a.x, a.y, bp.x, bp.y);
+                    if len <= 1e-4 {
+                        continue;
+                    }
+                    let (nx, ny) = (-(bp.y - a.y) / len, (bp.x - a.x) / len);
+                    let mut t = carry;
+                    while t < len {
+                        let (px, py) = (a.x + (bp.x - a.x) * t / len, a.y + (bp.y - a.y) * t / len);
+                        for _ in 0..3 {
+                            let off = (rnd() - 0.5) * w * 1.05;
+                            let along = (rnd() - 0.5) * step;
+                            let (x, y) = (px + nx * off + (bp.x - a.x) / len * along, py + ny * off + (bp.y - a.y) / len * along);
+                            let k = (rnd() * 3.0) as usize % 3;
+                            let rad = w * (0.06 + rnd() * 0.12);
+                            sets[k].push(vec![(x, y - rad), (x + rad, y), (x, y + rad), (x - rad, y)]);
+                        }
+                        t += step;
+                    }
+                    carry = t - len;
+                }
+                let [d, l, white] = sets;
+                vec![
+                    (vec![self.outline()], [r, g, b, 235]),
+                    (d, [dark[0], dark[1], dark[2], 200]),
+                    (l, [light[0], light[1], light[2], 235]),
+                    (white, [255, 255, 255, 240]),
+                ]
+            }
+            _ => vec![(vec![self.outline()], self.color)],
+        }
     }
 
     pub fn length(&self) -> f32 {

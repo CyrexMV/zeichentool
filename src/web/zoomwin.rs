@@ -119,12 +119,10 @@ impl Editor {
             if *page == z.page {
                 let mut s = stroke.clone();
                 s.pts.extend_from_slice(predicted);
-                let p = outline_path(&s);
                 if s.pen == PenKind::Highlighter {
                     let _ = ctx.set_global_composite_operation("multiply");
                 }
-                ctx.set_fill_style_str(&rgba_css(s.color));
-                ctx.fill_with_path_2d(&p);
+                super::render::fill_stroke(&ctx, &s, None, || outline_path(&s));
                 let _ = ctx.set_global_composite_operation("source-over");
             }
         }
