@@ -65,6 +65,12 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Zirkel** (Lineal-Menü): Mitte verschieben, an der Spitze den Radius aufziehen; am Kreis entlang zeichnet der Stift exakt, der Arm dreht sich dabei mit
 - **Einfügen-Menü**: Bild, **Tabelle** (Spalten/Zeilen, farbige Kopfzeile) und **Funktionsgraph** (z. B. `x^2 - 2; 2sin(x)`,
   automatischer y-Bereich, Gitternetz) – als normale Elemente, mit dem Lasso verschieb- und skalierbar
+- **Auswahl drehen & spiegeln** (Lasso → Ausrichten-Menü): 90° links/rechts, spiegeln, kippen – Bilder werden mitgedreht
+- **Element fixieren** (Lasso → Pinnadel): fixierte Elemente lassen sich nicht verschieben oder radieren;
+  zum Lösen mit dem Lasso einkreisen und die Pinnadel erneut tippen
+- **Seite drehen** (⋯ → „Seite drehen“): einzelne Seiten ins Querformat und zurück, der Inhalt dreht mit;
+  auch im PDF-Export im Querformat
+- **Winkel messen** am Geodreieck: am Nullpunkt ansetzen und zeichnen – Winkel und Gegenwinkel werden live angezeigt
 - **Datum einfügen** (Einfügen-Menü): heutiges Datum als Text, lang („Montag, 9. November 2026“) oder kurz („09.11.2026“)
 - **Doppeltipp zum Einpassen**: mit einem Finger doppelt tippen → zurück auf Seitenbreite; bei 100 % wird die getippte Seite ganz eingepasst
 - **Mindmap-Werkzeug**: Blasen anlegen, Äste hinzufügen, Text und Farbe ändern; beim Verschieben wandern die Verbindungen mit

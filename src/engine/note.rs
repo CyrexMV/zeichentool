@@ -97,6 +97,8 @@ pub struct Item {
     /// Zeichenreihenfolge (aufsteigend)
     pub order: f64,
     pub content: Content,
+    /// Fixiert: lässt sich mit dem Lasso nicht auswählen/verschieben und wird nicht radiert
+    pub pinned: bool,
 }
 
 impl Item {
@@ -112,16 +114,30 @@ impl Item {
     pub fn transformed(&self, xf: &Xf) -> Item {
         let content = match &self.content {
             Content::Stroke(s) => Content::Stroke(s.transformed(xf)),
-            Content::Text(t) => {
+            Content::Text(t) if xf.is_axis_scale() => {
                 let (x, y) = xf.apply(t.x, t.y);
                 let s = xf.scale();
                 Content::Text(TextBox { x, y, w: t.w * s, size: t.size * s, ..t.clone() })
+            }
+            Content::Text(t) => {
+                // gedreht/gespiegelt: Text bleibt lesbar, nur die Mitte wandert mit
+                let r = self.bbox();
+                let (cx, cy) = xf.apply((r.x0 + r.x1) * 0.5, (r.y0 + r.y1) * 0.5);
+                let s = xf.scale();
+                let (w, h) = (t.w * s, r.h() * s);
+                Content::Text(TextBox { x: cx - w * 0.5, y: cy - h * 0.5, w, size: t.size * s, ..t.clone() })
             }
             Content::Image(i) => {
                 let (x0, y0) = xf.apply(i.x, i.y);
                 let (x1, y1) = xf.apply(i.x + i.w, i.y + i.h);
                 let r = Rect::new(x0, y0, x1, y1);
                 Content::Image(ImageItem { x: r.x0, y: r.y0, w: r.w(), h: r.h(), ..i.clone() })
+            }
+            Content::Node(n) if !xf.is_axis_scale() => {
+                let (cx, cy) = xf.apply(n.x + n.w * 0.5, n.y + n.h * 0.5);
+                let s = xf.scale();
+                let (w, h) = (n.w * s, n.h * s);
+                Content::Node(Node { x: cx - w * 0.5, y: cy - h * 0.5, w, h, ..n.clone() })
             }
             Content::Node(n) => {
                 let (x0, y0) = xf.apply(n.x, n.y);
@@ -130,7 +146,7 @@ impl Item {
                 Content::Node(Node { x: r.x0, y: r.y0, w: r.w(), h: r.h(), ..n.clone() })
             }
         };
-        Item { id: self.id, order: self.order, content }
+        Item { id: self.id, order: self.order, content, pinned: self.pinned }
     }
 
     pub fn is_highlighter(&self) -> bool {
@@ -178,13 +194,24 @@ pub struct Page {
     pub links: Vec<Link>,
     /// nach `order` sortiert
     pub items: Vec<Item>,
+    /// Querformat (Seite um 90° gedreht)
+    pub land: bool,
     /// Laufzeit-Zähler für Zwischenspeicher (nicht gespeichert)
     pub version: u64,
 }
 
 impl Page {
+    /// Seitengröße (Breite, Höhe) – im Querformat vertauscht.
+    pub fn size(&self, f: &Format) -> (f32, f32) {
+        if self.land {
+            (f.h, f.w)
+        } else {
+            (f.w, f.h)
+        }
+    }
+
     pub fn new(id: u32, template: Template, paper: Color) -> Page {
-        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), mark: 0, tags: Vec::new(), bg: None, bg_paper: false, links: Vec::new(), items: Vec::new(), version: 0 }
+        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), mark: 0, tags: Vec::new(), bg: None, bg_paper: false, links: Vec::new(), items: Vec::new(), land: false, version: 0 }
     }
 
     pub fn touch(&mut self) {
@@ -368,6 +395,11 @@ pub struct Notebook {
 }
 
 impl Notebook {
+    /// Größe der Seite `i` (berücksichtigt Querformat).
+    pub fn page_size(&self, i: usize) -> (f32, f32) {
+        self.pages.get(i).map(|p| p.size(&self.format)).unwrap_or((self.format.w, self.format.h))
+    }
+
     pub fn new(id: String, title: &str, cover: u8, format: Format, template: Template, paper: Color, now: f64) -> Notebook {
         let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new(), lock: String::new(), trashed: 0.0, is_deck: false };
         let pid = nb.alloc_id();
@@ -392,10 +424,11 @@ impl Notebook {
     /// Neue leere Seite mit derselben Vorlage wie `like` (oder der letzten Seite).
     pub fn new_page_like(&mut self, like: usize) -> Page {
         let src = &self.pages[like.min(self.pages.len() - 1)];
-        let (t, p) = (src.template, src.paper);
+        let (t, p, land) = (src.template, src.paper, src.land);
         let bg = if src.bg_paper { src.bg.clone() } else { None };
         let id = self.alloc_id();
         let mut page = Page::new(id, t, p);
+        page.land = land;
         if bg.is_some() {
             page.bg = bg;
             page.bg_paper = true;
@@ -503,6 +536,7 @@ impl Notebook {
             id: tid,
             order: 1.0,
             content: Content::Text(TextBox { x: x + s * 0.6, y: y + ph * 0.5 - size * 0.75, w: pw - s * 1.2, size, color: [28, 30, 44, 255], bold: true, text: self.title.clone() }),
+            pinned: false,
         }]);
         p
     }
@@ -578,7 +612,7 @@ mod tests {
     use crate::engine::ink::{PenKind, Pt};
 
     fn stroke(order: f64, id: u32) -> Item {
-        Item { id, order, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.0, pts: vec![Pt::new(0.0, 0.0, 1.0)] }) }
+        Item { id, order, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.0, pts: vec![Pt::new(0.0, 0.0, 1.0)] }), pinned: false }
     }
 
     #[test]
@@ -599,7 +633,7 @@ mod tests {
         let r = rows[2];
         let mut p = Page::new(1, t, Color::WHITE);
         let y = (r.y0 + r.y1) * 0.5;
-        p.insert([Item { id: 1, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.0, pts: vec![Pt::new(r.text_x + 5.0, y, 1.0), Pt::new(300.0, y, 1.0)] }) }]);
+        p.insert([Item { id: 1, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0, 0, 0, 255], width: 1.0, pts: vec![Pt::new(r.text_x + 5.0, y, 1.0), Pt::new(300.0, y, 1.0)] }), pinned: false }]);
         let (x0, x1, sy) = p.row_strike(&r).expect("Zeile mit Schrift wird durchgestrichen");
         assert!(x0 < r.text_x + 5.0 && x1 > 300.0);
         assert!(sy > r.y0 && sy < r.y1);

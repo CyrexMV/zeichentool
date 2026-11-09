@@ -54,7 +54,7 @@ impl Editor {
     pub fn zw_size(&self, z: &ZoomWin) -> (f32, f32) {
         let c = panel();
         let (cw, ch) = (c.client_width().max(1) as f32, c.client_height().max(1) as f32);
-        let w = self.nb.format.w / z.zoom;
+        let w = self.page_size_id(z.page).0 / z.zoom;
         (w, w * ch / cw)
     }
 
@@ -109,7 +109,7 @@ impl Editor {
         ctx.fill_rect(0.0, 0.0, cw * dpr, ch * dpr);
         let k = self.zw_scale(&z) * dpr;
         ctx.set_transform(k, 0.0, 0.0, k, -(r.x0 as f64) * k, -(r.y0 as f64) * k).ok();
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let (w, h) = self.nb.page_size(i);
         {
             let page = &self.nb.pages[i];
             let mut cc = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
@@ -158,7 +158,7 @@ impl Editor {
     fn zw_line(&self, z: &ZoomWin) -> f32 {
         let i = self.page_index(z.page).unwrap_or(0);
         let t = self.nb.pages[i].template;
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let (w, h) = self.nb.page_size(i);
         let (_, rh) = self.zw_size(z);
         match t.kind {
             crate::engine::TemplateKind::Lined | crate::engine::TemplateKind::Checklist | crate::engine::TemplateKind::Cornell => t.unit(w, h),
@@ -170,7 +170,7 @@ impl Editor {
     pub fn zw_step(&mut self, dir: i32) {
         let Some(mut z) = self.zoomwin else { return };
         let (rw, rh) = self.zw_size(&z);
-        let (pw, ph) = (self.nb.format.w, self.nb.format.h);
+        let (pw, ph) = self.page_size_id(z.page);
         let line = self.zw_line(&z);
         match dir {
             1 => {
@@ -221,7 +221,7 @@ impl App {
         set_class(&el("editor"), "zw-open", true);
         let i = ed.cur_page;
         let page = ed.nb.pages[i].id;
-        let (pw, ph) = (ed.nb.format.w, ed.nb.format.h);
+        let (pw, ph) = ed.nb.page_size(i);
         let t = ed.nb.pages[i].template;
         // Start: linker Rand (bei Linien: Randlinie), im oberen sichtbaren Bereich
         let left = if t.kind == crate::engine::TemplateKind::Lined { t.unit(pw, ph) * 2.4 } else { pw * 0.06 };
@@ -248,7 +248,7 @@ impl App {
                 }
                 if let Some(z) = ed.zoomwin {
                     let (rw, rh) = ed.zw_size(&z);
-                    let (pw, ph) = (ed.nb.format.w, ed.nb.format.h);
+                    let (pw, ph) = ed.page_size_id(z.page);
                     let z2 = ZoomWin { x: z.x.min(pw - rw).max(0.0), y: z.y.min(ph - rh).max(0.0), ..z };
                     ed.zoomwin = Some(z2);
                 }
@@ -311,7 +311,7 @@ impl App {
         let Some(mut z) = ed.zoomwin else { return };
         let s = ed.view.s() as f32;
         let (rw, rh) = ed.zw_size(&z);
-        let (pw, ph) = (ed.nb.format.w, ed.nb.format.h);
+        let (pw, ph) = ed.page_size_id(start.2);
         z.page = start.2;
         z.x = (start.0 + dx as f32 / s).clamp(0.0, (pw - rw).max(0.0));
         z.y = (start.1 + dy as f32 / s).clamp(0.0, (ph - rh).max(0.0));

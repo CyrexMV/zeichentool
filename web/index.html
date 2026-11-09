@@ -65,6 +65,11 @@
     <symbol id="i-paper" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="2"/><path d="m20 17-3-3-6 6"/></symbol>
     <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2a1.5 1.5 0 0 1 0 3H8v-5M14 11v5M14 11h2"/></symbol>
     <symbol id="i-pensets" viewBox="0 0 24 24"><path d="M4 20l3-1 9-9-2-2-9 9z"/><path d="M13 7l2-2 4 4-2 2"/><path d="M15 21h6M18 18v6" transform="translate(0 -3)"/></symbol>
+    <symbol id="i-rot-cw" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+    <symbol id="i-rot-ccw" viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 1 2.3 5.7"/><path d="M4 4v7h7"/></symbol>
+    <symbol id="i-flip-h" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6 3 18h6z"/><path d="M15 6l6 12h-6z"/></symbol>
+    <symbol id="i-flip-v" viewBox="0 0 24 24"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9 18 3v6z"/><path d="M6 15l12 6v-6z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></symbol>
     <symbol id="i-align" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
     <symbol id="i-al-left" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
     <symbol id="i-al-hc" viewBox="0 0 24 24"><path d="M12 3v18"/><rect x="5" y="5" width="14" height="5" rx="1.5"/><rect x="8" y="14" width="8" height="5" rx="1.5"/></symbol>
@@ -187,7 +192,8 @@
   <div id="sel-menu" class="sel-menu glass hidden">
     <div class="sel-colors" id="sel-colors"></div>
     <span class="sep"></span>
-    <button data-act="sel-align" title="Ausrichten"><svg><use href="#i-align"/></svg></button>
+    <button data-act="sel-align" title="Ausrichten, drehen &amp; spiegeln"><svg><use href="#i-align"/></svg></button>
+    <button data-act="sel-pin" id="sel-pin" title="Fixieren"><svg><use href="#i-pin"/></svg></button>
     <button data-act="sel-fill" title="Form füllen (Stiftfarbe)"><svg><use href="#i-fill"/></svg></button>
     <button data-act="sel-link" id="sel-link" title="Link setzen"><svg><use href="#i-link"/></svg></button>
     <button data-act="sel-card" id="sel-card" title="Als Lernkarte"><svg><use href="#i-cards"/></svg></button>
@@ -249,6 +255,7 @@
   <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
   <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
   <button class="mi" data-act="marks"><svg><use href="#i-tag"/></svg>Markierung &amp; Schlagwörter …</button>
+  <button class="mi" data-act="rotate-page"><svg><use href="#i-rot-cw"/></svg>Seite drehen (Hoch/Quer)</button>
   <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
   <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>Seite in anderes Notizbuch …</button>
   <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
@@ -273,6 +280,13 @@
     <button data-act="align-dist-v" title="Senkrecht verteilen"><svg><use href="#i-al-dv"/></svg><span>Verteilen ↕</span></button>
   </div>
   <p class="hint">Was sich berührt (z. B. ein Wort oder eine Tabelle), bleibt zusammen.</p>
+  <div class="pop-title second">Drehen &amp; Spiegeln</div>
+  <div class="align-grid four">
+    <button data-act="xf-rot-ccw" title="90° nach links"><svg><use href="#i-rot-ccw"/></svg><span>90° links</span></button>
+    <button data-act="xf-rot-cw" title="90° nach rechts"><svg><use href="#i-rot-cw"/></svg><span>90° rechts</span></button>
+    <button data-act="xf-flip-h" title="Waagerecht spiegeln"><svg><use href="#i-flip-h"/></svg><span>Spiegeln</span></button>
+    <button data-act="xf-flip-v" title="Senkrecht spiegeln"><svg><use href="#i-flip-v"/></svg><span>Kippen</span></button>
+  </div>
 </div>
 
 <!-- Stift-Sets -->
@@ -304,7 +318,7 @@
   <button class="mi" data-act="ruler" data-arg="triangle"><svg><use href="#i-triangle"/></svg>Geodreieck</button>
   <button class="mi" data-act="ruler" data-arg="compass"><svg><use href="#i-compass"/></svg>Zirkel</button>
   <button class="mi" data-act="ruler" data-arg="off"><svg><use href="#i-close"/></svg>Ausblenden</button>
-  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien. Zirkel: Mitte verschieben, Spitze ziehen = Radius; am Kreis entlang zeichnen.</p>
+  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien. Zirkel: Mitte verschieben, Spitze ziehen = Radius; am Kreis entlang zeichnen. Winkel messen: am Nullpunkt des Geodreiecks ansetzen und zeichnen.</p>
 </div>
 
 <!-- Ordner-Menü -->

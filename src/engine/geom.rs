@@ -79,6 +79,25 @@ impl Xf {
         Xf { a: sx, b: 0.0, c: 0.0, d: sy, e: cx - sx * cx, f: cy - sy * cy }
     }
 
+    /// Drehung um 90° im Uhrzeigersinn (Bildschirm: y nach unten) um (cx, cy).
+    pub fn rot90_about(cx: f32, cy: f32) -> Xf {
+        Xf { a: 0.0, b: 1.0, c: -1.0, d: 0.0, e: cx + cy, f: cy - cx }
+    }
+
+    /// Spiegelung an der senkrechten (`horizontal`) bzw. waagrechten Achse durch (cx, cy).
+    pub fn flip_about(horizontal: bool, cx: f32, cy: f32) -> Xf {
+        if horizontal {
+            Xf { a: -1.0, b: 0.0, c: 0.0, d: 1.0, e: 2.0 * cx, f: 0.0 }
+        } else {
+            Xf { a: 1.0, b: 0.0, c: 0.0, d: -1.0, e: 0.0, f: 2.0 * cy }
+        }
+    }
+
+    /// Nur Verschiebung/positive Skalierung (keine Drehung oder Spiegelung)?
+    pub fn is_axis_scale(&self) -> bool {
+        self.b == 0.0 && self.c == 0.0 && self.a > 0.0 && self.d > 0.0
+    }
+
     pub fn apply(&self, x: f32, y: f32) -> (f32, f32) {
         (self.a * x + self.c * y + self.e, self.b * x + self.d * y + self.f)
     }

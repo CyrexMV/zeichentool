@@ -558,7 +558,7 @@ fn image_notebook(title: &str, w: u32, h: u32, rgba: &[u8]) -> Notebook {
     let mut nb = Notebook::new(new_id(), if title.is_empty() { "Importiert" } else { title }, 8, format, Default::default(), Color::WHITE, wall_clock());
     let png = encode_png(w, h, rgba);
     let id = nb.alloc_id();
-    nb.pages[0].insert([Item { id, order: 1.0, content: Content::Image(ImageItem { x: 0.0, y: 0.0, w: format.w, h: format.h, key: hash_bytes(&png), png: Rc::new(png) }) }]);
+    nb.pages[0].insert([Item { id, order: 1.0, content: Content::Image(ImageItem { x: 0.0, y: 0.0, w: format.w, h: format.h, key: hash_bytes(&png), png: Rc::new(png) }), pinned: false }]);
     nb
 }
 

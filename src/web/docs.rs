@@ -134,7 +134,7 @@ impl App {
                 Ok(o) => {
                     let jpeg = bytes_of(&o, "jpeg");
                     let Some(ed) = &mut a.ed else { return };
-                    let (w, h) = (ed.nb.format.w, ed.nb.format.h);
+                    let (w, h) = ed.nb.page_size(ed.cur_page);
                     let img = bg_item(jpeg, w, h);
                     let idx: Vec<usize> = if all { (0..ed.nb.pages.len()).collect() } else { vec![ed.cur_page] };
                     ed.update_pages_meta(&idx, |m| {

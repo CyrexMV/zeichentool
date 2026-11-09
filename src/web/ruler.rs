@@ -124,6 +124,10 @@ impl Ruler {
             }
             return None;
         }
+        // Am Nullpunkt des Geodreiecks beginnen = Winkel antragen (freier Strich mit Gradanzeige)
+        if self.kind == RulerKind::Triangle && (x - self.cx).hypot(y - self.cy) < 22.0 {
+            return None;
+        }
         self.snap(x, y, max, offset).map(Guide::Line)
     }
 

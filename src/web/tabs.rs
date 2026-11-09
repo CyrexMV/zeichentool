@@ -196,13 +196,15 @@ impl super::editor::Editor {
     pub fn present_fit(&mut self, i: usize) {
         let i = i.min(self.nb.pages.len() - 1);
         let fit = self.view.fit;
-        let z = ((self.vh - 40.0) / (self.ph() * fit)).min((self.vw - 40.0) / (self.pw() * fit)).max(0.1);
+        let (pw, ph) = (self.page_w(i), self.page_h(i));
+        let z = ((self.vh - 40.0) / (ph * fit)).min((self.vw - 40.0) / (pw * fit)).max(0.1);
         self.view.zoom = z;
         let s = self.view.s();
-        self.view.sy = self.page_top(i) - ((self.vh / s) - self.ph()) * 0.5;
+        self.view.sy = self.page_top(i) - ((self.vh / s) - ph) * 0.5;
         self.bmps.clear();
         self.clamp();
-        self.view.sy = self.page_top(i) - ((self.vh / s) - self.ph()) * 0.5;
+        self.view.sy = self.page_top(i) - ((self.vh / s) - ph) * 0.5;
+        self.view.sx = self.page_left(i) - ((self.vw / s) - pw) * 0.5;
         self.cur_page = i;
         self.dirty = true;
     }

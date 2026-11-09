@@ -135,7 +135,6 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     let mut shadings: Vec<String> = Vec::new();
     // Bilder: (Schlüssel → Name, Objekt-ID)
     let mut images: BTreeMap<u64, (String, usize)> = BTreeMap::new();
-    let (w, h) = (nb.format.w, nb.format.h);
     // Seitenobjekte vorab reservieren (für Verweise zwischen Seiten)
     let exported: Vec<usize> = pages.iter().copied().filter(|&pi| pi < nb.pages.len()).collect();
     let page_ids: Vec<usize> = exported.iter().map(|_| pdf.reserve()).collect();
@@ -145,6 +144,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     let mut contents: Vec<String> = Vec::new();
     for &pi in &exported {
         let page = &nb.pages[pi];
+        let (w, h) = page.size(&nb.format);
         annots.push(page.links.iter().filter_map(|l| match l.target {
             super::note::LinkTarget::Page(id) => pid_of(id).map(|t| (l.rect, t)),
             _ => None,
@@ -258,6 +258,7 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     pdf.obj(res_id, &res);
 
     for (k, c) in contents.into_iter().enumerate() {
+        let (w, h) = nb.pages[exported[k]].size(&nb.format);
         let cid = pdf.reserve();
         pdf.stream(cid, "", c.as_bytes());
         let mut annot_refs = Vec::new();
@@ -557,8 +558,8 @@ mod tests {
     fn exports_valid_looking_pdf() {
         let mut nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template::new(TemplateKind::Planner, 1), Color::WHITE, 0.0);
         nb.pages[0].insert([
-            Item { id: 5, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Highlighter, color: [255, 230, 0, 90], width: 12.0, pts: vec![Pt::new(10.0, 10.0, 1.0), Pt::new(100.0, 10.0, 1.0)] }) },
-            Item { id: 6, order: 2.0, content: Content::Text(TextBox { x: 10.0, y: 10.0, w: 100.0, size: 12.0, color: [0, 0, 0, 255], bold: false, text: "Grüße".into() }) },
+            Item { id: 5, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Highlighter, color: [255, 230, 0, 90], width: 12.0, pts: vec![Pt::new(10.0, 10.0, 1.0), Pt::new(100.0, 10.0, 1.0)] }), pinned: false },
+            Item { id: 6, order: 2.0, content: Content::Text(TextBox { x: 10.0, y: 10.0, w: 100.0, size: 12.0, color: [0, 0, 0, 255], bold: false, text: "Grüße".into() }), pinned: false },
         ]);
         let p = nb.new_page_like(0);
         nb.pages.push(p);

@@ -10,7 +10,7 @@ use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 
 struct W(Vec<u8>);
 
@@ -142,13 +142,15 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
         for t in &p.tags {
             w.str(t);
         }
+        w.u8(p.land as u8);
         w.u32(p.items.len() as u32);
         for it in &p.items {
+            let pin = if it.pinned { 0x80 } else { 0 };
             match &it.content {
-                Content::Stroke(_) => w.u8(0),
-                Content::Text(_) => w.u8(1),
-                Content::Image(_) => w.u8(2),
-                Content::Node(_) => w.u8(3),
+                Content::Stroke(_) => w.u8(pin),
+                Content::Text(_) => w.u8(1 | pin),
+                Content::Image(_) => w.u8(2 | pin),
+                Content::Node(_) => w.u8(3 | pin),
             }
             w.u32(it.id);
             w.f64(it.order);
@@ -288,14 +290,21 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                 tags.push(r.str()?);
             }
         }
+        let land = version >= 7 && r.u8()? != 0;
+        if land {
+            if let Some(b) = &mut bg {
+                (b.w, b.h) = (format.h, format.w);
+            }
+        }
         let ni = r.u32()? as usize;
         let mut items = Vec::with_capacity(ni.min(100_000));
         for _ in 0..ni {
             let kind = r.u8()?;
+            let pinned = kind & 0x80 != 0;
             let id = r.u32()?;
             max_id = max_id.max(id);
             let order = r.f64()?;
-            let content = match kind {
+            let content = match kind & 0x7f {
                 0 => {
                     let pen = PenKind::from_u8(r.u8()?);
                     let color = r.rgba()?;
@@ -320,10 +329,10 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                 }
                 _ => return Err(BROKEN.into()),
             };
-            items.push(Item { id, order, content });
+            items.push(Item { id, order, content, pinned });
         }
         items.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap_or(std::cmp::Ordering::Equal));
-        pages.push(Page { id: pid, template, paper, bookmark, checks, title, mark, tags, bg, bg_paper, links, items, version: 1 });
+        pages.push(Page { id: pid, template, paper, bookmark, checks, title, mark, tags, bg, bg_paper, links, items, land, version: 1 });
     }
     if pages.is_empty() {
         return Err("Notizbuch enthält keine Seiten".into());
@@ -642,9 +651,9 @@ mod tests {
         let id = nb.alloc_id();
         let png = encode_png(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]);
         nb.pages[0].insert([
-            Item { id, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Brush, color: [1, 2, 3, 255], width: 2.5, pts: vec![Pt::new(1.0, 2.0, 1.0), Pt::new(3.0, 4.0, 0.0)] }) },
-            Item { id: id + 1, order: 2.0, content: Content::Text(TextBox { x: 10.0, y: 20.0, w: 200.0, size: 14.0, color: [0, 0, 0, 255], bold: true, text: "Hallo\nWelt".into() }) },
-            Item { id: id + 2, order: 3.0, content: Content::Image(ImageItem { x: 0.0, y: 0.0, w: 50.0, h: 25.0, key: hash_bytes(&png), png: Rc::new(png) }) },
+            Item { id, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Brush, color: [1, 2, 3, 255], width: 2.5, pts: vec![Pt::new(1.0, 2.0, 1.0), Pt::new(3.0, 4.0, 0.0)] }), pinned: false },
+            Item { id: id + 1, order: 2.0, content: Content::Text(TextBox { x: 10.0, y: 20.0, w: 200.0, size: 14.0, color: [0, 0, 0, 255], bold: true, text: "Hallo\nWelt".into() }), pinned: true },
+            Item { id: id + 2, order: 3.0, content: Content::Image(ImageItem { x: 0.0, y: 0.0, w: 50.0, h: 25.0, key: hash_bytes(&png), png: Rc::new(png) }), pinned: false },
         ]);
         nb.next_id = id + 3;
         nb.pages[0].bookmark = true;
@@ -656,12 +665,13 @@ mod tests {
         nb.trashed = 99.0;
         nb.pages[0].template = Template::planner(TemplateKind::WeekPlan, 2027, 12);
         let bgp = encode_png(1, 1, &[1, 2, 3, 255]);
-        nb.pages[0].bg = Some(ImageItem { x: 0.0, y: 0.0, w: 595.0, h: 842.0, key: hash_bytes(&bgp), png: Rc::new(bgp) });
+        nb.pages[0].bg = Some(ImageItem { x: 0.0, y: 0.0, w: nb.format.h, h: nb.format.w, key: hash_bytes(&bgp), png: Rc::new(bgp) });
         nb.pages[0].bg_paper = true;
+        nb.pages[0].land = true;
         nb.pages[0].mark = 3;
         nb.pages[0].tags = vec!["Prüfung".into(), "Wichtig".into()];
         let nid = nb.alloc_id();
-        nb.pages[0].insert([Item { id: nid, order: 9.0, content: Content::Node(Node { x: 1.0, y: 2.0, w: 80.0, h: 30.0, text: "Thema".into(), color: [1, 2, 3, 255], parent: 0 }) }]);
+        nb.pages[0].insert([Item { id: nid, order: 9.0, content: Content::Node(Node { x: 1.0, y: 2.0, w: 80.0, h: 30.0, text: "Thema".into(), color: [1, 2, 3, 255], parent: 0 }), pinned: false }]);
         nb.pages[0].links = vec![Link { rect: Rect::new(1.0, 2.0, 3.0, 4.0), target: LinkTarget::Page(1), hidden: true }, Link { rect: Rect::new(5.0, 6.0, 7.0, 8.0), target: LinkTarget::Notebook("abc".into()), hidden: false }];
         nb.cards.push(Card { id: 99, front: Region { page: nb.pages[0].id, rect: Rect::new(1.0, 2.0, 30.0, 40.0) }, back: Region { page: nb.pages[0].id, rect: Rect::new(5.0, 50.0, 60.0, 90.0) }, level: 2, right: 3, wrong: 1, due: 12345.0 });
         nb.next_id = nb.next_id.max(100);

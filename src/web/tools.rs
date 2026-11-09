@@ -90,6 +90,7 @@ impl App {
             }
             Tool::Lasso => {
                 // Auswahl verschieben/skalieren?
+                let pinned = ed.sel_pinned();
                 if let Some(sel) = &ed.selection {
                     if let Some(i) = ed.page_index(sel.page) {
                         let b = sel.bbox;
@@ -97,13 +98,21 @@ impl App {
                         let (x1, y1) = ed.page_to_screen(i, b.x1, b.y1);
                         let (_, px, py) = ed.hit_page(sx, sy, 1e6).unwrap_or((i, 0.0, 0.0));
                         let (nx, ny) = ed.to_nb(sx, sy);
-                        let local = (nx as f32, (ny - ed.page_top(i)) as f32);
+                        let (lx, ly) = ed.nb_to_page(i, nx, ny);
+                        let local = (lx as f32, ly as f32);
                         let _ = (px, py);
+                        let inside = sx >= x0 - 14.0 && sx <= x1 + 14.0 && sy >= y0 - 14.0 && sy <= y1 + 14.0;
+                        if pinned && (inside || dist((x1 + 6.0) as f32, (y1 + 6.0) as f32, sx as f32, sy as f32) < 26.0) {
+                            set_timeout(0, || {
+                                with_app(|a| a.toast("Fixiert – zum Verschieben zuerst im Auswahlmenü lösen"));
+                            });
+                            return;
+                        }
                         if dist((x1 + 6.0) as f32, (y1 + 6.0) as f32, sx as f32, sy as f32) < 26.0 {
                             ed.op = Some(Op::MoveSel { pointer, start: local, scale: true, xf: Xf::IDENTITY });
                             return;
                         }
-                        if sx >= x0 - 14.0 && sx <= x1 + 14.0 && sy >= y0 - 14.0 && sy <= y1 + 14.0 {
+                        if inside {
                             ed.op = Some(Op::MoveSel { pointer, start: local, scale: false, xf: Xf::IDENTITY });
                             show("sel-menu", false);
                             return;
@@ -204,10 +213,10 @@ impl App {
             Op::MoveSel { .. } => ed.selection.as_ref().and_then(|sel| ed.page_index(sel.page)),
             Op::Laser { .. } | Op::Mind { .. } => None,
         };
-        let top = page_idx.map(|i| ed.page_top(i)).unwrap_or(0.0);
+        let (left, top) = page_idx.map(|i| (ed.page_left(i), ed.page_top(i))).unwrap_or((0.0, 0.0));
         let to_page = |sx: f64, sy: f64, ed: &Editor| {
             let (x, y) = ed.to_nb(sx, sy);
-            (x as f32, (y - top) as f32)
+            ((x - left) as f32, (y - top) as f32)
         };
         let local: Vec<(f32, f32, f32)> = pts.iter().map(|&(sx, sy, p)| {
             let (x, y) = to_page(sx, sy, ed);
@@ -354,7 +363,7 @@ impl App {
                         }
                     }
                     let id = ed.nb.alloc_id();
-                    added.push(Item { id, order, content: Content::Stroke(stroke) });
+                    added.push(Item { id, order, content: Content::Stroke(stroke), pinned: false });
                     if let Some(p) = ed.nb.page_mut(page) {
                         p.insert(added.clone());
                     }
@@ -516,6 +525,7 @@ impl App {
     /// Auswahlmenü, Einfügen-Knopf und Textfeld an die Ansicht anpassen.
     pub fn position_overlays(&mut self) {
         self.position_mind_menu();
+        self.refresh_pin_button();
         let Some(ed) = &self.ed else { return };
         let menu = el("sel-menu");
         match (&ed.selection, &ed.op) {
@@ -573,7 +583,7 @@ impl App {
             }
             _ => {
                 set_textarea("");
-                let w = (ed.nb.format.w - x - 16.0).clamp(80.0, 320.0);
+                let w = (ed.nb.page_size(page_idx).0 - x - 16.0).clamp(80.0, 320.0);
                 TextEdit { page: page.id, item: None, x, y: y - size * 0.5, w, size, color, bold }
             }
         };
@@ -603,7 +613,7 @@ impl App {
                 None => (0, page.max_order() + 1.0),
             };
             let id = if id == 0 { ed.nb.alloc_id() } else { id };
-            added.push(Item { id, order, content: Content::Text(tb) });
+            added.push(Item { id, order, content: Content::Text(tb), pinned: false });
         }
         let removed: Vec<Item> = old.into_iter().collect();
         if removed.is_empty() && added.is_empty() {
@@ -631,7 +641,7 @@ impl App {
     pub fn insert_image(&mut self, png: Vec<u8>, pw: f32, ph: f32) {
         let Some(ed) = &mut self.ed else { return };
         let i = ed.cur_page;
-        let (w, h) = (ed.nb.format.w, ed.nb.format.h);
+        let (w, h) = ed.nb.page_size(i);
         let mut iw = pw * 0.75;
         let mut ih = ph * 0.75;
         let f = (w * 0.7 / iw).min(h * 0.6 / ih).min(1.0);
@@ -639,13 +649,13 @@ impl App {
         ih *= f;
         // Mitte des sichtbaren Bereichs der Seite
         let (cx, cy) = ed.to_nb(ed.vw * 0.5, ed.vh * 0.5);
-        let cy = cy - ed.page_top(i);
+        let (cx, cy) = ed.nb_to_page(i, cx, cy);
         let x = (cx as f32 - iw * 0.5).clamp(0.0, (w - iw).max(0.0));
         let y = (cy as f32 - ih * 0.5).clamp(0.0, (h - ih).max(0.0));
         let key = hash_bytes(&png);
         let id = ed.nb.alloc_id();
         let page = &mut ed.nb.pages[i];
-        let item = Item { id, order: page.max_order() + 1.0, content: Content::Image(ImageItem { x, y, w: iw, h: ih, png: Rc::new(png), key }) };
+        let item = Item { id, order: page.max_order() + 1.0, content: Content::Image(ImageItem { x, y, w: iw, h: ih, png: Rc::new(png), key }), pinned: false };
         page.insert([item.clone()]);
         let pid = page.id;
         ed.push(Action::Items { page: pid, removed: vec![], added: vec![item.clone()] });
@@ -672,7 +682,7 @@ impl Editor {
     /// Checklisten-Kästchen an einem Bildschirmpunkt umschalten. `true`, wenn eines getroffen wurde.
     pub fn toggle_check_at(&mut self, sx: f64, sy: f64) -> bool {
         let Some((i, x, y)) = self.hit_page(sx, sy, 0.0) else { return false };
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let (w, h) = self.nb.page_size(i);
         let page = &self.nb.pages[i];
         // Trefferfläche mindestens ~11 Bildschirmpixel um das Kästchen (gut mit dem Finger)
         let pad = (11.0 / self.view.s() as f32).max(2.0);
@@ -697,6 +707,9 @@ impl Editor {
         let Some(pi) = self.page_index(page) else { return };
         let mut changes: Vec<(u32, f64, Vec<Stroke>)> = Vec::new();
         for it in &self.nb.pages[pi].items {
+            if it.pinned {
+                continue;
+            }
             if let Content::Stroke(s) = &it.content {
                 if hl_only && s.pen != PenKind::Highlighter {
                     continue;
@@ -717,7 +730,7 @@ impl Editor {
         for (_, order, pieces) in &changes {
             for (k, s) in pieces.iter().enumerate() {
                 let id = self.nb.alloc_id();
-                new_items.push(Item { id, order: order + (k as f64 + 1.0) * 1e-7, content: Content::Stroke(s.clone()) });
+                new_items.push(Item { id, order: order + (k as f64 + 1.0) * 1e-7, content: Content::Stroke(s.clone()), pinned: false });
             }
         }
         let ids: Vec<u32> = changes.iter().map(|c| c.0).collect();
@@ -729,8 +742,9 @@ impl Editor {
 
     pub fn select_in(&mut self, page: u32, poly: &[(f32, f32)], kinds: (bool, bool, bool)) {
         let Some(pi) = self.page_index(page) else { return };
-        let mut ids = Vec::new();
-        let mut bbox = Rect::EMPTY;
+        // fixierte Elemente nur, wenn sonst nichts erfasst wurde (zum Lösen)
+        let (mut ids, mut pins) = (Vec::new(), Vec::new());
+        let (mut bbox, mut pbox) = (Rect::EMPTY, Rect::EMPTY);
         for it in &self.nb.pages[pi].items {
             let take = match &it.content {
                 Content::Stroke(s) if kinds.0 => {
@@ -747,21 +761,48 @@ impl Editor {
                 }
                 _ => false,
             };
-            if take {
+            if take && it.pinned {
+                pins.push(it.id);
+                pbox = pbox.union(&it.bbox());
+            } else if take {
                 ids.push(it.id);
                 bbox = bbox.union(&it.bbox());
             }
         }
+        if ids.is_empty() {
+            (ids, bbox) = (pins, pbox);
+        }
         self.selection = if ids.is_empty() { None } else { Some(Selection { page, ids, bbox }) };
     }
 
-    fn selected_items(&self) -> Vec<Item> {
+    /// Enthält die Auswahl fixierte Elemente?
+    pub fn sel_pinned(&self) -> bool {
+        self.selected_items().iter().any(|i| i.pinned)
+    }
+
+    /// Auswahl fixieren bzw. lösen (sind schon alle fixiert, werden sie gelöst). Liefert den neuen Zustand.
+    pub fn toggle_pin_selection(&mut self) -> Option<bool> {
+        let items = self.selected_items();
+        if items.is_empty() {
+            return None;
+        }
+        let pin = !items.iter().all(|i| i.pinned);
+        let new_items = items.into_iter().map(|mut i| {
+            i.pinned = pin;
+            i
+        }).collect();
+        self.replace_selected(new_items);
+        self.dirty = true;
+        Some(pin)
+    }
+
+    pub fn selected_items(&self) -> Vec<Item> {
         let Some(sel) = &self.selection else { return Vec::new() };
         let Some(pi) = self.page_index(sel.page) else { return Vec::new() };
         self.nb.pages[pi].items.iter().filter(|i| sel.ids.contains(&i.id)).cloned().collect()
     }
 
-    fn replace_selected(&mut self, new_items: Vec<Item>) {
+    pub fn replace_selected(&mut self, new_items: Vec<Item>) {
         let Some(sel) = &self.selection else { return };
         let page = sel.page;
         let old = self.selected_items();
@@ -845,6 +886,7 @@ impl Editor {
             map.push((n.id, id));
             n.id = id;
             n.order = order;
+            n.pinned = false;
             items.push(n);
         }
         crate::engine::note::remap_parents(&mut items, &map);
@@ -872,7 +914,7 @@ pub fn is_closed(s: &Stroke) -> bool {
 /// Füllfläche für eine geschlossene Form.
 pub fn fill_item(id: u32, order: f64, s: &Stroke, alpha: u8) -> Item {
     let c = s.color;
-    Item { id, order, content: Content::Stroke(Stroke { pen: PenKind::Fill, color: [c[0], c[1], c[2], alpha], width: 0.0, pts: s.pts.iter().map(|p| Pt::new(p.x, p.y, 1.0)).collect() }) }
+    Item { id, order, content: Content::Stroke(Stroke { pen: PenKind::Fill, color: [c[0], c[1], c[2], alpha], width: 0.0, pts: s.pts.iter().map(|p| Pt::new(p.x, p.y, 1.0)).collect() }), pinned: false }
 }
 
 impl Editor {

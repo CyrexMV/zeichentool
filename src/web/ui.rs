@@ -437,6 +437,15 @@ impl App {
                 }
                 self.after_pages_change();
             }
+            "rotate-page" => {
+                self.close_popovers();
+                self.rotate_page();
+            }
+            "sel-pin" => self.toggle_pin(),
+            a if a.starts_with("xf-") => {
+                let kind = a.trim_start_matches("xf-").to_string();
+                self.transform_selection_kind(&kind);
+            }
             "dup-page" => {
                 self.close_popovers();
                 if let Some(ed) = &mut self.ed {

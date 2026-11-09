@@ -471,10 +471,8 @@ impl Editor {
         ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
         ctx.set_fill_style_str(if self.presenting.is_some() { "#0b0c10" } else if dark { "#15161b" } else { "#e9ebf1" });
         ctx.fill_rect(0.0, 0.0, self.vw * dpr, self.vh * dpr);
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
-        let span = self.ph() + GAP;
-        let first = ((sy / span).floor().max(0.0)) as usize;
-        let last = (((sy + self.vh / s) / span).floor().max(0.0) as usize).min(self.nb.pages.len() - 1);
+        let first = self.page_at_y(sy - GAP * 0.5);
+        let last = self.page_at_y(sy + self.vh / s);
         let moving_ids: Vec<u32>;
         let moving = match (&self.op, &self.selection) {
             (Some(Op::MoveSel { xf, .. }), Some(sel)) => {
@@ -490,7 +488,6 @@ impl Editor {
         let skip_page = self.text_edit.as_ref().map(|t| t.page);
         let px_scale = s * dpr;
         let max_bmp = 4096.0;
-        let use_bmp = (w as f64 * px_scale) <= max_bmp && (h as f64 * px_scale) <= max_bmp;
         for i in first..=last.max(first) {
             if i >= self.nb.pages.len() {
                 break;
@@ -498,8 +495,11 @@ impl Editor {
             if self.presenting.is_some_and(|p| p != i) {
                 continue;
             }
+            let (w, h) = self.nb.page_size(i);
+            let use_bmp = (w as f64 * px_scale) <= max_bmp && (h as f64 * px_scale) <= max_bmp;
             let top = self.page_top(i);
-            let (ox, oy) = (-sx * s * dpr, (top - sy) * s * dpr);
+            let left = self.page_left(i);
+            let (ox, oy) = ((left - sx) * s * dpr, (top - sy) * s * dpr);
             let pid = self.nb.pages[i].id;
             // Schatten
             ctx.set_fill_style_str(if dark { "rgba(0,0,0,.45)" } else { "rgba(30,35,60,.10)" });
@@ -507,7 +507,7 @@ impl Editor {
             let is_live = self.live_page == Some(pid) || moving.map(|m| m.0) == Some(pid) || skip_page == Some(pid);
             let version = self.nb.pages[i].version;
             if use_bmp && !is_live {
-                let valid = self.bmps.get(&pid).map(|b| (b.scale - px_scale).abs() < 1e-6 && b.version == version && b.dark == dark).unwrap_or(false);
+                let valid = self.bmps.get(&pid).map(|b| (b.scale - px_scale).abs() < 1e-6 && b.version == version && b.dark == dark && b.canvas.width() == (w as f64 * px_scale).ceil() as u32).unwrap_or(false);
                 if !valid && self.zooming && self.bmps.contains_key(&pid) {
                     // während des Zoomens altes Bild skaliert verwenden
                 } else if !valid {
@@ -533,7 +533,7 @@ impl Editor {
             }
             // direkt zeichnen (stark gezoomt oder Seite wird gerade bearbeitet)
             ctx.set_transform(px_scale, 0.0, 0.0, px_scale, ox, oy).ok();
-            let clip = Rect::new((sx) as f32, (sy - top) as f32, (sx + self.vw / s) as f32, (sy - top + self.vh / s) as f32).expand(20.0);
+            let clip = Rect::new((sx - left) as f32, (sy - top) as f32, (sx - left + self.vw / s) as f32, (sy - top + self.vh / s) as f32).expand(20.0);
             let mv = match moving {
                 Some((p, xf)) if p == pid => Some((moving_ids.as_slice(), xf)),
                 _ => None,
@@ -576,7 +576,7 @@ impl Editor {
             if p.mark == 0 || self.presenting.is_some() {
                 continue;
             }
-            let (x, y) = self.page_to_screen(i, w - 36.0, 0.0);
+            let (x, y) = self.page_to_screen(i, self.page_w(i) as f32 - 36.0, 0.0);
             let bw = (14.0 * s).clamp(8.0, 22.0);
             let bh = bw * 2.4;
             ctx.set_transform(dpr, 0.0, 0.0, dpr, 0.0, 0.0).ok();
@@ -623,8 +623,8 @@ impl Editor {
     /// Transformation für die Live-Ebene in Seitenkoordinaten der Seite `i`.
     pub fn live_xf(&self, i: usize) {
         let (dpr, s) = (self.dpr, self.view.s());
-        let top = self.page_top(i);
-        self.lctx.set_transform(s * dpr, 0.0, 0.0, s * dpr, -self.view.sx * s * dpr, (top - self.view.sy) * s * dpr).ok();
+        let (left, top) = (self.page_left(i), self.page_top(i));
+        self.lctx.set_transform(s * dpr, 0.0, 0.0, s * dpr, (left - self.view.sx) * s * dpr, (top - self.view.sy) * s * dpr).ok();
     }
 
     pub fn clear_live(&self) {
@@ -653,10 +653,43 @@ impl Editor {
                     ctx.set_fill_style_str("#ffffff");
                     let _ = ctx.fill_text(&label, lx + 24.0, ly - 22.5);
                 }
+                // Winkel messen: Strich beginnt am Nullpunkt des Geodreiecks
+                if let (Some(r), None, Some(a), Some(b)) = (self.ruler, rule, stroke.pts.first(), stroke.pts.last()) {
+                    if r.kind == super::ruler::RulerKind::Triangle {
+                        let (ax, ay) = self.page_to_screen(i, a.x, a.y);
+                        let (bx, by) = self.page_to_screen(i, b.x, b.y);
+                        let (u, v) = r.local(bx, by);
+                        if (ax - r.cx).hypot(ay - r.cy) < 30.0 && u.hypot(v) > 24.0 {
+                            let deg = (-v).atan2(u).to_degrees();
+                            let deg = if deg < 0.0 { deg + 360.0 } else { deg };
+                            ctx.set_transform(self.dpr, 0.0, 0.0, self.dpr, 0.0, 0.0).ok();
+                            // Bogen vom rechten Schenkel (0°) bis zur Linie
+                            let rad = u.hypot(v).min(90.0);
+                            ctx.set_stroke_style_str("rgba(109,92,255,.85)");
+                            ctx.set_line_width(2.0);
+                            ctx.begin_path();
+                            let a0 = r.angle;
+                            let _ = ctx.arc_with_anticlockwise(r.cx, r.cy, rad, a0, a0 - deg.to_radians(), true);
+                            ctx.stroke();
+                            // Winkel zum rechten und (Gegenwinkel) zum linken Schenkel
+                            let label = format!("{:.0}°  ·  {:.0}°", deg, (180.0 - deg).abs());
+                            ctx.set_font("700 14px Inter, system-ui, sans-serif");
+                            let tw = ctx.measure_text(&label).map(|m| m.width()).unwrap_or(80.0) + 24.0;
+                            ctx.set_fill_style_str("#6d5cff");
+                            ctx.begin_path();
+                            let _ = ctx.round_rect_with_f64(bx + 14.0, by - 40.0, tw, 26.0, 13.0);
+                            ctx.fill();
+                            ctx.set_fill_style_str("#ffffff");
+                            ctx.set_text_align("center");
+                            let _ = ctx.fill_text(&label, bx + 14.0 + tw * 0.5, by - 22.0);
+                            ctx.set_text_align("start");
+                        }
+                    }
+                }
                 self.live_xf(i);
                 ctx.save();
                 ctx.begin_path();
-                ctx.rect(0.0, 0.0, self.pw(), self.ph());
+                ctx.rect(0.0, 0.0, self.page_w(i), self.page_h(i));
                 ctx.clip();
                 let mut s = stroke.clone();
                 s.pts.extend_from_slice(predicted);
@@ -738,10 +771,11 @@ impl Editor {
     /// Vorschaubilder der Seitenübersicht aktualisieren.
     pub fn render_thumbs(&mut self, images: &mut HashMap<u64, HtmlImageElement>, _dark: bool) {
         self.thumbs_dirty = false;
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
         let tw = 132.0f64;
-        let scale = tw / w as f64 * self.dpr;
+        let fmt = self.nb.format;
         for page in &self.nb.pages {
+            let (w, h) = page.size(&fmt);
+            let scale = tw / w as f64 * self.dpr;
             if self.thumb_versions.get(&page.id) == Some(&page.version) {
                 continue;
             }
@@ -760,7 +794,7 @@ impl Editor {
 
     /// Seite als PNG (Data-URL) in hoher Auflösung.
     pub fn page_png(&mut self, i: usize, images: &mut HashMap<u64, HtmlImageElement>) -> Option<String> {
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let (w, h) = self.nb.page_size(i);
         let scale = 3.0;
         let (canvas, ctx) = new_canvas();
         canvas.set_width((w as f64 * scale) as u32);

@@ -42,7 +42,7 @@ impl Editor {
         ctx.begin_path();
         let _ = ctx.round_rect_with_f64(r.x0 as f64, r.y0 as f64, rw, rh, 8.0);
         ctx.clip();
-        let (w, h) = (self.nb.format.w, self.nb.format.h);
+        let (w, h) = self.nb.page_size(pi);
         let page = &self.nb.pages[pi];
         let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
         draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: r });

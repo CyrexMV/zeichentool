@@ -142,7 +142,7 @@ impl App {
         let Some(ed) = &mut self.ed else { return 0 };
         let id = ed.nb.alloc_id();
         let Some(p) = ed.nb.page_mut(page) else { return 0 };
-        let item = Item { id, order: p.max_order() + 1.0, content: Content::Node(node) };
+        let item = Item { id, order: p.max_order() + 1.0, content: Content::Node(node), pinned: false };
         p.insert([item.clone()]);
         ed.push(Action::Items { page, removed: vec![], added: vec![item] });
         self.after_edit();
@@ -165,7 +165,7 @@ impl App {
             .collect();
         let k = siblings.len();
         let (w, h) = ed.node_size("Idee");
-        let (pw, ph) = (ed.nb.format.w, ed.nb.format.h);
+        let (pw, ph) = ed.page_size_id(page);
         let (pcx, pcy) = parent.center();
         // Richtung: Wurzel abwechselnd rechts/links, sonst weg von der eigenen Elternblase
         let dir = if parent.parent == 0 {

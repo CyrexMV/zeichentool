@@ -76,9 +76,9 @@ impl App {
     pub fn insert_contents(&mut self, contents: Vec<Content>, w: f32, h: f32) {
         let Some(ed) = &mut self.ed else { return };
         let i = ed.cur_page;
-        let (pw, ph) = (ed.nb.format.w, ed.nb.format.h);
+        let (pw, ph) = ed.nb.page_size(i);
         let (cx, cy) = ed.to_nb(ed.vw * 0.5, ed.vh * 0.45);
-        let cy = cy - ed.page_top(i);
+        let (cx, cy) = ed.nb_to_page(i, cx, cy);
         let x0 = (cx as f32 - w * 0.5).clamp(0.0, (pw - w).max(0.0));
         let y0 = (cy as f32 - h * 0.5).clamp(0.0, (ph - h).max(0.0));
         let xf = crate::engine::Xf::translate(x0, y0);
@@ -86,7 +86,7 @@ impl App {
         let mut items = Vec::new();
         for (k, c) in contents.into_iter().enumerate() {
             let id = ed.nb.alloc_id();
-            items.push(Item { id, order: base + 1.0 + k as f64 * 0.001, content: c }.transformed(&xf));
+            items.push(Item { id, order: base + 1.0 + k as f64 * 0.001, content: c, pinned: false }.transformed(&xf));
         }
         let page = ed.nb.pages[i].id;
         let ids: Vec<u32> = items.iter().map(|it| it.id).collect();
@@ -129,7 +129,7 @@ impl App {
 
     fn table_contents(&self) -> (Vec<Content>, f32, f32) {
         let o = self.table_opts;
-        let (pw, ph) = self.ed.as_ref().map(|e| (e.nb.format.w, e.nb.format.h)).unwrap_or((595.0, 842.0));
+        let (pw, ph) = self.ed.as_ref().map(|e| e.nb.page_size(e.cur_page)).unwrap_or((595.0, 842.0));
         let unit = self.ed.as_ref().map(|e| e.nb.pages[e.cur_page].template.unit(pw, ph)).unwrap_or(22.0);
         let cw = (pw * 0.84 / o.cols as f32).clamp(36.0, 160.0);
         let rh = (unit * 1.1).clamp(18.0, 40.0);
@@ -217,7 +217,7 @@ impl App {
     }
 
     fn plot_size(&self) -> (f32, f32) {
-        let pw = self.ed.as_ref().map(|e| e.nb.format.w).unwrap_or(595.0);
+        let pw = self.ed.as_ref().map(|e| e.nb.page_size(e.cur_page).0).unwrap_or(595.0);
         let w = (pw * 0.72).min(460.0);
         (w, w * 0.68)
     }

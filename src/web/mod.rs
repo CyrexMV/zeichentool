@@ -20,6 +20,7 @@ mod storage;
 mod svg;
 mod tabs;
 mod tools;
+mod transform;
 mod zoomwin;
 mod ui;
 

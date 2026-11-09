@@ -211,20 +211,75 @@ impl Editor {
         ed
     }
 
+    /// Breite des Inhalts (breiteste Seite).
     pub fn pw(&self) -> f64 {
-        self.nb.format.w as f64
+        let f = &self.nb.format;
+        if self.nb.pages.iter().any(|p| p.land) {
+            f.w.max(f.h) as f64
+        } else {
+            f.w as f64
+        }
     }
 
+    /// Höhe einer Hochformat-Seite (Grundformat).
     pub fn ph(&self) -> f64 {
         self.nb.format.h as f64
     }
 
+    /// Größe der Seite mit der ID `id`.
+    pub fn page_size_id(&self, id: u32) -> (f32, f32) {
+        self.nb.page_size(self.page_index(id).unwrap_or(0))
+    }
+
+    /// Breite der Seite `i`.
+    pub fn page_w(&self, i: usize) -> f64 {
+        self.nb.page_size(i).0 as f64
+    }
+
+    /// Höhe der Seite `i`.
+    pub fn page_h(&self, i: usize) -> f64 {
+        self.nb.page_size(i).1 as f64
+    }
+
+    /// Oberkante der Seite `i` im Notizbuch-Koordinatensystem.
     pub fn page_top(&self, i: usize) -> f64 {
-        i as f64 * (self.ph() + GAP)
+        if !self.nb.pages.iter().any(|p| p.land) {
+            return i as f64 * (self.ph() + GAP);
+        }
+        let f = &self.nb.format;
+        self.nb.pages.iter().take(i).map(|p| if p.land { f.w } else { f.h } as f64 + GAP).sum()
+    }
+
+    /// Linke Kante der Seite `i` (schmalere Seiten werden mittig gesetzt).
+    pub fn page_left(&self, i: usize) -> f64 {
+        (self.pw() - self.page_w(i)) * 0.5
+    }
+
+    /// Notizbuch-Koordinaten → Seitenkoordinaten der Seite `i`.
+    pub fn nb_to_page(&self, i: usize, x: f64, y: f64) -> (f64, f64) {
+        (x - self.page_left(i), y - self.page_top(i))
+    }
+
+    /// Index der Seite auf Höhe `y` (Notizbuch-Koordinaten), inkl. halbem Zwischenraum.
+    pub fn page_at_y(&self, y: f64) -> usize {
+        let n = self.nb.pages.len();
+        if !self.nb.pages.iter().any(|p| p.land) {
+            return (((y + GAP * 0.5) / (self.ph() + GAP)).floor().max(0.0) as usize).min(n - 1);
+        }
+        let mut top = 0.0;
+        for i in 0..n {
+            let h = self.page_h(i);
+            if y < top + h + GAP * 0.5 {
+                return i;
+            }
+            top += h + GAP;
+        }
+        n - 1
     }
 
     pub fn content_h(&self) -> f64 {
-        self.nb.pages.len() as f64 * (self.ph() + GAP) - GAP
+        let n = self.nb.pages.len();
+        self.page_top(n - 1) + self.page_h(n - 1)
     }
 
     /// Größe der Zeichenflächen an das Fenster anpassen.
@@ -238,13 +293,18 @@ impl Editor {
             c.set_width((self.vw * self.dpr).round() as u32);
             c.set_height((self.vh * self.dpr).round() as u32);
         }
+        self.update_fit();
+        self.clamp();
+        self.dirty = true;
+    }
+
+    /// Grundzoom (Seitenbreite) neu berechnen – z. B. wenn eine Seite ins Querformat gedreht wurde.
+    pub fn update_fit(&mut self) {
         let old_fit = self.view.fit;
         self.view.fit = ((self.vw - 48.0) / self.pw()).min(1.6 * (self.vh - self.top_pad) / self.ph()).max(0.1);
         if (old_fit - self.view.fit).abs() > 1e-9 {
             self.bmps.clear();
         }
-        self.clamp();
-        self.dirty = true;
     }
 
     pub fn clamp(&mut self) {
@@ -262,8 +322,7 @@ impl Editor {
         self.view.sy = self.view.sy.clamp(min_y, max_y);
         // aktuelle Seite = Seite in der Bildschirmmitte
         let mid = self.view.sy + vis_h * 0.5;
-        let i = (mid / (self.ph() + GAP)).floor().max(0.0) as usize;
-        self.cur_page = i.min(self.nb.pages.len() - 1);
+        self.cur_page = self.page_at_y(mid - GAP * 0.5);
     }
 
     /// Scrollt so, dass Seite `i` oben sichtbar ist (Zoom = Seitenbreite).
@@ -321,23 +380,21 @@ impl Editor {
     /// Bildschirmpunkt → (Seitenindex, Seitenkoordinaten). `margin` erlaubt Punkte knapp außerhalb.
     pub fn hit_page(&self, px: f64, py: f64, margin: f64) -> Option<(usize, f32, f32)> {
         let (x, y) = self.to_nb(px, py);
-        let span = self.ph() + GAP;
-        let i = ((y + GAP * 0.5) / span).floor();
-        if i < 0.0 {
+        if y < -GAP * 0.5 {
             return None;
         }
-        let i = (i as usize).min(self.nb.pages.len() - 1);
-        let ly = y - self.page_top(i);
-        if x < -margin || x > self.pw() + margin || ly < -margin || ly > self.ph() + margin {
+        let i = self.page_at_y(y);
+        let (lx, ly) = self.nb_to_page(i, x, y);
+        if lx < -margin || lx > self.page_w(i) + margin || ly < -margin || ly > self.page_h(i) + margin {
             return None;
         }
-        Some((i, x as f32, ly as f32))
+        Some((i, lx as f32, ly as f32))
     }
 
     /// Seitenkoordinaten → Bildschirm.
     pub fn page_to_screen(&self, i: usize, x: f32, y: f32) -> (f64, f64) {
         let s = self.view.s();
-        ((x as f64 - self.view.sx) * s, (self.page_top(i) + y as f64 - self.view.sy) * s)
+        ((self.page_left(i) + x as f64 - self.view.sx) * s, (self.page_top(i) + y as f64 - self.view.sy) * s)
     }
 
     pub fn page_index(&self, id: u32) -> Option<usize> {
@@ -448,6 +505,7 @@ impl Editor {
     }
 
     fn after_history(&mut self, focus: Option<usize>) {
+        self.update_fit();
         self.nb.modified = wall_clock();
         self.thumbs_dirty = true;
         self.dirty = true;
@@ -456,7 +514,7 @@ impl Editor {
             let s = self.view.s();
             let top = self.page_top(i);
             let (v0, v1) = (self.view.sy, self.view.sy + self.vh / s);
-            if top + self.ph() < v0 || top > v1 {
+            if top + self.page_h(i) < v0 || top > v1 {
                 self.goto_page(i);
             }
         }

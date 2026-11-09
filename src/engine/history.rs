@@ -16,11 +16,12 @@ pub struct PageMeta {
     pub bg: Option<ImageItem>,
     pub bg_paper: bool,
     pub links: Vec<Link>,
+    pub land: bool,
 }
 
 impl PageMeta {
     pub fn of(p: &Page) -> PageMeta {
-        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone(), mark: p.mark, tags: p.tags.clone(), bg: p.bg.clone(), bg_paper: p.bg_paper, links: p.links.clone() }
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone(), mark: p.mark, tags: p.tags.clone(), bg: p.bg.clone(), bg_paper: p.bg_paper, links: p.links.clone(), land: p.land }
     }
 
     pub fn apply(&self, p: &mut Page) {
@@ -34,6 +35,7 @@ impl PageMeta {
         p.bg = self.bg.clone();
         p.bg_paper = self.bg_paper;
         p.links = self.links.clone();
+        p.land = self.land;
         p.touch();
     }
 }
@@ -165,7 +167,7 @@ mod tests {
     }
 
     fn item(id: u32, x: f32) -> Item {
-        Item { id, order: id as f64, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0; 4], width: 1.0, pts: vec![Pt::new(x, 0.0, 1.0)] }) }
+        Item { id, order: id as f64, content: Content::Stroke(Stroke { pen: PenKind::Ball, color: [0; 4], width: 1.0, pts: vec![Pt::new(x, 0.0, 1.0)] }), pinned: false }
     }
 
     #[test]
