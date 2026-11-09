@@ -71,6 +71,10 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Seite drehen** (⋯ → „Seite drehen“): einzelne Seiten ins Querformat und zurück, der Inhalt dreht mit;
   auch im PDF-Export im Querformat
 - **Winkel messen** am Geodreieck: am Nullpunkt ansetzen und zeichnen – Winkel und Gegenwinkel werden live angezeigt
+- **Seitenleiste links** (wie in einem PDF-Programm): Vorschaubilder aller Seiten, angedockt neben der Seite –
+  zum Scrollen und Springen; ein-/ausblenden über das Seiten-Symbol (auf schmalen Bildschirmen schwebend)
+- **Split-Ansicht** (Symbol oben rechts): zwei Notizbücher nebeneinander, z. B. Skript links und Mitschrift rechts –
+  in eine Hälfte tippen, um dort zu schreiben; Werkzeuge, Seitenleiste und Seitenanzeige gelten für die aktive Hälfte
 - **Neon- und Glitzerstift** (Stift-Menü): leuchtender Kern mit Schein bzw. funkelnde Partikel – auch im PDF
 - **Symbol-Palette** (Einfügen-Menü): Mathe (∑ √ ∫ ≤ ≠ π …), Griechisch, Pfeile, Einheiten, Häkchen – zu einem Text
   zusammenstellen und einfügen; der PDF-Export nutzt dafür die Standardschriften Symbol und ZapfDingbats

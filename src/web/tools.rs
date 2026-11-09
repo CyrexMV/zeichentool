@@ -533,7 +533,7 @@ impl App {
                 if let Some(i) = ed.page_index(sel.page) {
                     let (x0, y0) = ed.page_to_screen(i, sel.bbox.x0, sel.bbox.y0);
                     let (x1, _) = ed.page_to_screen(i, sel.bbox.x1, sel.bbox.y1);
-                    let left = ((x0 + x1) * 0.5).clamp(170.0, ed.vw - 170.0);
+                    let left = ed.ox + ((x0 + x1) * 0.5).clamp(170.0, (ed.vw - 170.0).max(170.0));
                     let top = (y0 - 64.0).max(ed.top_pad);
                     style(&menu, "left", &format!("{}px", left));
                     style(&menu, "top", &format!("{}px", top));
@@ -546,7 +546,7 @@ impl App {
             if let Some(i) = ed.page_index(page) {
                 let (sx, sy) = ed.page_to_screen(i, x, y);
                 let b = el("paste-btn");
-                style(&b, "left", &format!("{}px", sx));
+                style(&b, "left", &format!("{}px", sx + ed.ox));
                 style(&b, "top", &format!("{}px", sy - 52.0));
                 set_class(&b, "hidden", false);
             }
@@ -556,7 +556,7 @@ impl App {
                 let s = ed.view.s();
                 let (sx, sy) = ed.page_to_screen(i, te.x, te.y);
                 let ta = el("text-editor");
-                style(&ta, "left", &format!("{}px", sx));
+                style(&ta, "left", &format!("{}px", sx + ed.ox));
                 style(&ta, "top", &format!("{}px", sy));
                 style(&ta, "width", &format!("{}px", te.w as f64 * s));
                 style(&ta, "font-size", &format!("{}px", te.size as f64 * s));

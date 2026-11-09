@@ -85,6 +85,7 @@ impl App {
             format!("pen_sets={}", self.pen_sets.iter().map(|s| s.encode()).collect::<Vec<_>>().join(";")),
             format!("tabs={}", self.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>().join(",")),
             format!("tool={}", self.tool.code()),
+            format!("nav_pinned={}", self.nav_pinned),
             format!("exams={}", crate::engine::school::encode_exams(&self.exams)),
             format!("grades={}", crate::engine::school::encode_subjects(&self.subjects)),
         ];
@@ -164,6 +165,7 @@ impl App {
                     }
                 }
                 "new_cover_page" => self.new_nb.cover_page = b(v),
+                "nav_pinned" => self.nav_pinned = v == "true",
                 "tabs" => self.tabs = v.split(',').filter(|s| !s.is_empty()).take(8).map(|s| super::tabs::Tab { id: s.to_string(), view: None }).collect(),
                 "exams" => {
                     // vergangene Prüfungen nach 30 Tagen aufräumen

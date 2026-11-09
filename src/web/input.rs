@@ -39,8 +39,25 @@ pub fn client_xy(e: &PointerEvent) -> (f64, f64) {
         (Some(x), Some(y)) => (x, y),
         _ => (e.client_x() as f64, e.client_y() as f64),
     };
-    // Eingaben im Zoom-Fenster auf die Seite umrechnen
-    super::zoomwin::map_xy(e.pointer_id(), x, y)
+    // Eingaben im Zoom-Fenster auf die Seite umrechnen (schon Bereichskoordinaten)
+    if super::zoomwin::mapped(e.pointer_id()) {
+        return super::zoomwin::map_xy(e.pointer_id(), x, y);
+    }
+    // Fenster → Koordinaten des aktiven Bereichs (Seitenleiste / Split-Ansicht)
+    (x - pane_ox(), y)
+}
+
+thread_local! {
+    static PANE_OX: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+}
+
+/// Linke Kante des aktiven Editorbereichs im Fenster.
+pub fn pane_ox() -> f64 {
+    PANE_OX.with(|c| c.get())
+}
+
+pub fn set_pane_ox(v: f64) {
+    PANE_OX.with(|c| c.set(v));
 }
 
 fn target_id(e: &PointerEvent) -> String {
@@ -129,8 +146,8 @@ pub fn bind_input() {
     });
     on(&window(), "resize", |_: Event| {
         with_app(|a| {
+            a.layout_panes();
             if let Some(ed) = &mut a.ed {
-                ed.resize();
                 if let Some(i) = ed.presenting {
                     ed.present_fit(i);
                 }
@@ -173,7 +190,7 @@ fn is_captured(e: &PointerEvent) -> bool {
 fn is_canvas_target(e: &PointerEvent) -> bool {
     e.target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
-        .map(|el| el.id() == "live" || el.id() == "view" || el.id() == "zw-canvas")
+        .map(|el| matches!(el.id().as_str(), "live" | "view" | "live2" | "view2" | "zw-canvas"))
         .unwrap_or(false)
 }
 
@@ -181,6 +198,15 @@ impl App {
     fn pointer_down(&mut self, e: &PointerEvent) {
         if self.screen != Screen::Editor {
             return;
+        }
+        // Split-Ansicht: Stift oder Finger im anderen Bereich macht ihn aktiv
+        if self.is_other_pane(&target_id(e)) {
+            let busy = self.ed.as_ref().is_some_and(|ed| ed.op.is_some()) || !self.touches.is_empty();
+            let palm = e.pointer_type() == "touch" && self.palm_locked();
+            if busy || palm {
+                return;
+            }
+            self.activate_other();
         }
         if target_id(e) == "zw-canvas" {
             // Handballen auf dem Zoom-Fenster ignorieren; Finger schreibt nur, wenn erlaubt
@@ -200,6 +226,11 @@ impl App {
 
     fn pointer_move(&mut self, e: &PointerEvent) {
         if self.screen != Screen::Editor {
+            return;
+        }
+        // Schweben über dem inaktiven Bereich der Split-Ansicht ignorieren
+        if self.is_other_pane(&target_id(e)) && self.touches.is_empty() && self.ed.as_ref().is_some_and(|ed| ed.op.is_none()) {
+            self.hide_cursor();
             return;
         }
         match e.pointer_type().as_str() {
@@ -866,6 +897,10 @@ impl App {
     }
 
     fn wheel(&mut self, e: &WheelEvent) {
+        let tid = e.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()).map(|el| el.id()).unwrap_or_default();
+        if self.is_other_pane(&tid) {
+            self.activate_other();
+        }
         let Some(ed) = &mut self.ed else { return };
         let mut dy = e.delta_y();
         let mut dx = e.delta_x();
@@ -876,7 +911,7 @@ impl App {
         if e.ctrl_key() || e.meta_key() {
             let f = (-dy * 0.0025).exp();
             let z = ed.view.zoom * f;
-            ed.zoom_about(z, e.client_x() as f64, e.client_y() as f64);
+            ed.zoom_about(z, e.client_x() as f64 - pane_ox(), e.client_y() as f64);
             ed.bmps.clear();
         } else {
             ed.scroll_by(dx, dy);

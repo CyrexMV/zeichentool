@@ -253,17 +253,27 @@ impl App {
         show("library", false);
         show("editor", true);
         let nb_id = nb.id.clone();
-        self.ed = Some(Editor::new(nb));
+        // auf den Zeichenflächen des bisher aktiven Bereichs (Split-Ansicht)
+        let (view, live) = match &self.ed {
+            Some(e) => (e.canvas.id(), e.live.id()),
+            None => ("view".to_string(), "live".to_string()),
+        };
+        let nav_open = self.ed.as_ref().map(|e| e.nav_open).unwrap_or(self.nav_pinned && window().inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(0.0) >= 900.0);
+        self.ed = Some(Editor::new_in(nb, &view, &live));
         self.tab_opened(&nb_id);
         if let Some(ed) = &mut self.ed {
-            ed.resize();
-            let i = 0;
-            ed.fit_page(i);
-            ed.nav_open = false;
+            ed.nav_open = nav_open;
+        }
+        self.layout_panes();
+        if let Some(ed) = &mut self.ed {
+            ed.fit_page(0);
         }
         self.tab_restore_view();
-        set_class(&el("navigator"), "open", false);
-        set_class(&el("btn-nav"), "active", false);
+        set_class(&el("navigator"), "open", nav_open);
+        set_class(&el("btn-nav"), "active", nav_open);
+        if nav_open {
+            self.render_nav();
+        }
         self.hold_eraser = false;
         self.refresh_toolbar();
         self.update_pill();
@@ -281,6 +291,9 @@ impl App {
         }
         self.save_now();
         self.ed = None;
+        self.ed2 = None;
+        self.active_left = true;
+        set_class(&el("editor"), "nav-docked", false);
         self.unlocked.clear();
         self.images.clear();
         self.screen = Screen::Library;
@@ -532,7 +545,7 @@ impl App {
                 }
                 self.toast("Vorlage gelöscht");
             }
-            Some(Pending::MoveToFolder(_)) | Some(Pending::PageTo(_)) | Some(Pending::Link(..)) => {}
+            Some(Pending::MoveToFolder(_)) | Some(Pending::PageTo(_)) | Some(Pending::Link(..)) | Some(Pending::Split) => {}
             Some(Pending::Unlock(..)) | Some(Pending::SetPin(_)) | Some(Pending::ConfirmPin(..)) | Some(Pending::RemovePin(_)) => {}
             None => {}
         }
@@ -633,6 +646,7 @@ impl App {
                 self.toast(&format!("Verschoben nach {}", label));
             }
             Some(Pending::PageTo(i)) => self.page_to(i, value.to_string()),
+            Some(Pending::Split) => self.open_split(value.to_string()),
             Some(Pending::Link(page, x0, y0, x1, y1)) => self.create_link(page, crate::engine::Rect::new(x0, y0, x1, y1), value),
             _ => {}
         }

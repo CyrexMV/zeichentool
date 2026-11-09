@@ -466,6 +466,8 @@ impl App {
                 let kind = a.trim_start_matches("xf-").to_string();
                 self.transform_selection_kind(&kind);
             }
+            "split" => self.toggle_split(),
+            "split-close" => self.close_split(),
             "dup-page" => {
                 self.close_popovers();
                 if let Some(ed) = &mut self.ed {
@@ -1024,17 +1026,8 @@ impl App {
     }
 
     fn toggle_nav(&mut self) {
-        let Some(ed) = &mut self.ed else { return };
-        ed.nav_open = !ed.nav_open;
-        let open = ed.nav_open;
-        if !open {
-            ed.nav_sel = None;
-        }
-        set_class(&el("navigator"), "open", open);
-        set_class(&el("btn-nav"), "active", open);
-        if open {
-            self.render_nav();
-        }
+        let open = !self.ed.as_ref().is_some_and(|e| e.nav_open);
+        self.set_nav_open(open);
     }
 
     pub fn render_nav(&mut self) {

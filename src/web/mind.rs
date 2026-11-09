@@ -273,7 +273,7 @@ impl App {
         set_class(&menu, "hidden", false);
         let mw = menu.client_width() as f64;
         let left = ((x0 + x1) * 0.5 - mw * 0.5).clamp(8.0, (ed.vw - mw - 8.0).max(8.0));
-        style(&menu, "left", &format!("{}px", left));
+        style(&menu, "left", &format!("{}px", left + ed.ox));
         style(&menu, "top", &format!("{}px", (y1 + 12.0).min(ed.vh - 70.0)));
     }
 }

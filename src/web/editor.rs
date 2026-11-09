@@ -148,6 +148,10 @@ pub struct Editor {
     pub card_front: Option<crate::engine::Region>,
     /// Platz für die Werkzeugleiste oben (CSS-Pixel)
     pub top_pad: f64,
+    /// Linke Kante des Bereichs im Fenster (Seitenleiste / Split-Ansicht), CSS-Pixel
+    pub ox: f64,
+    /// Breite des Bereichs (0 = bis zum rechten Fensterrand)
+    pub pane_w: f64,
 }
 
 fn ctx2d(c: &HtmlCanvasElement, desync: bool) -> CanvasRenderingContext2d {
@@ -165,9 +169,10 @@ pub fn new_canvas() -> (HtmlCanvasElement, CanvasRenderingContext2d) {
 }
 
 impl Editor {
-    pub fn new(nb: Notebook) -> Editor {
-        let canvas: HtmlCanvasElement = el("view").unchecked_into();
-        let live: HtmlCanvasElement = el("live").unchecked_into();
+    /// Editor auf eigenen Zeichenflächen (Split-Ansicht: „view2“/„live2“).
+    pub fn new_in(nb: Notebook, view_id: &str, live_id: &str) -> Editor {
+        let canvas: HtmlCanvasElement = el(view_id).unchecked_into();
+        let live: HtmlCanvasElement = el(live_id).unchecked_into();
         let ctx = ctx2d(&canvas, false);
         let lctx = ctx2d(&live, true);
         let mut ed = Editor {
@@ -208,6 +213,8 @@ impl Editor {
             presenting: None,
             card_front: None,
             top_pad: 84.0,
+            ox: 0.0,
+            pane_w: 0.0,
         };
         ed.resize();
         ed.fit_page(0);
@@ -289,12 +296,16 @@ impl Editor {
     pub fn resize(&mut self) {
         let win = window();
         self.dpr = win.device_pixel_ratio().max(1.0);
-        self.vw = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
+        let ww = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
+        self.vw = if self.pane_w > 0.0 { self.pane_w } else { (ww - self.ox).max(100.0) };
         self.vh = win.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(800.0);
         self.top_pad = if self.presenting.is_some() { 16.0 } else { dom().get_element_by_id("ed-top").map(|e| e.get_bounding_client_rect().bottom()).filter(|b| *b > 0.0).unwrap_or(72.0) + 12.0 };
         for c in [&self.canvas, &self.live] {
             c.set_width((self.vw * self.dpr).round() as u32);
             c.set_height((self.vh * self.dpr).round() as u32);
+            let s = c.style();
+            let _ = s.set_property("left", &format!("{}px", self.ox));
+            let _ = s.set_property("width", &format!("{}px", self.vw));
         }
         self.update_fit();
         self.clamp();

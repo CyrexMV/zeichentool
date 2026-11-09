@@ -77,16 +77,17 @@ impl App {
         set_class(&bar, "hidden", !show_bar);
         set_class(&el("editor"), "has-tabs", show_bar);
         if was != show_bar {
-            if let Some(ed) = &mut self.ed {
-                ed.resize();
-            }
-            self.position_overlays();
-            self.request_frame();
+            self.layout_panes();
         }
     }
 
     pub fn tab_switch(&mut self, id: String) {
         if self.ed.as_ref().map(|e| e.nb.id == id).unwrap_or(false) {
+            return;
+        }
+        // in der Split-Ansicht schon offen → nur den Bereich wechseln
+        if self.ed2.as_ref().is_some_and(|e| e.nb.id == id) {
+            self.activate_other();
             return;
         }
         self.tab_store_view();
@@ -141,7 +142,9 @@ impl App {
         self.refresh_toolbar();
         if let Some(ed) = &mut self.ed {
             ed.presenting = Some(i);
-            ed.resize();
+        }
+        self.layout_panes();
+        if let Some(ed) = &mut self.ed {
             ed.present_fit(i);
         }
         self.present_update();
@@ -159,7 +162,9 @@ impl App {
         let cur = self.ed.as_ref().and_then(|e| e.presenting).unwrap_or(0);
         if let Some(ed) = &mut self.ed {
             ed.presenting = None;
-            ed.resize();
+        }
+        self.layout_panes();
+        if let Some(ed) = &mut self.ed {
             ed.view.zoom = z;
             ed.view.sx = sx;
             ed.view.sy = sy;

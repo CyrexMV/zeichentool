@@ -16,6 +16,7 @@ mod render;
 mod ruler;
 mod school;
 mod scrubber;
+mod split;
 mod stickers;
 mod symbols;
 mod stats;
@@ -385,6 +386,8 @@ pub enum Pending {
     DeleteSubject(usize),
     /// mehrere Seiten löschen (Indizes)
     DeletePages(Vec<usize>),
+    /// Notizbuch für die Split-Ansicht wählen
+    Split,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -413,6 +416,12 @@ pub struct App {
     pub prev_tool: Tool,
     pub hold_eraser: bool,
     pub ed: Option<Editor>,
+    /// zweiter (inaktiver) Bereich der Split-Ansicht
+    pub ed2: Option<Editor>,
+    /// aktiver Bereich ist der linke
+    pub active_left: bool,
+    /// Seitenleiste angedockt lassen (gemerkt)
+    pub nav_pinned: bool,
     pub images: HashMap<u64, HtmlImageElement>,
     pub new_nb: NewNb,
     pub ctx_target: Option<String>,
@@ -512,6 +521,9 @@ impl App {
             prev_tool: Tool::Pen,
             hold_eraser: false,
             ed: None,
+            ed2: None,
+            active_left: true,
+            nav_pinned: true,
             images: HashMap::new(),
             new_nb: NewNb::default(),
             ctx_target: None,
@@ -579,7 +591,7 @@ impl App {
 
     /// Editor neu zeichnen lassen.
     pub fn redraw(&mut self) {
-        if let Some(ed) = &mut self.ed {
+        for ed in [&mut self.ed, &mut self.ed2].into_iter().flatten() {
             ed.dirty = true;
         }
         self.request_frame();
@@ -594,6 +606,11 @@ impl App {
         let lib_needed = self.screen == Screen::Editor;
         let mut rendered = false;
         let mind_hl = if self.tool == Tool::Mind { self.mind_sel } else { None };
+        if let (Some(ed2), true) = (&mut self.ed2, lib_needed) {
+            if ed2.dirty {
+                ed2.render(&mut self.images, dark);
+            }
+        }
         if let (Some(ed), true) = (&mut self.ed, lib_needed) {
             if ed.mind_hl != mind_hl {
                 ed.mind_hl = mind_hl;
