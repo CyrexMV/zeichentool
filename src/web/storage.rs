@@ -55,6 +55,7 @@ impl App {
             format!("palm_lock={}", s.palm_lock),
             format!("one_finger_scroll={}", s.one_finger_scroll),
             format!("finger_draw={}", s.finger_draw),
+            format!("due_mode={}", s.due_mode),
             format!("pen_seen={}", s.pen_seen),
             format!("migrated={}", s.migrated),
             format!("lib_sort={}", self.lib_sort),
@@ -77,6 +78,7 @@ impl App {
             format!("text_bold={}", p.text_bold),
             format!("lasso={},{},{}", p.lasso_ink, p.lasso_text, p.lasso_img),
             format!("laser={}", c4(p.laser_color)),
+            format!("shape_fill={}", p.shape_fill),
             format!("new={},{},{},{},{}", self.new_nb.cover, self.new_nb.template.kind.code(), self.new_nb.template.spacing, self.new_nb.paper.to_hex(), self.new_nb.format),
             format!("tool={}", self.tool.code()),
         ];
@@ -122,6 +124,7 @@ impl App {
                 "palm_lock" => s.palm_lock = f(v, 2.0).clamp(0.0, 10.0),
                 "one_finger_scroll" => s.one_finger_scroll = b(v),
                 "finger_draw" => s.finger_draw = b(v),
+                "due_mode" => s.due_mode = b(v),
                 "pen_seen" => s.pen_seen = b(v),
                 "migrated" => s.migrated = b(v),
                 "lib_sort" => self.lib_sort = v.to_string(),
@@ -148,6 +151,7 @@ impl App {
                         (p.lasso_ink, p.lasso_text, p.lasso_img) = (l[0], l[1], l[2]);
                     }
                 }
+                "shape_fill" => p.shape_fill = v.parse::<u8>().unwrap_or(0).min(2),
                 "laser" => {
                     if let Some(c) = p4(v) {
                         p.laser_color = c;
@@ -181,7 +185,7 @@ impl App {
             || self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false);
         if full {
             parts.push(format!("0,0,{},{}", vw, vh));
-        } else if let Ok(list) = dom().query_selector_all(".ed-left, .toolbar, .ed-right, .page-pill, #sel-menu:not(.hidden), #paste-btn:not(.hidden), #navigator.open") {
+        } else if let Ok(list) = dom().query_selector_all(".ed-left, .toolbar, .ed-right, .page-pill, #sel-menu:not(.hidden), #paste-btn:not(.hidden), #navigator.open, #zoomwin:not(.hidden) .zw-tools") {
             for i in 0..list.length() {
                 let Some(n) = list.get(i) else { continue };
                 let el: web_sys::Element = n.unchecked_into();
@@ -541,6 +545,25 @@ fn decode_image(file: web_sys::File, done: impl FnOnce(Vec<u8>, u32, u32) + 'sta
 }
 
 pub fn bind_files() {
+    on(&input_el("file-paper"), "change", |e: Event| {
+        let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
+        let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
+        inp.set_value("");
+        with_app(|a| {
+            let all = a.paper_all;
+            a.set_paper_image(file, all);
+        });
+    });
+    on(&input_el("file-pdf"), "change", |e: Event| {
+        let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
+        let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
+        inp.set_value("");
+        spawn_local(async move {
+            let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
+            let bytes = Uint8Array::new(&buf).to_vec();
+            with_app(|a| a.append_pdf(bytes));
+        });
+    });
     on(&input_el("file-image"), "change", |e: Event| {
         let inp: HtmlInputElement = e.target().unwrap().unchecked_into();
         let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
@@ -554,6 +577,14 @@ pub fn bind_files() {
         let Some(file) = inp.files().and_then(|f| f.get(0)) else { return };
         inp.set_value("");
         let name = file.name();
+        if file.type_() == "application/pdf" || name.to_lowercase().ends_with(".pdf") {
+            spawn_local(async move {
+                let Ok(buf) = JsFuture::from(file.array_buffer()).await else { return };
+                let bytes = Uint8Array::new(&buf).to_vec();
+                with_app(|a| a.import_pdf(name, bytes));
+            });
+            return;
+        }
         if file.type_().starts_with("image/") {
             let title: String = name.rsplit_once('.').map(|(a, _)| a.to_string()).unwrap_or(name.clone());
             decode_image(file, move |png, w, h| {
@@ -654,12 +685,14 @@ pub fn init_storage() {
         match open_db().await {
             Ok(db) => {
                 let lib = idb_get(&db, META, "library").await.and_then(|v| v.as_string()).map(|s| load_library(&s)).unwrap_or_default();
+                let stats = idb_get(&db, META, "stats").await.and_then(|v| v.as_string()).map(|s| super::stats::parse_stats(&s)).unwrap_or_default();
                 let folders: Vec<String> = idb_get(&db, META, "folders").await.and_then(|v| v.as_string()).map(|s| s.lines().filter(|l| !l.trim().is_empty()).map(|l| l.to_string()).collect()).unwrap_or_default();
                 let migrated = with_app(|a| a.settings.migrated).unwrap_or(true);
                 let legacy = if migrated { None } else { idb_get(&db, LEGACY, "aktuell").await.map(|v| Uint8Array::new(&v).to_vec()) };
                 with_app(|a| {
                     a.db = Some(db);
                     a.library = lib;
+                    a.stats = stats;
                     // Ordner: gespeicherte Liste + alle, in denen Notizbücher liegen
                     let mut f = folders;
                     for m in &a.library {
@@ -669,6 +702,7 @@ pub fn init_storage() {
                     }
                     f.sort_by_key(|x| x.to_lowercase());
                     a.folders = f;
+                    a.purge_trash();
                     if !a.settings.migrated {
                         a.settings.migrated = true;
                         if let Some(bytes) = legacy {
@@ -712,5 +746,12 @@ pub fn register_service_worker() {
     let has = js_sys::Reflect::get(&nav, &"serviceWorker".into()).map(|v| !v.is_undefined()).unwrap_or(false);
     if has {
         let _ = nav.service_worker().register("sw.js");
+    }
+}
+
+/// Wert im Meta-Speicher ablegen (Text).
+pub fn put_meta(a: &App, key: &str, value: &str) {
+    if let Some(db) = &a.db {
+        idb_put(db, META, key, &JsValue::from_str(value));
     }
 }

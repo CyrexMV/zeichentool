@@ -53,6 +53,19 @@
     <symbol id="i-toc" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-template" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
     <symbol id="i-move-page" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M13 12l3 3-3 3"/></symbol>
+    <symbol id="i-pipette" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+    <symbol id="i-fill" viewBox="0 0 24 24"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M12 16V8M17 16v-7"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.3 1.4 1.4 2.8 2.5 2.8Z"/></symbol>
+    <symbol id="i-zoomwin" viewBox="0 0 24 24"><rect x="2" y="13" width="20" height="8" rx="2"/><rect x="6" y="3" width="8" height="5" rx="1"/><path d="M10 8v5"/></symbol>
+    <symbol id="i-paper" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="2"/><path d="m20 17-3-3-6 6"/></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2a1.5 1.5 0 0 1 0 3H8v-5M14 11v5M14 11h2"/></symbol>
+    <symbol id="i-fingerprint" viewBox="0 0 24 24"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
   </defs>
 </svg>
 
@@ -80,7 +93,7 @@
       <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Neues Notizbuch</button>
     </div>
   </header>
-  <div id="lib-crumb" class="lib-crumb hidden"><button class="btn small ghost" data-act="folder-up"><svg><use href="#i-back"/></svg>Alle Notizbücher</button><span id="lib-crumb-name"></span></div>
+  <div id="lib-crumb" class="lib-crumb hidden"><button class="btn small ghost" data-act="folder-up"><svg><use href="#i-back"/></svg>Alle Notizbücher</button><span id="lib-crumb-name"></span><button id="lib-trash-empty" class="btn small ghost danger hidden" data-act="trash-empty"><svg><use href="#i-trash"/></svg>Papierkorb leeren</button></div>
   <div id="lib-decks" class="lib-decks"></div>
   <div id="lib-folders" class="lib-folders"></div>
   <div id="lib-grid" class="lib-grid"></div>
@@ -117,6 +130,7 @@
       <button class="tb" data-act="image" title="Bild einfügen"><svg><use href="#i-image"/></svg></button>
       <button class="tb tool" data-act="tool" data-arg="laser" title="Laserpointer"><svg><use href="#i-laser"/></svg></button>
       <button class="tb" id="btn-ruler" data-act="ruler-menu" title="Lineal &amp; Geodreieck"><svg><use href="#i-ruler"/></svg></button>
+      <button class="tb" id="btn-zoomwin" data-act="zoomwin" title="Zoom-Fenster"><svg><use href="#i-zoomwin"/></svg></button>
       <span class="sep" id="fav-sep"></span>
       <div id="favs" class="favs"></div>
     </div>
@@ -151,11 +165,24 @@
   <div id="sel-menu" class="sel-menu glass hidden">
     <div class="sel-colors" id="sel-colors"></div>
     <span class="sep"></span>
+    <button data-act="sel-fill" title="Form füllen (Stiftfarbe)"><svg><use href="#i-fill"/></svg></button>
+    <button data-act="sel-link" id="sel-link" title="Link setzen"><svg><use href="#i-link"/></svg></button>
     <button data-act="sel-card" id="sel-card" title="Als Lernkarte"><svg><use href="#i-cards"/></svg></button>
     <button data-act="sel-copy" title="Kopieren"><svg><use href="#i-copy"/></svg></button>
     <button data-act="sel-cut" title="Ausschneiden"><svg><use href="#i-cut"/></svg></button>
     <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
     <button data-act="sel-delete" class="danger" title="Löschen"><svg><use href="#i-trash"/></svg></button>
+  </div>
+  <div id="zoomwin" class="zoomwin glass hidden">
+    <canvas id="zw-canvas"></canvas>
+    <div class="zw-tools" id="zw-tools">
+      <button data-act="zw-prev" title="Zurück">‹</button>
+      <button data-act="zw-next" title="Weiter">›</button>
+      <button data-act="zw-line" title="Neue Zeile">↵</button>
+      <button data-act="zw-in" title="Stärker vergrößern">+</button>
+      <button data-act="zw-out" title="Weniger vergrößern">−</button>
+      <button data-act="zw-close" title="Zoom-Fenster schließen">✕</button>
+    </div>
   </div>
   <button id="paste-btn" class="paste-btn glass hidden" data-act="paste"><svg><use href="#i-paste"/></svg>Einfügen</button>
   <div id="cursor"></div>
@@ -173,6 +200,7 @@
   <hr>
   <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel (Inhaltsverzeichnis) …</button>
   <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier ändern …</button>
+  <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
   <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
   <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
   <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>Seite in anderes Notizbuch …</button>
@@ -206,11 +234,19 @@
   <button class="mi" data-act="card-cover"><svg><use href="#i-palette"/></svg>Cover ändern</button>
   <button class="mi" data-act="card-folder"><svg><use href="#i-folder"/></svg>In Ordner verschieben …</button>
   <button class="mi" data-act="card-dup"><svg><use href="#i-dup"/></svg>Duplizieren</button>
+  <button class="mi" data-act="card-lock"><svg><use href="#i-lock"/></svg><span id="card-lock-label">Mit PIN sperren …</span></button>
   <button class="mi" data-act="card-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
   <button class="mi" data-act="card-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
   <button class="mi" data-act="card-znote"><svg><use href="#i-copy"/></svg>Backup speichern</button>
   <hr>
   <button class="mi danger" data-act="card-delete"><svg><use href="#i-trash"/></svg>Löschen</button>
+</div>
+
+<!-- Papierkorb-Menü -->
+<div id="pop-trash" class="popover menu glass hidden">
+  <button class="mi" data-act="trash-restore"><svg><use href="#i-restore"/></svg>Wiederherstellen</button>
+  <hr>
+  <button class="mi danger" data-act="trash-delete"><svg><use href="#i-trash"/></svg>Endgültig löschen</button>
 </div>
 
 <!-- Neues Notizbuch -->
@@ -224,7 +260,7 @@
       <div class="new-opts">
         <label class="field"><span>Titel</span><input id="new-title" data-input="new-title" placeholder="z. B. Mathe, Ideen, Tagebuch" autocomplete="off"></label>
         <div id="new-from-wrap" class="hidden">
-          <h4>Notizbuchvorlage</h4>
+          <h4>Vorlage &amp; Planer</h4>
           <div id="new-from" class="from-row"></div>
         </div>
         <h4>Cover</h4>
@@ -270,6 +306,13 @@
       </div>
       <div id="tpl-paper" class="paper-sw"></div>
     </div>
+    <h4>Eigenes Papier</h4>
+    <div class="paper-own">
+      <button class="btn small" data-act="paper-img" data-arg="page"><svg><use href="#i-paper"/></svg>Bild für diese Seite</button>
+      <button class="btn small" data-act="paper-img" data-arg="all"><svg><use href="#i-paper"/></svg>Bild für alle Seiten</button>
+      <button class="btn small ghost" data-act="paper-clear"><svg><use href="#i-close"/></svg>Hintergrund entfernen</button>
+    </div>
+    <p class="hint">Ein Foto, gescanntes Papier oder eine eigene Vorlage wird zum Seitenhintergrund – neue Seiten übernehmen es automatisch.</p>
     <div class="modal-actions">
       <button class="btn ghost" data-act="modal-close">Abbrechen</button>
       <button class="btn" data-act="tpl-apply" data-arg="all">Alle Seiten</button>
@@ -293,6 +336,7 @@
     <h2 id="dlg-title"></h2>
     <p id="dlg-text"></p>
     <input id="dlg-input" class="dlg-input hidden" maxlength="80" autocomplete="off" spellcheck="false">
+    <button id="dlg-bio" class="btn small ghost bio hidden" data-act="dlg-bio"><svg><use href="#i-fingerprint"/></svg>Fingerabdruck verwenden</button>
     <div class="dlg-actions">
       <button class="btn ghost" data-act="modal-close">Abbrechen</button>
       <button id="dlg-ok" class="btn" data-act="dlg-ok">OK</button>
@@ -324,10 +368,14 @@
   </header>
   <div id="study-home" class="study-home">
     <div id="study-boxes" class="study-boxes"></div>
+    <div class="study-meta"><div id="study-streak" class="study-streak"></div><button class="btn small ghost" data-act="stats"><svg><use href="#i-chart"/></svg>Statistik</button></div>
     <div class="study-start">
+      <button class="btn big hidden" id="study-due-btn" data-act="study-start" data-arg="due"><svg><use href="#i-calendar"/></svg><span id="study-due-label">Fällige lernen</span></button>
       <button class="btn primary big" data-act="study-start" data-arg="all"><svg><use href="#i-cards"/></svg><span id="study-start-label">Lernen starten</span></button>
       <button class="btn big" data-act="study-start" data-arg="hard">Nur schwierige</button>
     </div>
+    <label class="row toggle due-toggle" id="study-due-toggle"><span>Wiederholungsplan (freiwillig)<br><small>Gewusste Karten werden erst nach 1, 3, 7 und 21 Tagen wieder fällig</small></span><span class="switch"><input type="checkbox" data-input="study-due"><span></span></span></label>
+    <p id="study-due-info" class="hint center due-info"></p>
     <p class="hint center">So erstellst du Karten: Mit dem <b>Lasso</b> die Frage einkreisen → <b>Lernkarte</b> tippen, dann die Antwort einkreisen → nochmal <b>Lernkarte</b>.</p>
     <div id="study-cards" class="study-cards"></div>
   </div>
@@ -345,6 +393,7 @@
   <div id="study-done" class="study-done hidden">
     <div class="done-badge">🎉</div>
     <h2 id="study-done-title">Geschafft!</h2>
+    <div id="study-done-streak" class="study-streak center"></div>
     <p id="study-done-text" class="muted"></p>
     <div class="study-start">
       <button class="btn primary big" data-act="study-start" data-arg="all">Nochmal lernen</button>
@@ -352,6 +401,14 @@
     </div>
   </div>
 </section>
+
+<!-- Statistik -->
+<div id="modal-stats" class="modal hidden">
+  <div class="modal-card glass narrow stats">
+    <div class="modal-head"><h2>Lernstatistik</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div id="stats-body"></div>
+  </div>
+</div>
 
 <!-- Einstellungen -->
 <div id="modal-settings" class="modal hidden">
@@ -391,8 +448,12 @@
 
 <div id="loading"><div class="spinner"></div><span>Notion wird geladen …</span></div>
 <div id="toast"></div>
+<div id="busy" class="busy hidden"><div class="busy-card glass"><div class="spinner"></div><span id="busy-text">Bitte warten …</span></div></div>
 <input type="file" id="file-image" accept="image/*" hidden>
-<input type="file" id="file-import" accept=".znote,.zeichen,image/*,application/octet-stream" hidden>
+<input type="file" id="file-import" accept=".znote,.zeichen,.pdf,application/pdf,image/*,application/octet-stream" hidden>
+<input type="file" id="file-paper" accept="image/*" hidden>
+<input type="file" id="file-pdf" accept=".pdf,application/pdf" hidden>
+<script src="pdfimport.js"></script>
 
 <script type="module">
   import init from './pkg/zeichentool.js';

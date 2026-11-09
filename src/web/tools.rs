@@ -40,6 +40,10 @@ impl App {
     /// Beginn einer Eingabe (Stift aufgesetzt / Finger zeichnet / Maus gedrückt).
     pub fn begin_op(&mut self, pointer: i32, sx: f64, sy: f64, pressure: f32) {
         self.close_popovers();
+        if self.pipette {
+            self.pick_color_at(sx, sy);
+            return;
+        }
         if self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false) {
             self.commit_text();
         }
@@ -270,7 +274,27 @@ impl App {
         }
         let op = ed.op.take().unwrap();
         let mut auto_back = false;
+        let fill_alpha = match self.prefs.shape_fill {
+            1 => Some(70u8),
+            2 => Some(255u8),
+            _ => None,
+        };
         match op {
+            Op::Ink { page, mut stroke, raw, quick, shape_tool, straight, .. } if quick.is_none() && stroke.length() * (ed.view.s() as f32) < 6.0 && ed.nb.page_mut(page).and_then(|p| p.link_at(stroke.pts[0].x, stroke.pts[0].y).map(|l| l.target.clone())).is_some() => {
+                // kurzer Tipp auf einen Verweis: springen statt Punkt setzen
+                let _ = (raw, shape_tool, straight);
+                let target = ed.nb.page_mut(page).and_then(|p| p.link_at(stroke.pts[0].x, stroke.pts[0].y).map(|l| l.target.clone()));
+                stroke.pts.clear();
+                ed.clear_live();
+                ed.dirty = true;
+                if let Some(t) = target {
+                    set_timeout(0, move || {
+                        with_app(|a| a.follow_link(t));
+                    });
+                }
+                self.request_frame();
+                return;
+            }
             Op::Ink { page, mut stroke, raw, quick, shape_tool, straight, .. } => {
                 // Glättung zum letzten echten Punkt aufholen, damit Striche nicht zu kurz enden
                 if quick.is_none() && !straight {
@@ -295,12 +319,20 @@ impl App {
                 if let Some(p) = ed.nb.page_mut(page) {
                     let order = p.max_order() + 1.0;
                     let _ = p;
-                    let id = ed.nb.alloc_id();
-                    let item = Item { id, order, content: Content::Stroke(stroke) };
-                    if let Some(p) = ed.nb.page_mut(page) {
-                        p.insert([item.clone()]);
+                    let mut added = Vec::new();
+                    // Formen füllen (Formwerkzeug oder QuickShape, nur geschlossene Formen)
+                    if let Some(a) = fill_alpha {
+                        if (shape_tool || quick.is_some()) && is_closed(&stroke) {
+                            let fid = ed.nb.alloc_id();
+                            added.push(fill_item(fid, order - 0.5, &stroke, a));
+                        }
                     }
-                    ed.push(Action::Items { page, removed: vec![], added: vec![item] });
+                    let id = ed.nb.alloc_id();
+                    added.push(Item { id, order, content: Content::Stroke(stroke) });
+                    if let Some(p) = ed.nb.page_mut(page) {
+                        p.insert(added.clone());
+                    }
+                    ed.push(Action::Items { page, removed: vec![], added });
                 }
             }
             Op::Erase { page, before, .. } => {
@@ -319,7 +351,12 @@ impl App {
             }
             Op::Lasso { page, pts, .. } => {
                 let len: f32 = pts.windows(2).map(|w| dist(w[0].0, w[0].1, w[1].0, w[1].1)).sum();
-                if len * (ed.view.s() as f32) < 12.0 {
+                let link = ed.nb.page_mut(page).and_then(|p| p.link_at(pts[0].0, pts[0].1).map(|l| l.target.clone()));
+                if let (true, Some(t)) = (len * (ed.view.s() as f32) < 12.0, link) {
+                    set_timeout(0, move || {
+                        with_app(|a| a.follow_link(t));
+                    });
+                } else if len * (ed.view.s() as f32) < 12.0 {
                     if !ed.clipboard.is_empty() {
                         ed.paste_at = Some((page, pts[0].0, pts[0].1));
                     }
@@ -412,6 +449,16 @@ impl App {
                 self.toast("Ausgeschnitten – mit dem Lasso auf eine freie Stelle tippen zum Einfügen");
             }
             "sel-dup" => ed.duplicate_selection(),
+            "sel-fill" => {
+                let a = if self.prefs.shape_fill == 2 { 255 } else { 70 };
+                let c = self.prefs.pen_colors[self.prefs.pen_ci];
+                let n = ed.fill_selection([c[0], c[1], c[2], a]);
+                if n == 0 {
+                    self.toast("Keine geschlossene Form ausgewählt – zeichne z. B. einen Kreis oder ein Rechteck");
+                } else {
+                    self.toast(&format!("{} {} gefüllt", n, if n == 1 { "Form" } else { "Formen" }));
+                }
+            }
             "sel-color" => {
                 if let Some(c) = Color::from_hex(arg) {
                     ed.recolor_selection(c);
@@ -773,5 +820,77 @@ impl Editor {
         }
         self.selection = Some(Selection { page, ids: items.iter().map(|i| i.id).collect(), bbox });
         self.push(Action::Items { page, removed: vec![], added: items });
+    }
+}
+
+/// Ist der Strich eine geschlossene Form (Anfang ≈ Ende)?
+pub fn is_closed(s: &Stroke) -> bool {
+    if s.pts.len() < 4 || s.pen == PenKind::Fill || s.pen == PenKind::Highlighter {
+        return false;
+    }
+    let (a, b) = (s.pts[0], s.pts[s.pts.len() - 1]);
+    let r = s.bbox();
+    let diag = (r.w() * r.w() + r.h() * r.h()).sqrt();
+    diag > 8.0 && dist(a.x, a.y, b.x, b.y) <= (diag * 0.12).max(s.width * 3.0)
+}
+
+/// Füllfläche für eine geschlossene Form.
+pub fn fill_item(id: u32, order: f64, s: &Stroke, alpha: u8) -> Item {
+    let c = s.color;
+    Item { id, order, content: Content::Stroke(Stroke { pen: PenKind::Fill, color: [c[0], c[1], c[2], alpha], width: 0.0, pts: s.pts.iter().map(|p| Pt::new(p.x, p.y, 1.0)).collect() }) }
+}
+
+impl Editor {
+    /// Füllt alle geschlossenen Formen der Auswahl; liefert die Anzahl.
+    pub fn fill_selection(&mut self, color: [u8; 4]) -> usize {
+        let Some(sel) = &self.selection else { return 0 };
+        let page = sel.page;
+        let Some(pi) = self.page_index(page) else { return 0 };
+        let shapes: Vec<(f64, Stroke)> = self.nb.pages[pi]
+            .items
+            .iter()
+            .filter(|it| sel.ids.contains(&it.id))
+            .filter_map(|it| match &it.content {
+                Content::Stroke(s) if is_closed(s) => Some((it.order, s.clone())),
+                _ => None,
+            })
+            .collect();
+        let mut added = Vec::new();
+        for (order, s) in shapes {
+            let id = self.nb.alloc_id();
+            let mut it = fill_item(id, order - 0.01, &s, color[3]);
+            if let Content::Stroke(f) = &mut it.content {
+                f.color = color;
+            }
+            added.push(it);
+        }
+        let n = added.len();
+        if n > 0 {
+            self.nb.pages[pi].insert(added.clone());
+            self.push(Action::Items { page, removed: vec![], added });
+            self.dirty = true;
+        }
+        n
+    }
+}
+
+impl App {
+    /// Pipette: Farbe an einem Bildschirmpunkt übernehmen.
+    pub fn pick_color_at(&mut self, sx: f64, sy: f64) {
+        self.pipette = false;
+        set_class(&dom().body().unwrap(), "picking", false);
+        let Some(ed) = &self.ed else { return };
+        let dpr = ed.dpr;
+        let Ok(data) = ed.ctx.get_image_data(sx * dpr, sy * dpr, 1.0, 1.0) else { return };
+        let d = data.data();
+        if d.len() < 3 {
+            return;
+        }
+        if matches!(self.tool, Tool::Eraser | Tool::Lasso | Tool::Laser) {
+            self.set_tool(Tool::Pen);
+        }
+        let c = Color::from_u8(d[0], d[1], d[2]);
+        self.set_active_color_pub(c);
+        self.toast(&format!("Farbe {} übernommen", c.to_hex()));
     }
 }

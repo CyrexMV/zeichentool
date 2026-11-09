@@ -32,7 +32,7 @@ impl App {
         let mut list: Vec<&NoteMeta> = self
             .library
             .iter()
-            .filter(|m| !m.is_template)
+            .filter(|m| m.visible())
             .filter(|m| !self.lib_fav || m.favorite)
             .filter(|m| if searching { m.title.to_lowercase().contains(&q) } else { m.folder == folder.clone().unwrap_or_default() })
             .collect();
@@ -56,7 +56,7 @@ impl App {
                    <div class=\"cover\" style=\"{css};aspect-ratio:{ratio}\">\
                      <div class=\"cover-band\"></div>\
                      <div class=\"cover-label\"><b>{title}</b><small>{pages} {pw}</small></div>\
-                     {star}\
+                     {star}{lock}\
                      <button class=\"card-more\" data-act=\"card-menu\" data-arg=\"{id}\" title=\"Optionen\"><svg><use href=\"#i-more\"/></svg></button>\
                    </div>\
                    <div class=\"card-meta\"><b>{title}</b><small>{date}</small>{in_folder}</div>\
@@ -68,6 +68,7 @@ impl App {
                 pages = m.pages,
                 pw = if m.pages == 1 { "Seite" } else { "Seiten" },
                 star = if m.favorite { "<svg class=\"cover-star\"><use href=\"#i-star\"/></svg>" } else { "" },
+                lock = if m.locked() { "<span class=\"cover-lock\"><svg><use href=\"#i-lock\"/></svg></span>" } else { "" },
                 date = date_label(m.modified),
                 in_folder = in_folder,
             ));
@@ -76,7 +77,7 @@ impl App {
         let mut fhtml = String::new();
         if folder.is_none() && !searching {
             for f in &self.folders {
-                let n = self.library.iter().filter(|m| !m.is_template && &m.folder == f).count();
+                let n = self.library.iter().filter(|m| m.visible() && &m.folder == f).count();
                 fhtml.push_str(&format!(
                     "<div class=\"folder-card\" data-act=\"folder-open\" data-arg=\"{f}\"><div class=\"folder-ico\"><svg><use href=\"#i-folder\"/></svg></div><div><b>{f}</b><small>{n} {nw}</small></div><button class=\"folder-more\" data-act=\"folder-menu\" data-arg=\"{f}\" title=\"Ordner-Optionen\"><svg><use href=\"#i-more\"/></svg></button></div>",
                     f = esc(f),
@@ -85,12 +86,32 @@ impl App {
                 ));
             }
         }
+        let trash_n = self.trash_count();
+        if folder.is_none() && !searching && trash_n > 0 && !self.show_trash {
+            fhtml.push_str(&format!(
+                "<div class=\"folder-card trash\" data-act=\"trash-open\"><div class=\"folder-ico\"><svg><use href=\"#i-trash\"/></svg></div><div><b>Papierkorb</b><small>{} {}</small></div></div>",
+                trash_n,
+                if trash_n == 1 { "Notizbuch" } else { "Notizbücher" }
+            ));
+        }
+        if self.show_trash {
+            fhtml.clear();
+        }
         el("lib-folders").set_inner_html(&fhtml);
-        self.render_decks(folder.is_none() && !searching && !self.lib_fav);
-        show("lib-crumb", folder.is_some() && !searching);
-        set_text("lib-crumb-name", folder.as_deref().unwrap_or(""));
+        self.render_decks(folder.is_none() && !searching && !self.lib_fav && !self.show_trash);
+        show("lib-crumb", (folder.is_some() || self.show_trash) && !searching);
+        set_text("lib-crumb-name", if self.show_trash { "Papierkorb" } else { folder.as_deref().unwrap_or("") });
+        show("lib-trash-empty", self.show_trash && trash_n > 0);
+        if self.show_trash {
+            show("lib-decks", false);
+            show("lib-empty", false);
+            show("lib-grid", true);
+            let t = self.render_trash();
+            el("lib-grid").set_inner_html(&t);
+            return;
+        }
         el("lib-grid").set_inner_html(&html);
-        let total = self.library.iter().filter(|m| !m.is_template).count();
+        let total = self.library.iter().filter(|m| m.visible()).count();
         set_text("lib-count", &format!("{} {}", total, if total == 1 { "Notizbuch" } else { "Notizbücher" }));
         let empty = total == 0 && self.folders.is_empty();
         show("lib-empty", empty);
@@ -113,24 +134,28 @@ impl App {
         if !visible {
             return;
         }
-        let mut decks: Vec<&NoteMeta> = self.library.iter().filter(|m| !m.is_template && (m.deck || m.cards > 0)).collect();
+        let mut decks: Vec<&NoteMeta> = self.library.iter().filter(|m| m.visible() && (m.deck || m.cards > 0)).collect();
         decks.sort_by(|a, b| b.modified.partial_cmp(&a.modified).unwrap_or(std::cmp::Ordering::Equal));
         let (total, learned): (u32, u32) = decks.iter().fold((0, 0), |(t, l), m| (t + m.cards, l + m.learned));
+        let now = wall_clock();
+        let due_total: usize = if self.settings.due_mode { decks.iter().map(|m| m.due_count(now)).sum() } else { 0 };
         let summary = if decks.is_empty() {
             "Lerne mit Karteikarten – Frage vorne, Antwort hinten".to_string()
         } else {
-            format!("{} {} · {} gelernt", total, if total == 1 { "Karte" } else { "Karten" }, learned)
+            format!("{} {} · {} gelernt{}", total, if total == 1 { "Karte" } else { "Karten" }, learned, if due_total > 0 { format!(" · <b class=\"due\">{} heute fällig</b>", due_total) } else { String::new() })
         };
         let mut html = format!(
-            "<div class=\"decks-head\"><h3><svg><use href=\"#i-cards\"/></svg>Lernkarten</h3><span class=\"muted\">{}</span></div><div class=\"decks-row\">\
+            "<div class=\"decks-head\"><h3><svg><use href=\"#i-cards\"/></svg>Lernkarten</h3><span class=\"muted\">{}</span><span class=\"decks-streak\">{}</span><button class=\"btn small ghost\" data-act=\"stats\"><svg><use href=\"#i-chart\"/></svg>Statistik</button></div><div class=\"decks-row\">\
              <button class=\"deck-new\" data-act=\"deck-new\"><span class=\"deck-plus\"><svg><use href=\"#i-plus\"/></svg></span><b>Neues Lernkarten-Set</b><small>Frage oben, Antwort unten – mit dem S-Pen</small></button>",
-            summary
+            summary,
+            self.streak_line()
         );
         for m in decks {
+            let due = if self.settings.due_mode { m.due_count(now) } else { 0 };
             let pct = m.progress.min(100) as f64;
             html.push_str(&format!(
                 "<div class=\"deck\" data-act=\"card\" data-arg=\"{id}\" title=\"Bearbeiten\">\
-                   <div class=\"deck-stack\" style=\"{css}\"><span></span><span></span><div class=\"deck-face\"><b>{title}</b><small>{n} {nw}</small></div></div>\
+                   <div class=\"deck-stack\" style=\"{css}\"><span></span><span></span><div class=\"deck-face\"><b>{title}</b><small>{n} {nw}</small>{due}</div></div>\
                    <div class=\"deck-prog\"><span style=\"width:{pct:.0}%\"></span></div>\
                    <div class=\"deck-foot\"><small>{l} von {n} gelernt</small><button class=\"btn small primary\" data-act=\"deck-study\" data-arg=\"{id}\"><svg><use href=\"#i-cards\"/></svg>Lernen</button></div>\
                  </div>",
@@ -140,7 +165,8 @@ impl App {
                 n = m.cards,
                 nw = if m.cards == 1 { "Karte" } else { "Karten" },
                 l = m.learned,
-                pct = pct
+                pct = pct,
+                due = if due > 0 { format!("<span class=\"due-badge\">{} fällig</span>", due) } else { String::new() }
             ));
         }
         html.push_str("</div>");
@@ -149,13 +175,17 @@ impl App {
 
     /// Lernkarten-Set vom Startbildschirm aus öffnen und gleich lernen.
     pub fn study_deck(&mut self, id: String) {
+        if self.needs_unlock(&id, super::lock::Then::Study) {
+            return;
+        }
         self.with_stored(id, |a, nb| {
             a.enter_editor(nb);
             a.open_study();
             a.study_from_lib = true;
-            let has = a.ed.as_ref().map(|e| !e.nb.study_cards().is_empty()).unwrap_or(false);
+            let now = wall_clock();
+            let (has, due) = a.ed.as_ref().map(|e| (!e.nb.study_cards().is_empty(), e.nb.study_cards().iter().any(|c| c.is_due(now)))).unwrap_or((false, false));
             if has {
-                a.study_start(false);
+                a.study_start(if a.settings.due_mode && due { "due" } else { "all" });
             }
         });
     }
@@ -202,6 +232,7 @@ impl App {
         }
         self.save_now();
         self.ed = None;
+        self.unlocked.clear();
         self.images.clear();
         self.screen = Screen::Library;
         self.close_popovers();
@@ -215,8 +246,12 @@ impl App {
     pub fn card_action(&mut self, act: &str, n: usize) {
         self.close_popovers();
         let Some(id) = self.ctx_target.clone() else { return };
+        if matches!(act, "card-dup" | "card-template" | "card-pdf" | "card-znote") && self.needs_unlock(&id, super::lock::Then::Card(act.to_string())) {
+            return;
+        }
         match act {
-            "card-open" => self.open_notebook(id),
+            "card-open" => self.open_guarded(id),
+            "card-lock" => self.card_lock(id),
             "card-rename" => {
                 let cur = self.library.iter().find(|m| m.id == id).map(|m| m.title.clone()).unwrap_or_default();
                 let visual = self.cover_visual(&id, "accent", "i-text");
@@ -250,12 +285,12 @@ impl App {
                 let (title, pages) = meta.map(|m| (m.title, m.pages)).unwrap_or_default();
                 let visual = self.cover_visual(&id, "danger", "i-trash");
                 let text = format!(
-                    "<b>„{}“</b> mit {} {} wird endgültig gelöscht. Das kann nicht rückgängig gemacht werden.",
+                    "<b>„{}“</b> mit {} {} wird in den Papierkorb verschoben. Dort kannst du es 30 Tage lang wiederherstellen.",
                     esc(&title),
                     pages,
                     if pages == 1 { "Seite" } else { "Seiten" }
                 );
-                self.open_dialog(&visual, "Notizbuch löschen?", &text, "Löschen", true, None, Pending::DeleteNotebook(id));
+                self.open_dialog(&visual, "Notizbuch löschen?", &text, "In den Papierkorb", true, None, Pending::DeleteNotebook(id));
             }
             _ => {}
         }
@@ -286,6 +321,10 @@ impl App {
         set_class(&okb, "danger", danger);
         set_class(&okb, "primary", !danger);
         let inp = input_el("dlg-input");
+        let _ = inp.set_attribute("type", "text");
+        let _ = inp.set_attribute("inputmode", "text");
+        inp.set_placeholder("");
+        show("dlg-bio", false);
         set_class(&inp, "hidden", input.is_none());
         inp.set_value(input.unwrap_or(""));
         self.pending = Some(pending);
@@ -301,21 +340,28 @@ impl App {
         let value = input_el("dlg-input").value();
         let pending = self.pending.take();
         self.close_modals();
+        if let Some(p) = &pending {
+            if self.lock_dialog(p, &value) {
+                return;
+            }
+        }
         match pending {
+            Some(Pending::DeleteForever(id)) => {
+                self.delete_stored(&id);
+                self.toast("Endgültig gelöscht");
+            }
+            Some(Pending::EmptyTrash) => self.empty_trash(),
             Some(Pending::NewDeck) => {
                 let t: String = value.trim().chars().take(80).collect();
                 let title = if t.is_empty() { "Lernkarten".to_string() } else { t };
                 let cover = (js_sys::Math::random() * COVERS.len() as f64) as u8 % COVERS.len() as u8;
-                let tpl = crate::engine::Template { kind: crate::engine::TemplateKind::Flashcard, spacing: 1 };
+                let tpl = crate::engine::Template::new(crate::engine::TemplateKind::Flashcard, 1);
                 let mut nb = Notebook::new(super::storage::new_id(), &title, cover, crate::engine::Format { w: 420.0, h: 595.0 }, tpl, crate::engine::Color::WHITE, wall_clock());
                 nb.folder = self.folder.clone().unwrap_or_default();
                 self.add_notebook(nb, true);
                 self.toast("Oben die Frage, unten die Antwort schreiben – neue Karte über „Seite hinzufügen“ (Blatt mit +)");
             }
-            Some(Pending::DeleteNotebook(id)) => {
-                self.delete_stored(&id);
-                self.toast("Notizbuch gelöscht");
-            }
+            Some(Pending::DeleteNotebook(id)) => self.trash_notebook(id),
             Some(Pending::RenameNotebook(id)) => {
                 let t: String = value.trim().chars().take(80).collect();
                 if !t.is_empty() {
@@ -412,7 +458,8 @@ impl App {
                 }
                 self.toast("Vorlage gelöscht");
             }
-            Some(Pending::MoveToFolder(_)) | Some(Pending::PageTo(_)) => {}
+            Some(Pending::MoveToFolder(_)) | Some(Pending::PageTo(_)) | Some(Pending::Link(..)) => {}
+            Some(Pending::Unlock(..)) | Some(Pending::SetPin(_)) | Some(Pending::ConfirmPin(..)) | Some(Pending::RemovePin(_)) => {}
             None => {}
         }
     }
@@ -433,6 +480,7 @@ impl App {
             }
             "folder-up" => {
                 self.folder = None;
+                self.show_trash = false;
                 self.render_library();
             }
             "folder-menu" => {
@@ -446,7 +494,7 @@ impl App {
             }
             "folder-delete" => {
                 let Some(name) = self.ctx_target.clone() else { return };
-                let n = self.library.iter().filter(|m| !m.is_template && m.folder == name).count();
+                let n = self.library.iter().filter(|m| m.visible() && m.folder == name).count();
                 let visual = "<div class=\"dlg-icon danger\"><svg><use href=\"#i-folder\"/></svg></div>";
                 let text = format!("Der Ordner <b>„{}“</b> wird aufgelöst. Die {} {} darin bleiben erhalten und liegen danach in der Übersicht.", esc(&name), n, if n == 1 { "Notizbuch" } else { "Notizbücher" });
                 self.open_dialog(visual, "Ordner auflösen?", &text, "Auflösen", true, None, Pending::DeleteFolder(name));
@@ -511,6 +559,7 @@ impl App {
                 self.toast(&format!("Verschoben nach {}", label));
             }
             Some(Pending::PageTo(i)) => self.page_to(i, value.to_string()),
+            Some(Pending::Link(page, x0, y0, x1, y1)) => self.create_link(page, crate::engine::Rect::new(x0, y0, x1, y1), value),
             _ => {}
         }
     }
@@ -540,7 +589,7 @@ impl App {
     pub fn open_page_to(&mut self) {
         let Some(ed) = &self.ed else { return };
         let (i, cur_id) = (ed.cur_page, ed.nb.id.clone());
-        let mut list: Vec<&NoteMeta> = self.library.iter().filter(|m| !m.is_template && m.id != cur_id).collect();
+        let mut list: Vec<&NoteMeta> = self.library.iter().filter(|m| m.visible() && m.id != cur_id).collect();
         list.sort_by(|a, b| b.modified.partial_cmp(&a.modified).unwrap_or(std::cmp::Ordering::Equal));
         if list.is_empty() {
             self.toast("Lege zuerst ein weiteres Notizbuch an");

@@ -127,7 +127,7 @@ pub fn image_for(images: &mut HashMap<u64, HtmlImageElement>, key: u64, png: &[u
     let parts = js_sys::Array::new();
     parts.push(&js_sys::Uint8Array::from(png));
     let opts = web_sys::BlobPropertyBag::new();
-    opts.set_type("image/png");
+    opts.set_type(if png.first() == Some(&0xFF) { "image/jpeg" } else { "image/png" });
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &opts).ok()?;
     let url = web_sys::Url::create_object_url_with_blob(&blob).ok()?;
     let img = HtmlImageElement::new().ok()?;
@@ -163,6 +163,12 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
     ctx.clip();
     ctx.set_fill_style_str(&page.paper.to_hex());
     ctx.fill_rect(0.0, 0.0, w as f64, h as f64);
+    if let Some(bg) = &page.bg {
+        if let Some(el) = image_for(c.images, bg.key, &bg.png) {
+            let (x, y, dw, dh) = crate::engine::pdf::fit_contain(el.natural_width() as f32, el.natural_height() as f32, w, h);
+            let _ = ctx.draw_image_with_html_image_element_and_dw_and_dh(&el, x as f64, y as f64, dw as f64, dh as f64);
+        }
+    }
     draw_template(ctx, page, w, h, c);
     for pass in 0..4 {
         for it in &page.items {
@@ -186,6 +192,11 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                         ctx.fill_rect(img.x as f64, img.y as f64, img.w as f64, img.h as f64);
                     }
                 }
+                (Content::Stroke(s), 0) if s.pen == PenKind::Fill => {
+                    let p = c.path(it.id, s);
+                    ctx.set_fill_style_str(&rgba_css(s.color));
+                    ctx.fill_with_path_2d(&p);
+                }
                 (Content::Stroke(s), 1) if s.pen == PenKind::Highlighter => {
                     let p = c.path(it.id, s);
                     let _ = ctx.set_global_composite_operation("multiply");
@@ -193,7 +204,7 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
                     ctx.fill_with_path_2d(&p);
                     let _ = ctx.set_global_composite_operation("source-over");
                 }
-                (Content::Stroke(s), 2) if s.pen != PenKind::Highlighter => {
+                (Content::Stroke(s), 2) if s.pen != PenKind::Highlighter && s.pen != PenKind::Fill => {
                     let p = c.path(it.id, s);
                     ctx.set_fill_style_str(&rgba_css(s.color));
                     ctx.fill_with_path_2d(&p);
@@ -215,6 +226,34 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
         }
     }
     draw_checks(ctx, page, w, h);
+    // sichtbare Verweise: zarte blaue Fläche mit Rahmen
+    for l in page.links.iter().filter(|l| !l.hidden) {
+        let r = l.rect;
+        ctx.begin_path();
+        let _ = ctx.round_rect_with_f64(r.x0 as f64, r.y0 as f64, r.w() as f64, r.h() as f64, 4.0);
+        ctx.set_fill_style_str("rgba(47,140,255,0.10)");
+        ctx.fill();
+        ctx.set_stroke_style_str("rgba(47,140,255,0.6)");
+        ctx.set_line_width(1.0);
+        let _ = ctx.set_line_dash(&js_sys::Array::of2(&4.0.into(), &3.0.into()));
+        ctx.stroke();
+        let _ = ctx.set_line_dash(&js_sys::Array::new());
+        // kleines Link-Symbol oben rechts
+        let (cx, cy) = (r.x1 as f64 - 1.0, r.y0 as f64 + 1.0);
+        ctx.set_fill_style_str("#2f8cff");
+        ctx.begin_path();
+        let _ = ctx.arc(cx, cy, 5.5, 0.0, std::f64::consts::TAU);
+        ctx.fill();
+        ctx.set_stroke_style_str("#ffffff");
+        ctx.set_line_width(1.2);
+        ctx.begin_path();
+        ctx.move_to(cx - 2.2, cy + 2.2);
+        ctx.line_to(cx + 2.2, cy - 2.2);
+        ctx.move_to(cx - 0.4, cy - 2.2);
+        ctx.line_to(cx + 2.2, cy - 2.2);
+        ctx.line_to(cx + 2.2, cy + 0.4);
+        ctx.stroke();
+    }
     ctx.restore();
 }
 
@@ -270,12 +309,12 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
         return;
     }
     let light = page.paper.luminance() > 0.5;
-    let key = format!("{}-{}-{}-{}", t.kind as u8, t.spacing, w, h);
+    let key = format!("{}-{}-{}-{}-{}-{}", t.kind as u8, t.spacing, t.plan.year, t.plan.idx, w, h);
     if !c.tpl.contains_key(&key) {
         let prims = t.primitives(w, h);
         let mut d = [String::new(), String::new(), String::new(), String::new()];
         for p in &prims {
-            match *p {
+            match p.clone() {
                 Prim::Line { x0, y0, x1, y1, accent, strong } => {
                     let k = if accent { 2 } else if strong { 1 } else { 0 };
                     let _ = write!(d[k], "M{:.2} {:.2}L{:.2} {:.2}", x0, y0, x1, y1);
@@ -328,13 +367,13 @@ fn draw_template(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
     ctx.set_text_baseline("alphabetic");
     ctx.set_text_align("start");
     for p in decor {
-        if let Prim::Label { x, y, size, text, color, bold } = *p {
+        if let Prim::Label { x, y, size, text, color, bold } = p.clone() {
             ctx.set_font(&format!("{} {}px {}", if bold { 700 } else { 500 }, size, FONT));
             ctx.set_fill_style_str(&match color {
                 Some(c) => css8(c),
                 None => css([line[0], line[1], line[2], if light { 0.9 } else { 0.7 }]),
             });
-            let _ = ctx.fill_text(text, x as f64, y as f64);
+            let _ = ctx.fill_text(&text, x as f64, y as f64);
         }
     }
 }
@@ -449,6 +488,7 @@ impl Editor {
         if let Some(r) = self.ruler {
             r.draw(&ctx, dpr, 2.8346 * s, dark);
         }
+        self.draw_zw_frame(&ctx);
         // ungenutzte Seitenbilder freigeben
         if self.bmps.len() > 8 {
             let keep: Vec<u32> = (first..=last).filter_map(|i| self.nb.pages.get(i).map(|p| p.id)).collect();

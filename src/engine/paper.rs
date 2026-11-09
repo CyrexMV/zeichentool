@@ -1,6 +1,7 @@
 //! Papiervorlagen (liniert, kariert, gepunktet, Cornell, Notenlinien, Planer) als Vektor-Grundformen.
 //! Die Linien gehören zum Papier und lassen sich nicht wegradieren.
 
+use super::cal;
 use super::color::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,10 +22,14 @@ pub enum TemplateKind {
     Meals = 13,
     Habits = 14,
     Flashcard = 15,
+    /// Jahresplaner: Jahresübersicht, Monat, Woche (mit echten Daten, siehe `Plan`)
+    YearPlan = 16,
+    MonthPlan = 17,
+    WeekPlan = 18,
 }
 
 impl TemplateKind {
-    pub const ALL: [TemplateKind; 16] = [
+    pub const ALL: [TemplateKind; 19] = [
         TemplateKind::Blank,
         TemplateKind::Lined,
         TemplateKind::Grid,
@@ -41,7 +46,15 @@ impl TemplateKind {
         TemplateKind::Meals,
         TemplateKind::Habits,
         TemplateKind::Flashcard,
+        TemplateKind::YearPlan,
+        TemplateKind::MonthPlan,
+        TemplateKind::WeekPlan,
     ];
+
+    /// Auswählbare Vorlagen (Planer-Seiten entstehen nur über den Jahresplaner).
+    pub fn picker() -> &'static [TemplateKind] {
+        &Self::ALL[..16]
+    }
 
     pub fn code(&self) -> &'static str {
         match self {
@@ -61,6 +74,9 @@ impl TemplateKind {
             TemplateKind::Meals => "meals",
             TemplateKind::Habits => "habits",
             TemplateKind::Flashcard => "flashcard",
+            TemplateKind::YearPlan => "plan-year",
+            TemplateKind::MonthPlan => "plan-month",
+            TemplateKind::WeekPlan => "plan-week",
         }
     }
 
@@ -90,6 +106,9 @@ impl TemplateKind {
             TemplateKind::Meals => "Essensplan",
             TemplateKind::Habits => "Gewohnheiten",
             TemplateKind::Flashcard => "Lernkarte",
+            TemplateKind::YearPlan => "Jahresübersicht",
+            TemplateKind::MonthPlan => "Monat (Planer)",
+            TemplateKind::WeekPlan => "Woche (Planer)",
         }
     }
 
@@ -100,8 +119,27 @@ impl TemplateKind {
 
     /// Vorlagen mit abhakbaren Kästchen.
     pub fn has_checks(&self) -> bool {
-        matches!(self, TemplateKind::Checklist | TemplateKind::Shopping | TemplateKind::Daily | TemplateKind::Timetable | TemplateKind::Meals)
+        matches!(self, TemplateKind::Checklist | TemplateKind::Shopping | TemplateKind::Daily | TemplateKind::Timetable | TemplateKind::Meals | TemplateKind::WeekPlan)
     }
+
+    pub fn is_plan(&self) -> bool {
+        matches!(self, TemplateKind::YearPlan | TemplateKind::MonthPlan | TemplateKind::WeekPlan)
+    }
+}
+
+/// Planer-Angaben einer Seite: Jahr und Monat (0–11) bzw. Wochenseite (0 …).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Plan {
+    pub year: u16,
+    pub idx: u16,
+}
+
+/// Ziel eines Planer-Verweises.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlanTarget {
+    Year,
+    Month(u16),
+    Week(u16),
 }
 
 /// Vorlage + Linienabstand (0 = eng, 1 = mittel, 2 = weit).
@@ -109,11 +147,22 @@ impl TemplateKind {
 pub struct Template {
     pub kind: TemplateKind,
     pub spacing: u8,
+    pub plan: Plan,
+}
+
+impl Template {
+    pub fn new(kind: TemplateKind, spacing: u8) -> Template {
+        Template { kind, spacing, plan: Plan::default() }
+    }
+
+    pub fn planner(kind: TemplateKind, year: u16, idx: u16) -> Template {
+        Template { kind, spacing: 1, plan: Plan { year, idx } }
+    }
 }
 
 impl Default for Template {
     fn default() -> Self {
-        Template { kind: TemplateKind::Blank, spacing: 1 }
+        Template::new(TemplateKind::Blank, 1)
     }
 }
 
@@ -124,7 +173,7 @@ pub type Area = (f32, f32, f32, f32);
 pub type Rgba = [u8; 4];
 
 /// Grundform einer Vorlage (Seitenkoordinaten in pt).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Prim {
     /// Linie; `accent` = farbige Randlinie, `strong` = kräftige Strukturlinie
     Line { x0: f32, y0: f32, x1: f32, y1: f32, accent: bool, strong: bool },
@@ -134,7 +183,7 @@ pub enum Prim {
     /// Farbfläche (abgerundetes Rechteck mit Eckradius `r`)
     Fill { x: f32, y: f32, w: f32, h: f32, r: f32, color: Rgba },
     /// Beschriftung ab Grundlinie (x, y); `color: None` = Linienfarbe des Papiers
-    Label { x: f32, y: f32, size: f32, text: &'static str, color: Option<Rgba>, bold: bool },
+    Label { x: f32, y: f32, size: f32, text: String, color: Option<Rgba>, bold: bool },
 }
 
 /// Eine abhakbare Zeile: Zeilenband (y0..y1), Kästchen, Schreibbereich text_x..x1.
@@ -192,6 +241,8 @@ const SHOP: [(&str, Rgba); 8] = [
     ("Drogerie & Haushalt", PINK),
     ("Sonstiges", SLATE),
 ];
+/// Eine Farbe je Monat (Planer-Reiter)
+pub const MONTH_COLORS: [Rgba; 12] = [VIOLET, SKY, TEAL, GREEN, [120, 180, 40, 255], AMBER, [245, 120, 40, 255], CORAL, PINK, [150, 90, 220, 255], [80, 110, 220, 255], SLATE];
 const MEALS: [(&str, Rgba); 4] = [("Frühstück", AMBER), ("Mittagessen", CORAL), ("Abendessen", VIOLET), ("Snacks", TEAL)];
 
 fn tint(c: Rgba, a: u8) -> Rgba {
@@ -207,6 +258,7 @@ pub fn approx_text_w(text: &str, size: f32, bold: bool) -> f32 {
 struct Builder {
     v: Vec<Prim>,
     rows: Vec<CheckRow>,
+    hot: Vec<(Area, PlanTarget)>,
     s: f32,
 }
 
@@ -223,15 +275,15 @@ impl Builder {
         self.v.push(Prim::Fill { x, y, w, h, r, color });
     }
 
-    fn label(&mut self, x: f32, y: f32, size: f32, text: &'static str, color: Option<Rgba>, bold: bool) {
-        self.v.push(Prim::Label { x, y, size, text, color, bold });
+    fn label(&mut self, x: f32, y: f32, size: f32, text: impl Into<String>, color: Option<Rgba>, bold: bool) {
+        self.v.push(Prim::Label { x, y, size, text: text.into(), color, bold });
     }
 
     /// Überschrift oben links + optional Feld rechts („KW ____“).
-    fn title(&mut self, w: f32, text: &'static str, color: Rgba, field: Option<&'static str>) {
+    fn title(&mut self, w: f32, text: &str, color: Rgba, field: Option<&'static str>) {
         let s = self.s;
         let m = s;
-        self.label(m, s * 1.95, s * 0.95, text, Some(color), true);
+        self.label(m, s * 1.95, s * 0.95, text.to_string(), Some(color), true);
         if let Some(f) = field {
             let fw = (w * 0.3).max(s * 5.0);
             let x = w - m - fw;
@@ -242,16 +294,16 @@ impl Builder {
     }
 
     /// Farbige Kopfzeile (Pille) mit weißer Schrift.
-    fn pill(&mut self, x: f32, y: f32, w: f32, text: &'static str, color: Rgba) {
+    fn pill(&mut self, x: f32, y: f32, w: f32, text: &str, color: Rgba) {
         let s = self.s;
         let h = s * 1.1;
         self.fill(x, y, w, h, s * 0.4, tint(color, 235));
         let size = (s * 0.5).min(w / (text.chars().count().max(1) as f32 * 0.62));
-        self.label(x + s * 0.42, y + h * 0.5 + size * 0.36, size, text, Some(WHITE), true);
+        self.label(x + s * 0.42, y + h * 0.5 + size * 0.36, size, text.to_string(), Some(WHITE), true);
     }
 
     /// Abschnitt: getönte Fläche mit Kopfzeile. Gibt den Beginn des Inhalts zurück.
-    fn section(&mut self, x: f32, y: f32, w: f32, h: f32, text: &'static str, color: Rgba) -> f32 {
+    fn section(&mut self, x: f32, y: f32, w: f32, h: f32, text: &str, color: Rgba) -> f32 {
         let s = self.s;
         self.fill(x, y, w, h, s * 0.5, tint(color, 24));
         self.pill(x + s * 0.25, y + s * 0.25, w - s * 0.5, text, color);
@@ -336,7 +388,7 @@ impl Template {
 
     fn build(&self, w: f32, h: f32) -> Builder {
         let s = self.unit(w, h);
-        let mut b = Builder { v: Vec::new(), rows: Vec::new(), s };
+        let mut b = Builder { v: Vec::new(), rows: Vec::new(), hot: Vec::new(), s };
         let landscape = w > h * 1.1;
         let m = s;
         let top = s * 2.8;
@@ -428,7 +480,7 @@ impl Template {
                 }
                 for (i, l) in PLANNER_LABELS.iter().enumerate() {
                     let (col, row) = (i / 4, i % 4);
-                    b.label(m + cw * col as f32 + s * 0.4, head + ch * row as f32 + s * 1.1, s * 0.55, l, None, true);
+                    b.label(m + cw * col as f32 + s * 0.4, head + ch * row as f32 + s * 1.1, s * 0.55, *l, None, true);
                 }
             }
             TemplateKind::WeekColor => {
@@ -466,7 +518,7 @@ impl Template {
                 let tx = m + s * 2.6;
                 for (i, l) in HOURS.iter().enumerate() {
                     let y = c0 + slot * i as f32;
-                    b.label(m + s * 0.45, y + slot * 0.5 + s * 0.15, s * 0.42, l, None, true);
+                    b.label(m + s * 0.45, y + slot * 0.5 + s * 0.15, s * 0.42, *l, None, true);
                     b.hline(y + slot, m + s * 0.3, m + lw - s * 0.3, false);
                 }
                 b.vline(tx, c0, c0 + slot * HOURS.len() as f32, false);
@@ -530,7 +582,7 @@ impl Template {
                     if r % 2 == 1 {
                         b.fill(m, y, gx1 - m, rh, 0.0, tint(SLATE, 14));
                     }
-                    b.label(m + tw * 0.5 - approx_text_w(l, s * 0.5, true) * 0.5, y + rh * 0.5 + s * 0.18, s * 0.5, l, None, true);
+                    b.label(m + tw * 0.5 - approx_text_w(l, s * 0.5, true) * 0.5, y + rh * 0.5 + s * 0.18, s * 0.5, *l, None, true);
                 }
                 let cols: Vec<f32> = (0..5).map(|d| m + tw + cw * d as f32).collect();
                 b.grid(m, gy0, gx1, gy1, &cols, lessons);
@@ -577,7 +629,7 @@ impl Template {
                 let size = (s * 0.36).min(dw * 0.7);
                 for (d, l) in NUMS.iter().enumerate() {
                     let x = x0 + dw * d as f32 + dw * 0.5 - approx_text_w(l, size, true) * 0.5;
-                    b.label(x, top + s * 0.55, size, l, None, true);
+                    b.label(x, top + s * 0.55, size, *l, None, true);
                 }
                 let rh = s * 1.15;
                 let rows = (((h - m - hy) / rh).floor() as usize).min(24);
@@ -613,8 +665,177 @@ impl Template {
                     b.hline(by0, 0.0, w, true);
                 }
             }
+            TemplateKind::YearPlan | TemplateKind::MonthPlan | TemplateKind::WeekPlan => self.build_plan(&mut b, w, h),
         }
         b
+    }
+
+    /// Verweisflächen eines Planers (Reiter, Mini-Monate, Kalenderwochen, Blättern).
+    pub fn hotspots(&self, w: f32, h: f32) -> Vec<(Area, PlanTarget)> {
+        if !self.kind.is_plan() {
+            return Vec::new();
+        }
+        self.build(w, h).hot
+    }
+
+    fn build_plan(&self, b: &mut Builder, w: f32, h: f32) {
+        let s = b.s;
+        let m = s;
+        let g = s * 0.4;
+        let landscape = w > h * 1.1;
+        let year = self.plan.year.max(1) as i32;
+        let idx = self.plan.idx;
+        // Reiter am rechten Rand: Jahr + 12 Monate
+        let tw = s * 1.55;
+        let tx = w - tw;
+        let th = (h - m * 2.0) / 13.0;
+        let cur_month = match self.kind {
+            TemplateKind::MonthPlan => Some(idx as usize),
+            TemplateKind::WeekPlan => {
+                let z = cal::first_monday(year) + idx as i64 * 7 + 3;
+                let (y, mo, _) = cal::civil_from_days(z);
+                Some(if y < year { 0 } else if y > year { 11 } else { mo as usize - 1 })
+            }
+            _ => None,
+        };
+        for k in 0..13 {
+            let y = m + th * k as f32;
+            let (text, color, active, target) = if k == 0 {
+                ("Jahr", SLATE, self.kind == TemplateKind::YearPlan, PlanTarget::Year)
+            } else {
+                (cal::MONTHS_SHORT[k - 1], MONTH_COLORS[k - 1], cur_month == Some(k - 1), PlanTarget::Month(k as u16 - 1))
+            };
+            b.fill(tx, y + s * 0.06, tw - s * 0.12, th - s * 0.12, s * 0.3, tint(color, if active { 240 } else { 70 }));
+            let size = (s * 0.42).min(th * 0.4);
+            b.label(tx + (tw - s * 0.12) * 0.5 - approx_text_w(text, size, true) * 0.5, y + th * 0.5 + size * 0.36, size, text, Some(if active { WHITE } else { tint(color, 255) }), true);
+            b.hot.push(((tx, y, w, y + th), target));
+        }
+        let x1 = tx - g; // rechter Rand des Inhalts
+        let top = s * 2.8;
+        // Blättern ‹ ›
+        let arrows = |b: &mut Builder, prev: Option<PlanTarget>, next: Option<PlanTarget>| {
+            let aw = s * 1.3;
+            for (k, t) in [(0, prev), (1, next)] {
+                if let Some(t) = t {
+                    let x = x1 - aw * 2.0 - g + (aw + g) * k as f32;
+                    b.fill(x, s * 0.95, aw, s * 1.15, s * 0.4, tint(SLATE, 40));
+                    b.label(x + aw * 0.5 - s * 0.17, s * 1.83, s * 0.7, if k == 0 { "‹" } else { "›" }, Some(SLATE), true);
+                    b.hot.push(((x, s * 0.95, x + aw, s * 2.1), t));
+                }
+            }
+        };
+        match self.kind {
+            TemplateKind::YearPlan => {
+                b.label(m, s * 1.95, s * 0.95, year.to_string(), Some(VIOLET), true);
+                b.label(m + approx_text_w("2000", s * 0.95, true) + s * 0.5, s * 1.95, s * 0.5, "Jahresübersicht", None, true);
+                let (cols, rows) = if landscape { (4, 3) } else { (3, 4) };
+                let cw = (x1 - m - g * (cols - 1) as f32) / cols as f32;
+                let ch = (h - top - m - g * (rows - 1) as f32) / rows as f32;
+                for mo in 0..12u32 {
+                    let (c, r) = ((mo as usize) % cols, (mo as usize) / cols);
+                    let (x, y) = (m + (cw + g) * c as f32, top + (ch + g) * r as f32);
+                    let color = MONTH_COLORS[mo as usize];
+                    b.fill(x, y, cw, ch, s * 0.45, tint(color, 22));
+                    b.pill(x + s * 0.2, y + s * 0.2, cw - s * 0.4, cal::MONTHS[mo as usize], color);
+                    b.hot.push(((x, y, x + cw, y + ch), PlanTarget::Month(mo as u16)));
+                    let gx = x + s * 0.3;
+                    let gw = (cw - s * 0.6) / 7.0;
+                    let gy = y + s * 1.75;
+                    let rh = (ch - s * 2.2) / 7.0;
+                    let size = (rh * 0.55).min(gw * 0.55).min(s * 0.42);
+                    for (d, l) in DAYS_SHORT.iter().copied().enumerate() {
+                        b.label(gx + gw * (d as f32 + 0.5) - approx_text_w(l, size, true) * 0.5, gy + rh * 0.7, size, l, Some(tint(color, 255)), true);
+                    }
+                    let first = cal::days_from_civil(year, mo + 1, 1);
+                    let off = cal::weekday(first) as usize;
+                    for (day, l) in NUMS.iter().copied().enumerate().take(cal::days_in_month(year, mo + 1) as usize) {
+                        let cell = off + day;
+                        let (cc, rr) = (cell % 7, cell / 7 + 1);
+                        b.label(gx + gw * (cc as f32 + 0.5) - approx_text_w(l, size, false) * 0.5, gy + rh * (rr as f32 + 0.7), size, l, None, cc >= 5);
+                    }
+                }
+            }
+            TemplateKind::MonthPlan => {
+                let mo = (idx as u32).min(11);
+                let color = MONTH_COLORS[mo as usize];
+                let name = cal::MONTHS[mo as usize];
+                b.label(m, s * 1.95, s * 0.95, name, Some(color), true);
+                b.label(m + approx_text_w(name, s * 0.95, true) + s * 0.4, s * 1.95, s * 0.6, year.to_string(), None, true);
+                arrows(b, if mo > 0 { Some(PlanTarget::Month(mo as u16 - 1)) } else { Some(PlanTarget::Year) }, if mo < 11 { Some(PlanTarget::Month(mo as u16 + 1)) } else { None });
+                let kw = s * 1.7;
+                let gx0 = m + kw;
+                let cw = (x1 - gx0) / 7.0;
+                for d in 0..7 {
+                    b.pill(gx0 + cw * d as f32 + s * 0.06, top, cw - s * 0.12, DAYS_SHORT[d], DAY_COLORS[d]);
+                }
+                let first = cal::days_from_civil(year, mo + 1, 1);
+                let off = cal::weekday(first) as usize;
+                let n = cal::days_in_month(year, mo + 1) as usize;
+                let rows = (off + n).div_ceil(7);
+                let notes_h = if landscape { 0.0 } else { (h - top) * 0.18 };
+                let gy0 = top + s * 1.35;
+                let gy1 = h - m - if notes_h > 0.0 { notes_h + g } else { 0.0 };
+                let rh = (gy1 - gy0) / rows as f32;
+                for cell in 0..rows * 7 {
+                    let (c, r) = (cell % 7, cell / 7);
+                    let (x, y) = (gx0 + cw * c as f32, gy0 + rh * r as f32);
+                    if cell < off || cell >= off + n {
+                        b.fill(x, y, cw, rh, 0.0, tint(SLATE, 26));
+                    } else {
+                        if c >= 5 {
+                            b.fill(x, y, cw, rh, 0.0, tint(DAY_COLORS[c], 22));
+                        }
+                        b.label(x + s * 0.25, y + s * 0.62, s * 0.45, NUMS[cell - off], Some(if c >= 5 { tint(DAY_COLORS[c], 255) } else { SLATE }), true);
+                    }
+                }
+                // Kalenderwochen links (Verweis auf die Wochenseite)
+                for r in 0..rows {
+                    let z = first - off as i64 + r as i64 * 7;
+                    let y = gy0 + rh * r as f32;
+                    b.fill(m, y + s * 0.08, kw - s * 0.2, rh - s * 0.16, s * 0.3, tint(color, 40));
+                    let l = format!("KW{}", cal::iso_week(z));
+                    let size = s * 0.36;
+                    b.label(m + (kw - s * 0.2) * 0.5 - approx_text_w(&l, size, true) * 0.5, y + rh * 0.5 + size * 0.36, size, l, Some(tint(color, 255)), true);
+                    let wz = z.max(cal::days_from_civil(year, 1, 1)).min(cal::days_from_civil(year, 12, 31));
+                    b.hot.push(((m, y, m + kw, y + rh), PlanTarget::Week(cal::week_index(year, wz) as u16)));
+                }
+                let cols: Vec<f32> = (1..7).map(|d| gx0 + cw * d as f32).collect();
+                b.grid(gx0, gy0, x1, gy1, &cols, rows);
+                if notes_h > 0.0 {
+                    let ny = gy1 + g;
+                    let c = b.section(m, ny, x1 - m, h - m - ny, "Notizen", color);
+                    b.lines(m + s * 0.4, x1 - s * 0.4, c + s * 0.6, h - m - s * 0.3, s * 0.8);
+                }
+            }
+            TemplateKind::WeekPlan => {
+                let monday = cal::first_monday(year) + idx as i64 * 7;
+                let (_, m0, d0) = cal::civil_from_days(monday);
+                let (y6, m6, d6) = cal::civil_from_days(monday + 6);
+                let kwl = format!("KW {}", cal::iso_week(monday));
+                b.label(m, s * 1.95, s * 0.95, kwl.clone(), Some(MONTH_COLORS[cur_month.unwrap_or(0)]), true);
+                let range = if m0 == m6 { format!("{}. – {}. {} {}", d0, d6, cal::MONTHS[m6 as usize - 1], y6) } else { format!("{}. {} – {}. {} {}", d0, cal::MONTHS_SHORT[m0 as usize - 1], d6, cal::MONTHS_SHORT[m6 as usize - 1], y6) };
+                b.label(m + approx_text_w(&kwl, s * 0.95, true) + s * 0.5, s * 1.95, s * 0.5, range, None, true);
+                let weeks = cal::weeks_in_year(year) as u16;
+                arrows(b, if idx > 0 { Some(PlanTarget::Week(idx - 1)) } else { None }, if idx + 1 < weeks { Some(PlanTarget::Week(idx + 1)) } else { None });
+                let (cols, rows) = if landscape { (4, 2) } else { (2, 4) };
+                let cw = (x1 - m - g * (cols - 1) as f32) / cols as f32;
+                let ch = (h - top - m - g * (rows - 1) as f32) / rows as f32;
+                for i in 0..8usize {
+                    let (c, r) = (i % cols, i / cols);
+                    let (x, y) = (m + (cw + g) * c as f32, top + (ch + g) * r as f32);
+                    if i < 7 {
+                        let (_, mo, d) = cal::civil_from_days(monday + i as i64);
+                        let l = format!("{} {}.{}.", PLANNER_LABELS[i], d, mo);
+                        let c0 = b.section(x, y, cw, ch, &l, DAY_COLORS[i]);
+                        b.lines(x + s * 0.4, x + cw - s * 0.4, c0 + s * 0.6, y + ch - s * 0.3, s * 0.8);
+                    } else {
+                        let c0 = b.section(x, y, cw, ch, "To-do", SLATE);
+                        b.check_rows(x + s * 0.1, x + cw - s * 0.35, c0, y + ch - s * 0.25, 20);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -626,7 +847,7 @@ mod tests {
     fn templates_produce_primitives() {
         for k in TemplateKind::ALL {
             for (w, h) in [(595.0, 842.0), (842.0, 595.0), (700.0, 700.0), (420.0, 595.0)] {
-                let t = Template { kind: k, spacing: 1 };
+                let t = Template::new(k, 1);
                 let p = t.primitives(w, h);
                 if k == TemplateKind::Blank {
                     assert!(p.is_empty());
@@ -644,15 +865,24 @@ mod tests {
             assert_eq!(TemplateKind::from_code(k.code()), k);
             assert_eq!(TemplateKind::from_u8(k as u8), k);
         }
-        let c = Template { kind: TemplateKind::Checklist, spacing: 1 };
+        let c = Template::new(TemplateKind::Checklist, 1);
         let rows = c.check_rows(595.0, 842.0);
         assert!(rows.len() > 20);
         assert!(rows[0].box_contains(rows[0].bx + 1.0, rows[0].by + 1.0, 0.0));
         assert!(c.primitives(595.0, 842.0).iter().any(|p| matches!(p, Prim::Box { .. })));
-        let shop = Template { kind: TemplateKind::Shopping, spacing: 1 }.check_rows(595.0, 842.0);
+        let shop = Template::new(TemplateKind::Shopping, 1).check_rows(595.0, 842.0);
         assert!(shop.len() >= 24, "{}", shop.len());
-        let week = Template { kind: TemplateKind::WeekColor, spacing: 1 }.primitives(595.0, 842.0);
-        assert_eq!(week.iter().filter(|p| matches!(p, Prim::Label { text, .. } if PLANNER_LABELS.contains(text))).count(), 8);
+        let week = Template::new(TemplateKind::WeekColor, 1).primitives(595.0, 842.0);
+        assert_eq!(week.iter().filter(|p| matches!(p, Prim::Label { text, .. } if PLANNER_LABELS.contains(&text.as_str()))).count(), 8);
+        // Planer mit echten Daten
+        let y = Template::planner(TemplateKind::YearPlan, 2027, 0);
+        assert!(y.primitives(595.0, 842.0).iter().any(|p| matches!(p, Prim::Label { text, .. } if text == "2027")));
+        assert_eq!(y.hotspots(595.0, 842.0).iter().filter(|h| matches!(h.1, PlanTarget::Month(_))).count(), 24);
+        let mo = Template::planner(TemplateKind::MonthPlan, 2027, 1);
+        assert!(mo.hotspots(595.0, 842.0).iter().any(|h| h.1 == PlanTarget::Week(5)));
+        let wk = Template::planner(TemplateKind::WeekPlan, 2027, 10);
+        assert!(wk.primitives(842.0, 595.0).iter().any(|p| matches!(p, Prim::Label { text, .. } if text.starts_with("Montag 8.3."))));
+        assert_eq!(wk.check_rows(595.0, 842.0).len() > 3, true);
         // mittel ≈ 8 mm
         let u = Template::default().unit(595.0, 842.0);
         assert!((u - 22.75).abs() < 0.1);

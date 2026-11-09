@@ -1,13 +1,18 @@
 //! Browser-Anbindung: Bibliothek, Editor, S-Pen/Touch-Eingabe, Rendering, Speicherung.
 
+mod docs;
 mod editor;
 mod input;
 mod library;
+mod links;
+mod lock;
 mod render;
 mod ruler;
+mod stats;
 mod study;
 mod storage;
 mod tools;
+mod zoomwin;
 mod ui;
 
 use crate::engine::format::NoteMeta;
@@ -225,6 +230,8 @@ pub struct Settings {
     pub finger_draw: bool,
     pub pen_seen: bool,
     pub migrated: bool,
+    /// Wiederholungsplan für Lernkarten (fällige Karten) – freiwillig
+    pub due_mode: bool,
 }
 
 impl Default for Settings {
@@ -240,6 +247,7 @@ impl Default for Settings {
             finger_draw: false,
             pen_seen: false,
             migrated: false,
+            due_mode: false,
         }
     }
 }
@@ -275,6 +283,8 @@ pub struct Prefs {
     pub lasso_text: bool,
     pub lasso_img: bool,
     pub laser_color: [u8; 4],
+    /// Formen füllen: 0 = aus, 1 = hell, 2 = voll
+    pub shape_fill: u8,
 }
 
 impl Default for Prefs {
@@ -303,6 +313,7 @@ impl Default for Prefs {
             lasso_text: true,
             lasso_img: true,
             laser_color: [255, 50, 60, 255],
+            shape_fill: 0,
         }
     }
 }
@@ -317,9 +328,12 @@ pub struct NewNb {
 
 impl Default for NewNb {
     fn default() -> Self {
-        NewNb { cover: 0, template: Template { kind: TemplateKind::Lined, spacing: 1 }, paper: Color::WHITE, format: 0 }
+        NewNb { cover: 0, template: Template::new(TemplateKind::Lined, 1), paper: Color::WHITE, format: 0 }
     }
 }
+
+/// Zoom-Rahmen ziehen: (Zeiger, Start x, Start y, (Rahmen x, y, Seite)).
+pub type ZwDrag = (i32, f64, f64, (f32, f32, u32));
 
 /// Aktion, die auf die Bestätigung im Dialog wartet.
 #[derive(Clone, Debug, PartialEq)]
@@ -337,6 +351,14 @@ pub enum Pending {
     MoveToFolder(String),
     PageTo(usize),
     NewDeck,
+    /// Link setzen: Seite + Rechteck (x0, y0, x1, y1)
+    Link(u32, f32, f32, f32, f32),
+    Unlock(String, lock::Then),
+    SetPin(String),
+    ConfirmPin(String, String),
+    RemovePin(String),
+    DeleteForever(String),
+    EmptyTrash,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -404,6 +426,18 @@ pub struct App {
     pub new_from: Option<String>,
     /// Modus im Auswahldialog: Seite kopieren statt verschieben
     pub pick_copy: bool,
+    /// Pipette aktiv: nächster Tipp auf die Seite übernimmt die Farbe
+    pub pipette: bool,
+    /// Eigenes Papier für alle Seiten (sonst nur aktuelle Seite)
+    pub paper_all: bool,
+    /// In dieser Sitzung entsperrte Notizbücher
+    pub unlocked: Vec<String>,
+    /// Bibliothek zeigt den Papierkorb
+    pub show_trash: bool,
+    /// Lernstatistik je Tag
+    pub stats: Vec<stats::Day>,
+    /// Zoom-Rahmen wird mit dem Finger gezogen: (Zeiger, Start x, Start y, (Rahmen x, y, Seite))
+    pub zw_drag: Option<ZwDrag>,
     /// Lernmodus wurde vom Startbildschirm aus geöffnet (Schließen → zurück zur Bibliothek)
     pub study_from_lib: bool,
 }
@@ -454,6 +488,12 @@ impl App {
             folders: Vec::new(),
             new_from: None,
             pick_copy: true,
+            pipette: false,
+            paper_all: false,
+            unlocked: Vec::new(),
+            show_trash: false,
+            stats: Vec::new(),
+            zw_drag: None,
             study_from_lib: false,
         }
     }
@@ -494,6 +534,9 @@ impl App {
             }
             if ed.op.is_some() {
                 again = true;
+            }
+            if ed.zoomwin.is_some() && (rendered || ed.op.is_some()) {
+                ed.render_zw(&mut self.images, dark);
             }
             if ed.nav_open && ed.thumbs_dirty && ed.op.is_none() {
                 ed.render_thumbs(&mut self.images, dark);

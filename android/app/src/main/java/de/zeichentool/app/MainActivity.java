@@ -5,7 +5,10 @@ import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
+import android.os.CancellationSignal;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -607,7 +610,56 @@ public class MainActivity extends Activity {
     // Brücke für die Rust-App: Dateien in Galerie / Downloads speichern
     // ------------------------------------------------------------------
 
+    /** Ergebnis des Fingerabdrucks an die Web-App melden. */
+    private void authResult(boolean ok) {
+        runOnUiThread(() -> web.evaluateJavascript("window.zeichentoolAuthResult&&window.zeichentoolAuthResult(" + ok + ")", null));
+    }
+
     public class Bridge {
+        /** Gibt es einen eingerichteten Fingerabdruck / eine Gesichtserkennung? */
+        @JavascriptInterface
+        public boolean canAuthenticate() {
+            try {
+                BiometricManager bm = getSystemService(BiometricManager.class);
+                if (bm == null) {
+                    return false;
+                }
+                int r = Build.VERSION.SDK_INT >= 30
+                        ? bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+                        : bm.canAuthenticate();
+                return r == BiometricManager.BIOMETRIC_SUCCESS;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /** Fingerabdruck-Abfrage zum Entsperren eines Notizbuchs. */
+        @JavascriptInterface
+        public void authenticate(String title) {
+            runOnUiThread(() -> {
+                try {
+                    BiometricPrompt prompt = new BiometricPrompt.Builder(MainActivity.this)
+                            .setTitle(title == null || title.isEmpty() ? "Notizbuch entsperren" : title)
+                            .setSubtitle("Notizbuch entsperren")
+                            .setNegativeButton("PIN eingeben", getMainExecutor(), (d, w) -> authResult(false))
+                            .build();
+                    prompt.authenticate(new CancellationSignal(), getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                            authResult(true);
+                        }
+
+                        @Override
+                        public void onAuthenticationError(int code, CharSequence msg) {
+                            authResult(false);
+                        }
+                    });
+                } catch (Exception e) {
+                    authResult(false);
+                }
+            });
+        }
+
         /** Speichert eine Datei. Bilder landen in „Bilder/Zeichentool“, Projekte in „Download/Zeichentool“. */
         @JavascriptInterface
         public boolean saveFile(String name, String mime, String base64) {

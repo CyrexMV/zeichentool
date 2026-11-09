@@ -33,10 +33,16 @@ pub struct Gesture {
 
 pub fn client_xy(e: &PointerEvent) -> (f64, f64) {
     let get = |k: &str| js_sys::Reflect::get(e, &k.into()).ok().and_then(|v| v.as_f64());
-    match (get("clientX"), get("clientY")) {
+    let (x, y) = match (get("clientX"), get("clientY")) {
         (Some(x), Some(y)) => (x, y),
         _ => (e.client_x() as f64, e.client_y() as f64),
-    }
+    };
+    // Eingaben im Zoom-Fenster auf die Seite umrechnen
+    super::zoomwin::map_xy(e.pointer_id(), x, y)
+}
+
+fn target_id(e: &PointerEvent) -> String {
+    e.target().and_then(|t| t.dyn_into::<web_sys::Element>().ok()).map(|el| el.id()).unwrap_or_default()
 }
 
 fn samples(e: &PointerEvent) -> Vec<(f64, f64, f32)> {
@@ -142,6 +148,12 @@ pub fn bind_input() {
     });
     let _ = js_sys::Reflect::set(&w, &"zeichentoolPenState".into(), state.as_ref());
     state.forget();
+    let auth = Closure::<dyn FnMut(JsValue)>::new(|v: JsValue| {
+        let ok = v.as_bool().unwrap_or(false);
+        with_app(|a| a.bio_result(ok));
+    });
+    let _ = js_sys::Reflect::set(&w, &"zeichentoolAuthResult".into(), auth.as_ref());
+    auth.forget();
 }
 
 /// Ereignis eines Zeigers, den die Zeichenfläche gerade „gefangen“ hat (laufender Strich)?
@@ -156,7 +168,7 @@ fn is_captured(e: &PointerEvent) -> bool {
 fn is_canvas_target(e: &PointerEvent) -> bool {
     e.target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
-        .map(|el| el.id() == "live" || el.id() == "view")
+        .map(|el| el.id() == "live" || el.id() == "view" || el.id() == "zw-canvas")
         .unwrap_or(false)
 }
 
@@ -164,6 +176,15 @@ impl App {
     fn pointer_down(&mut self, e: &PointerEvent) {
         if self.screen != Screen::Editor {
             return;
+        }
+        if target_id(e) == "zw-canvas" {
+            // Handballen auf dem Zoom-Fenster ignorieren; Finger schreibt nur, wenn erlaubt
+            if e.pointer_type() == "touch" && (!self.finger_draws() || self.palm_locked()) {
+                return;
+            }
+            if self.op_pointer().is_none() {
+                self.zw_pointer_down(e.pointer_id());
+            }
         }
         match e.pointer_type().as_str() {
             "pen" => self.pen_event(e),
@@ -186,6 +207,19 @@ impl App {
     fn pointer_up(&mut self, e: &PointerEvent, cancel: bool) {
         let id = e.pointer_id();
         let _ = el("editor").release_pointer_capture(id);
+        if super::zoomwin::mapped(id) {
+            self.pointer_up_inner(e, cancel);
+            super::zoomwin::clear_map(id);
+            if !cancel {
+                self.zw_after_stroke();
+            }
+            return;
+        }
+        self.pointer_up_inner(e, cancel);
+    }
+
+    fn pointer_up_inner(&mut self, e: &PointerEvent, cancel: bool) {
+        let id = e.pointer_id();
         match e.pointer_type().as_str() {
             "pen" => {
                 self.last_pen_time = now();
@@ -449,6 +483,14 @@ impl App {
         if self.palm_locked() || e.width() > 42 || e.height() > 42 {
             return;
         }
+        // Zoom-Rahmen mit einem Finger verschieben
+        if self.touches.is_empty() && self.zw_frame_hit(x, y) {
+            if let Some(z) = self.ed.as_ref().and_then(|e| e.zoomwin) {
+                let _ = el("editor").set_pointer_capture(id);
+                self.zw_drag = Some((id, x, y, (z.x, z.y, z.page)));
+                return;
+            }
+        }
         let _ = el("editor").set_pointer_capture(id);
         self.momentum = None;
         self.touches.retain(|p| p.id != id);
@@ -493,6 +535,12 @@ impl App {
     fn touch_move(&mut self, e: &PointerEvent) {
         let id = e.pointer_id();
         let (x, y) = client_xy(e);
+        if let Some((did, x0, y0, start)) = self.zw_drag {
+            if did == id {
+                self.zw_drag(start, x - x0, y - y0);
+                return;
+            }
+        }
         if self.ruler_move(id, x, y) {
             return;
         }
@@ -559,6 +607,10 @@ impl App {
 
     fn touch_up(&mut self, e: &PointerEvent, cancel: bool) {
         let id = e.pointer_id();
+        if self.zw_drag.map(|d| d.0) == Some(id) {
+            self.zw_drag = None;
+            return;
+        }
         if self.ruler_up(id) {
             return;
         }
@@ -586,6 +638,10 @@ impl App {
                 }
                 if !cancel && dt < 300.0 && g.moved < 14.0 {
                     match g.max_fingers {
+                        1 => {
+                            let (x, y) = client_xy(e);
+                            self.tap_link(x, y);
+                        }
                         2 => self.undo(),
                         3 => self.redo(),
                         _ => {}

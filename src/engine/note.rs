@@ -94,6 +94,24 @@ impl Item {
     }
 }
 
+/// Ziel eines Verweises.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LinkTarget {
+    /// Seite in diesem Notizbuch (Seiten-ID)
+    Page(u32),
+    /// Anderes Notizbuch (ID)
+    Notebook(String),
+}
+
+/// Verweis: Fläche auf der Seite, die beim Antippen springt.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Link {
+    pub rect: Rect,
+    pub target: LinkTarget,
+    /// Unsichtbar (z. B. Reiter im Jahresplaner – die Vorlage zeigt sie schon)
+    pub hidden: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Page {
     pub id: u32,
@@ -104,6 +122,12 @@ pub struct Page {
     pub checks: Vec<u16>,
     /// Seitentitel für das Inhaltsverzeichnis (leer = kein Eintrag)
     pub title: String,
+    /// Eigenes Papier (Bild oder PDF-Seite), seitenfüllend
+    pub bg: Option<ImageItem>,
+    /// Hintergrund ist eigenes Papier (wird für neue Seiten übernommen); sonst Dokument (PDF)
+    pub bg_paper: bool,
+    /// Verweise auf andere Seiten/Notizbücher
+    pub links: Vec<Link>,
     /// nach `order` sortiert
     pub items: Vec<Item>,
     /// Laufzeit-Zähler für Zwischenspeicher (nicht gespeichert)
@@ -112,7 +136,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(id: u32, template: Template, paper: Color) -> Page {
-        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), items: Vec::new(), version: 0 }
+        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), bg: None, bg_paper: false, links: Vec::new(), items: Vec::new(), version: 0 }
     }
 
     pub fn touch(&mut self) {
@@ -177,6 +201,11 @@ impl Page {
         Some((x0.min(r.x0), (r.x1 + 4.0).min(row.x1), y))
     }
 
+    /// Verweis an einer Stelle (Seitenkoordinaten).
+    pub fn link_at(&self, x: f32, y: f32) -> Option<&Link> {
+        self.links.iter().rev().find(|l| l.rect.contains(x, y))
+    }
+
     pub fn stroke_count(&self) -> usize {
         self.items.iter().filter(|i| matches!(i.content, Content::Stroke(_))).count()
     }
@@ -225,10 +254,15 @@ pub struct Card {
     pub level: u8,
     pub right: u32,
     pub wrong: u32,
+    /// Nächste Wiederholung (ms seit 1970, 0 = sofort fällig)
+    pub due: f64,
 }
 
+/// Wiederholungsabstand in Tagen je Fach (Karteikasten).
+pub const INTERVAL_DAYS: [f64; 5] = [0.0, 1.0, 3.0, 7.0, 21.0];
+
 impl Card {
-    pub fn answer(&mut self, known: bool) {
+    pub fn answer(&mut self, known: bool, now: f64) {
         if known {
             self.level = (self.level + 1).min(4);
             self.right += 1;
@@ -236,6 +270,12 @@ impl Card {
             self.level = 0;
             self.wrong += 1;
         }
+        // nicht gewusst: noch heute wieder; sonst nach dem Fach-Abstand
+        self.due = now + INTERVAL_DAYS[self.level as usize] * 86_400_000.0 - 3_600_000.0;
+    }
+
+    pub fn is_due(&self, now: f64) -> bool {
+        self.due <= now
     }
 }
 
@@ -255,11 +295,15 @@ pub struct Notebook {
     /// Als Notizbuchvorlage gespeichert (erscheint nicht in der Bibliothek)
     pub is_template: bool,
     pub cards: Vec<Card>,
+    /// PIN-Sperre: Prüfsumme (leer = nicht gesperrt)
+    pub lock: String,
+    /// Im Papierkorb seit (ms), 0 = nicht gelöscht
+    pub trashed: f64,
 }
 
 impl Notebook {
     pub fn new(id: String, title: &str, cover: u8, format: Format, template: Template, paper: Color, now: f64) -> Notebook {
-        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new() };
+        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new(), lock: String::new(), trashed: 0.0 };
         let pid = nb.alloc_id();
         nb.pages.push(Page::new(pid, template, paper));
         nb
@@ -283,8 +327,14 @@ impl Notebook {
     pub fn new_page_like(&mut self, like: usize) -> Page {
         let src = &self.pages[like.min(self.pages.len() - 1)];
         let (t, p) = (src.template, src.paper);
+        let bg = if src.bg_paper { src.bg.clone() } else { None };
         let id = self.alloc_id();
-        Page::new(id, t, p)
+        let mut page = Page::new(id, t, p);
+        if bg.is_some() {
+            page.bg = bg;
+            page.bg_paper = true;
+        }
+        page
     }
 
     /// Übernimmt eine Seite aus einem anderen Notizbuch (neue IDs, Seitenformat bleibt das dieses Notizbuchs).
@@ -308,10 +358,13 @@ impl Notebook {
         nb.modified = now;
         nb.favorite = false;
         nb.is_template = false;
+        nb.lock.clear();
+        nb.trashed = 0.0;
         for c in nb.cards.iter_mut() {
             c.level = 0;
             c.right = 0;
             c.wrong = 0;
+            c.due = 0.0;
         }
         nb
     }
@@ -343,7 +396,7 @@ impl Notebook {
             if !self.cards.iter().any(|c| c.front.page == pid && self.is_auto_card(c)) {
                 let (front, back) = self.flashcard_regions(pid);
                 let id = self.alloc_id();
-                self.cards.push(Card { id, front, back, level: 0, right: 0, wrong: 0 });
+                self.cards.push(Card { id, front, back, level: 0, right: 0, wrong: 0, due: 0.0 });
             }
         }
     }
@@ -367,6 +420,7 @@ impl Notebook {
         p.id = self.alloc_id();
         p.bookmark = false;
         p.checks.clear();
+        p.links.retain(|l| matches!(l.target, LinkTarget::Notebook(_)));
         if !p.title.is_empty() {
             p.title = format!("{} (Kopie)", p.title);
         }
@@ -400,7 +454,7 @@ mod tests {
 
     #[test]
     fn checklist_strike_follows_handwriting() {
-        let t = Template { kind: TemplateKind::Checklist, spacing: 1 };
+        let t = Template::new(TemplateKind::Checklist, 1);
         let rows = t.check_rows(595.0, 842.0);
         let r = rows[2];
         let mut p = Page::new(1, t, Color::WHITE);
@@ -414,7 +468,7 @@ mod tests {
 
     #[test]
     fn flashcard_pages_become_cards() {
-        let t = Template { kind: TemplateKind::Flashcard, spacing: 1 };
+        let t = Template::new(TemplateKind::Flashcard, 1);
         let mut nb = Notebook::new("x".into(), "Vokabeln", 0, Format { w: 420.0, h: 595.0 }, t, Color::WHITE, 0.0);
         nb.sync_template_cards();
         assert_eq!(nb.cards.len(), 1);

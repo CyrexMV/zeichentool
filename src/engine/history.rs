@@ -1,7 +1,7 @@
 //! Rückgängig/Wiederholen für Notizbücher.
 
 use super::color::Color;
-use super::note::{Item, Notebook, Page};
+use super::note::{ImageItem, Item, Link, Notebook, Page};
 use super::paper::Template;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -11,19 +11,25 @@ pub struct PageMeta {
     pub bookmark: bool,
     pub checks: Vec<u16>,
     pub title: String,
+    pub bg: Option<ImageItem>,
+    pub bg_paper: bool,
+    pub links: Vec<Link>,
 }
 
 impl PageMeta {
     pub fn of(p: &Page) -> PageMeta {
-        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone() }
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone(), bg: p.bg.clone(), bg_paper: p.bg_paper, links: p.links.clone() }
     }
 
-    fn apply(&self, p: &mut Page) {
+    pub fn apply(&self, p: &mut Page) {
         p.template = self.template;
         p.paper = self.paper;
         p.bookmark = self.bookmark;
         p.checks = self.checks.clone();
         p.title = self.title.clone();
+        p.bg = self.bg.clone();
+        p.bg_paper = self.bg_paper;
+        p.links = self.links.clone();
         p.touch();
     }
 }

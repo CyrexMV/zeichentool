@@ -124,6 +124,8 @@ pub struct Editor {
     pub cur_page: usize,
     pub paste_at: Option<(u32, f32, f32)>,
     pub ruler: Option<super::ruler::Ruler>,
+    /// Zoom-Fenster (Schreibstreifen unten)
+    pub zoomwin: Option<super::zoomwin::ZoomWin>,
     /// Gemerkte Vorderseite einer neuen Lernkarte
     pub card_front: Option<crate::engine::Region>,
     /// Platz für die Werkzeugleiste oben (CSS-Pixel)
@@ -181,6 +183,7 @@ impl Editor {
             cur_page: 0,
             paste_at: None,
             ruler: None,
+            zoomwin: None,
             card_front: None,
             top_pad: 84.0,
         };
@@ -368,12 +371,7 @@ impl Editor {
         if after == before {
             return;
         }
-        p.template = after.template;
-        p.paper = after.paper;
-        p.bookmark = after.bookmark;
-        p.checks = after.checks.clone();
-        p.title = after.title.clone();
-        p.touch();
+        after.apply(p);
         let id = p.id;
         self.push(Action::PageMeta { page: id, before, after });
     }
@@ -383,11 +381,11 @@ impl Editor {
         let mut group = Vec::new();
         for p in self.nb.pages.iter_mut() {
             let before = PageMeta::of(p);
-            let after = PageMeta { template, paper, bookmark: before.bookmark, checks: before.checks.clone(), title: before.title.clone() };
+            let mut after = before.clone();
+            after.template = template;
+            after.paper = paper;
             if before != after {
-                p.template = template;
-                p.paper = paper;
-                p.touch();
+                after.apply(p);
                 group.push(Action::PageMeta { page: p.id, before, after });
             }
         }

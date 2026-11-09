@@ -1,6 +1,6 @@
 //! Vektor-Tinte: Striche mit Druck, Umrissberechnung (variable Breite), Treffertests.
 
-use super::geom::{dist, dist_point_seg, dist_seg_seg, Rect, Xf};
+use super::geom::{dist, dist_point_seg, dist_seg_seg, point_in_polygon, Rect, Xf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PenKind {
@@ -14,6 +14,8 @@ pub enum PenKind {
     Pencil = 3,
     /// Textmarker: breit, transparent, liegt unter der Schrift
     Highlighter = 4,
+    /// Füllung einer geschlossenen Form (Punkte = Polygon)
+    Fill = 5,
 }
 
 impl PenKind {
@@ -25,6 +27,7 @@ impl PenKind {
             2 => PenKind::Brush,
             3 => PenKind::Pencil,
             4 => PenKind::Highlighter,
+            5 => PenKind::Fill,
             _ => PenKind::Fountain,
         }
     }
@@ -36,6 +39,7 @@ impl PenKind {
             PenKind::Brush => "brush",
             PenKind::Pencil => "pencil",
             PenKind::Highlighter => "highlighter",
+            PenKind::Fill => "fill",
         }
     }
 
@@ -56,6 +60,7 @@ impl PenKind {
             PenKind::Brush => "Pinselstift",
             PenKind::Pencil => "Bleistift",
             PenKind::Highlighter => "Textmarker",
+            PenKind::Fill => "Füllung",
         }
     }
 
@@ -67,7 +72,7 @@ impl PenKind {
             PenKind::Ball => 0.85 + 0.25 * p,
             PenKind::Brush => 0.08 + 1.6 * p.powf(1.2),
             PenKind::Pencil => 0.6 + 0.6 * p,
-            PenKind::Highlighter => 1.0,
+            PenKind::Highlighter | PenKind::Fill => 1.0,
         }
     }
 
@@ -81,7 +86,7 @@ impl PenKind {
     }
 
     pub fn round_caps(&self) -> bool {
-        !matches!(self, PenKind::Highlighter)
+        !matches!(self, PenKind::Highlighter | PenKind::Fill)
     }
 }
 
@@ -153,6 +158,9 @@ impl Stroke {
 
     /// Umriss als geschlossenes Polygon (gefüllt mit Nonzero-Regel).
     pub fn outline(&self) -> Vec<(f32, f32)> {
+        if self.pen == PenKind::Fill {
+            return self.pts.iter().map(|p| (p.x, p.y)).collect();
+        }
         let w = self.width.max(0.1);
         if self.pts.is_empty() {
             return Vec::new();
@@ -232,6 +240,10 @@ impl Stroke {
         if !self.bbox().expand(r).intersects(&Rect::new(a.0, a.1, b.0, b.1)) {
             return false;
         }
+        if self.pen == PenKind::Fill {
+            let poly: Vec<(f32, f32)> = self.pts.iter().map(|p| (p.x, p.y)).collect();
+            return point_in_polygon(a.0, a.1, &poly) || point_in_polygon(b.0, b.1, &poly);
+        }
         if self.pts.len() == 1 {
             return dist_point_seg(self.pts[0].x, self.pts[0].y, a.0, a.1, b.0, b.1) <= rr;
         }
@@ -243,6 +255,9 @@ impl Stroke {
     pub fn erase_part(&self, a: (f32, f32), b: (f32, f32), r: f32) -> Option<Vec<Stroke>> {
         if !self.hit(a, b, r) {
             return None;
+        }
+        if self.pen == PenKind::Fill {
+            return Some(Vec::new());
         }
         let rr = r + self.width * 0.35;
         // dichter abtasten, damit Schnitte sauber werden

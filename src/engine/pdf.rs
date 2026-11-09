@@ -2,7 +2,7 @@
 
 use super::format::decode_png;
 use super::ink::PenKind;
-use super::note::{Content, Notebook, Page, TextBox};
+use super::note::{Content, ImageItem, Notebook, Page, TextBox};
 use super::paper::{line_colors, Prim, TemplateKind};
 use miniz_oxide::deflate::compress_to_vec_zlib;
 use std::collections::BTreeMap;
@@ -86,6 +86,14 @@ impl Pdf {
         self.buf.extend_from_slice(b"\nendstream\nendobj\n");
     }
 
+    /// Stream ohne zusätzliche Kompression (z. B. JPEG mit /DCTDecode).
+    fn stream_raw(&mut self, id: usize, dict: &str, data: &[u8]) {
+        self.offsets[id - 1] = self.buf.len();
+        self.buf.extend_from_slice(format!("{} 0 obj\n<< {} /Length {} >>\nstream\n", id, dict, data.len()).as_bytes());
+        self.buf.extend_from_slice(data);
+        self.buf.extend_from_slice(b"\nendstream\nendobj\n");
+    }
+
     fn finish(mut self, root: usize) -> Vec<u8> {
         let xref = self.buf.len();
         let mut s = format!("xref\n0 {}\n0000000000 65535 f \n", self.offsets.len() + 1);
@@ -125,46 +133,40 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     };
     // Bilder: (Schlüssel → Name, Objekt-ID)
     let mut images: BTreeMap<u64, (String, usize)> = BTreeMap::new();
-    let mut page_ids = Vec::new();
     let (w, h) = (nb.format.w, nb.format.h);
+    // Seitenobjekte vorab reservieren (für Verweise zwischen Seiten)
+    let exported: Vec<usize> = pages.iter().copied().filter(|&pi| pi < nb.pages.len()).collect();
+    let page_ids: Vec<usize> = exported.iter().map(|_| pdf.reserve()).collect();
+    let pid_of = |page_id: u32| -> Option<usize> { exported.iter().position(|&pi| nb.pages[pi].id == page_id).map(|k| page_ids[k]) };
+    let mut annots: Vec<Vec<(super::geom::Rect, usize)>> = Vec::new();
 
     let mut contents: Vec<String> = Vec::new();
-    for &pi in pages {
-        let Some(page) = nb.pages.get(pi) else { continue };
+    for &pi in &exported {
+        let page = &nb.pages[pi];
+        annots.push(page.links.iter().filter_map(|l| match l.target {
+            super::note::LinkTarget::Page(id) => pid_of(id).map(|t| (l.rect, t)),
+            _ => None,
+        }).collect());
         let mut c = String::new();
         let _ = writeln!(c, "q 1 0 0 -1 0 {} cm", n(h));
-        page_background(&mut c, page, w, h, &mut gs_name);
+        let bg = page.bg.as_ref().and_then(|img| {
+            let (bw, bh) = image_size(&img.png)?;
+            let (x, y, dw, dh) = fit_contain(bw as f32, bh as f32, w, h);
+            embed_image(&mut pdf, &mut images, img).map(|id| format!("q {} 0 0 {} {} {} cm /{} Do Q\n", n(dw), n(-dh), n(x), n(y + dh), id))
+        });
+        page_background(&mut c, page, w, h, &mut gs_name, bg.as_deref());
         // Reihenfolge: Bilder, Textmarker, Tinte, Text
         for pass in 0..4 {
             for it in &page.items {
                 match (&it.content, pass) {
                     (Content::Image(img), 0) => {
-                        let id = if let Some((name, _)) = images.get(&img.key) {
-                            name.clone()
-                        } else if let Some((iw, ih, rgba)) = decode_png(&img.png) {
-                            let name = format!("Im{}", images.len());
-                            let oid = pdf.reserve();
-                            let rgb: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
-                            let has_alpha = rgba.chunks_exact(4).any(|p| p[3] < 255);
-                            let smask = if has_alpha {
-                                let sid = pdf.reserve();
-                                let a: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
-                                pdf.stream(sid, &format!("/Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8", iw, ih), &a);
-                                format!(" /SMask {} 0 R", sid)
-                            } else {
-                                String::new()
-                            };
-                            pdf.stream(oid, &format!("/Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8{}", iw, ih, smask), &rgb);
-                            images.insert(img.key, (name.clone(), oid));
-                            name
-                        } else {
-                            continue;
-                        };
+                        let Some(id) = embed_image(&mut pdf, &mut images, img) else { continue };
                         let _ = writeln!(c, "q {} 0 0 {} {} {} cm /{} Do Q", n(img.w), n(-img.h), n(img.x), n(img.y + img.h), id);
                     }
-                    (Content::Stroke(s), 1 | 2) => {
+                    (Content::Stroke(s), 0..=2) => {
                         let hl = s.pen == PenKind::Highlighter;
-                        if hl != (pass == 1) {
+                        let want = if s.pen == PenKind::Fill { 0 } else if hl { 1 } else { 2 };
+                        if want != pass {
                             continue;
                         }
                         let alpha = s.color[3] as f32 / 255.0;
@@ -212,12 +214,18 @@ pub fn export_pdf(nb: &Notebook, pages: &[usize], wrap: &dyn Fn(&TextBox) -> Vec
     let res_id = pdf.reserve();
     pdf.obj(res_id, &res);
 
-    for c in contents {
+    for (k, c) in contents.into_iter().enumerate() {
         let cid = pdf.reserve();
         pdf.stream(cid, "", c.as_bytes());
-        let pid = pdf.reserve();
-        pdf.obj(pid, &format!("<< /Type /Page /Parent {} 0 R /MediaBox [0 0 {} {}] /Resources {} 0 R /Contents {} 0 R >>", pages_id, n(w), n(h), res_id, cid));
-        page_ids.push(pid);
+        let mut annot_refs = Vec::new();
+        for (r, target) in &annots[k] {
+            let aid = pdf.reserve();
+            pdf.obj(aid, &format!("<< /Type /Annot /Subtype /Link /Rect [{} {} {} {}] /Border [0 0 0] /Dest [{} 0 R /Fit] >>", n(r.x0), n(h - r.y1), n(r.x1), n(h - r.y0), target));
+            annot_refs.push(format!("{} 0 R", aid));
+        }
+        let annots_str = if annot_refs.is_empty() { String::new() } else { format!(" /Annots [{}]", annot_refs.join(" ")) };
+        let pid = page_ids[k];
+        pdf.obj(pid, &format!("<< /Type /Page /Parent {} 0 R /MediaBox [0 0 {} {}] /Resources {} 0 R /Contents {} 0 R{} >>", pages_id, n(w), n(h), res_id, cid, annots_str));
     }
     let kids: Vec<String> = page_ids.iter().map(|i| format!("{} 0 R", i)).collect();
     pdf.obj(pages_id, &format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), page_ids.len()));
@@ -282,9 +290,92 @@ fn round_rect(c: &mut String, x: f32, y: f32, w: f32, h: f32, r: f32) {
     );
 }
 
-fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String) {
+/// Breite, Höhe und Farbkanäle eines JPEG (aus dem SOF-Abschnitt).
+pub fn jpeg_size(b: &[u8]) -> Option<(u32, u32, u8)> {
+    if b.len() < 4 || b[0] != 0xFF || b[1] != 0xD8 {
+        return None;
+    }
+    let mut i = 2;
+    while i + 9 < b.len() {
+        if b[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+        let m = b[i + 1];
+        if m == 0xD8 || m == 0x01 || (0xD0..=0xD7).contains(&m) || m == 0xFF {
+            i += if m == 0xFF { 1 } else { 2 };
+            continue;
+        }
+        let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
+        if matches!(m, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF) {
+            let h = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u32;
+            let w = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u32;
+            return Some((w, h, b[i + 9]));
+        }
+        i += 2 + len;
+    }
+    None
+}
+
+/// Pixelgröße eines PNG oder JPEG.
+pub fn image_size(b: &[u8]) -> Option<(u32, u32)> {
+    if let Some((w, h, _)) = jpeg_size(b) {
+        return Some((w, h));
+    }
+    if b.len() > 24 && &b[1..4] == b"PNG" {
+        return Some((u32::from_be_bytes([b[16], b[17], b[18], b[19]]), u32::from_be_bytes([b[20], b[21], b[22], b[23]])));
+    }
+    None
+}
+
+/// Bild (bw × bh) eingepasst und zentriert in w × h: (x, y, Breite, Höhe).
+pub fn fit_contain(bw: f32, bh: f32, w: f32, h: f32) -> (f32, f32, f32, f32) {
+    let s = (w / bw.max(1.0)).min(h / bh.max(1.0));
+    let (dw, dh) = (bw * s, bh * s);
+    // fast gleiches Seitenverhältnis: ganz füllen
+    if (dw - w).abs() < w * 0.03 && (dh - h).abs() < h * 0.03 {
+        return (0.0, 0.0, w, h);
+    }
+    ((w - dw) * 0.5, (h - dh) * 0.5, dw, dh)
+}
+
+/// Bild als XObject einbetten (einmal je Inhalt); liefert den Ressourcennamen.
+fn embed_image(pdf: &mut Pdf, images: &mut BTreeMap<u64, (String, usize)>, img: &ImageItem) -> Option<String> {
+    if let Some((name, _)) = images.get(&img.key) {
+        return Some(name.clone());
+    }
+    if let Some((iw, ih, comps)) = jpeg_size(&img.png) {
+        let name = format!("Im{}", images.len());
+        let oid = pdf.reserve();
+        let cs = if comps == 1 { "/DeviceGray" } else { "/DeviceRGB" };
+        pdf.stream_raw(oid, &format!("/Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace {} /BitsPerComponent 8 /Filter /DCTDecode", iw, ih, cs), &img.png);
+        images.insert(img.key, (name.clone(), oid));
+        return Some(name);
+    }
+    let (iw, ih, rgba) = decode_png(&img.png)?;
+    let name = format!("Im{}", images.len());
+    let oid = pdf.reserve();
+    let rgb: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+    let has_alpha = rgba.chunks_exact(4).any(|p| p[3] < 255);
+    let smask = if has_alpha {
+        let sid = pdf.reserve();
+        let a: Vec<u8> = rgba.chunks_exact(4).map(|p| p[3]).collect();
+        pdf.stream(sid, &format!("/Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8", iw, ih), &a);
+        format!(" /SMask {} 0 R", sid)
+    } else {
+        String::new()
+    };
+    pdf.stream(oid, &format!("/Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8{}", iw, ih, smask), &rgb);
+    images.insert(img.key, (name.clone(), oid));
+    Some(name)
+}
+
+fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnMut(f32, bool) -> String, bg: Option<&str>) {
     let p = page.paper;
     let _ = writeln!(c, "{} {} {} rg 0 0 {} {} re f", n(p.r), n(p.g), n(p.b), n(w), n(h));
+    if let Some(cmd) = bg {
+        c.push_str(cmd);
+    }
     let prims = page.template.primitives(w, h);
     if prims.is_empty() {
         return;
@@ -295,7 +386,7 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
     // Reihenfolge: Flächen, Linien/Punkte/Kästchen, Beschriftungen
     for pass in 0..3 {
         for pr in &prims {
-            match (*pr, pass) {
+            match (pr.clone(), pass) {
                 (Prim::Fill { x, y, w: fw, h: fh, r, color }, 0) => {
                     let _ = write!(c, "q /{} gs {} rg ", gs(color[3] as f32 / 255.0, false), rgb8(color));
                     round_rect(c, x, y, fw, fh, r);
@@ -327,7 +418,7 @@ fn page_background(c: &mut String, page: &Page, w: f32, h: f32, gs: &mut dyn FnM
                         Some(cl) => (rgb8(cl), cl[3] as f32 / 255.0),
                         None => (rgb(line), if light { 0.9 } else { 0.7 }),
                     };
-                    let _ = writeln!(c, "q /{} gs BT /{} {} Tf {} rg 1 0 0 -1 {} {} Tm {} Tj ET Q", gs(a, false), if bold { "F2" } else { "F1" }, n(size), col, n(x), n(y), pdf_text(text));
+                    let _ = writeln!(c, "q /{} gs BT /{} {} Tf {} rg 1 0 0 -1 {} {} Tm {} Tj ET Q", gs(a, false), if bold { "F2" } else { "F1" }, n(size), col, n(x), n(y), pdf_text(&text));
                 }
                 _ => {}
             }
@@ -346,10 +437,19 @@ mod tests {
     #[test]
     fn exports_all_templates() {
         for k in TemplateKind::ALL {
-            let nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template { kind: k, spacing: 1 }, Color::WHITE, 0.0);
+            let nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template::new(k, 1), Color::WHITE, 0.0);
             let s = String::from_utf8_lossy(&export_pdf(&nb, &[0], &|t: &TextBox| vec![t.text.clone()])).to_string();
             assert!(s.ends_with("%%EOF\n"), "{:?}", k);
         }
+    }
+
+    #[test]
+    fn planner_pdf_has_links() {
+        let nb = crate::engine::planner::year_planner("p".into(), "P", 0, Format::A4_PORTRAIT, 2027, Color::WHITE, 0.0);
+        let all: Vec<usize> = (0..nb.pages.len()).collect();
+        let s = String::from_utf8_lossy(&export_pdf(&nb, &all, &|t: &TextBox| vec![t.text.clone()])).to_string();
+        assert!(s.contains("/Subtype /Link"));
+        assert!(s.contains(&format!("/Count {}", nb.pages.len())));
     }
 
     #[test]
@@ -360,7 +460,7 @@ mod tests {
 
     #[test]
     fn exports_valid_looking_pdf() {
-        let mut nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template { kind: TemplateKind::Planner, spacing: 1 }, Color::WHITE, 0.0);
+        let mut nb = Notebook::new("x".into(), "T", 0, Format::A4_PORTRAIT, Template::new(TemplateKind::Planner, 1), Color::WHITE, 0.0);
         nb.pages[0].insert([
             Item { id: 5, order: 1.0, content: Content::Stroke(Stroke { pen: PenKind::Highlighter, color: [255, 230, 0, 90], width: 12.0, pts: vec![Pt::new(10.0, 10.0, 1.0), Pt::new(100.0, 10.0, 1.0)] }) },
             Item { id: 6, order: 2.0, content: Content::Text(TextBox { x: 10.0, y: 10.0, w: 100.0, size: 12.0, color: [0, 0, 0, 255], bold: false, text: "Grüße".into() }) },

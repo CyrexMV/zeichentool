@@ -73,7 +73,7 @@ impl App {
             }
             Some(front) => {
                 let id = ed.nb.alloc_id();
-                ed.nb.cards.push(Card { id, front, back: region, level: 0, right: 0, wrong: 0 });
+                ed.nb.cards.push(Card { id, front, back: region, level: 0, right: 0, wrong: 0, due: 0.0 });
                 ed.nb.modified = wall_clock();
                 let n = ed.nb.cards.len();
                 set_class(&el("sel-card"), "pending", false);
@@ -113,6 +113,7 @@ impl App {
     }
 
     pub fn render_study_home(&mut self) {
+        let streak = self.streak_line();
         show("study-home", true);
         show("study-run", false);
         show("study-done", false);
@@ -131,7 +132,29 @@ impl App {
             ));
         }
         el("study-boxes").set_inner_html(&boxes);
-        set_text("study-start-label", &format!("Lernen starten ({})", n));
+        set_text("study-start-label", &format!("Alle lernen ({})", n));
+        let now = wall_clock();
+        let due = cards.iter().filter(|c| c.is_due(now)).count();
+        let due_mode = self.settings.due_mode;
+        show("study-due-btn", due_mode);
+        set_text("study-due-label", &format!("Fällige lernen ({})", due));
+        set_class(&el("study-due-btn"), "primary", due_mode && due > 0);
+        if let Ok(Some(cb)) = dom().query_selector("#study-due-toggle input") {
+            cb.unchecked_into::<web_sys::HtmlInputElement>().set_checked(due_mode);
+        }
+        let next = cards.iter().filter(|c| !c.is_due(now)).map(|c| c.due).fold(f64::MAX, f64::min);
+        let info = if !due_mode {
+            String::new()
+        } else if due > 0 {
+            format!("{} {} heute fällig", due, if due == 1 { "Karte ist" } else { "Karten sind" })
+        } else if next < f64::MAX {
+            let days = ((next - now) / 86_400_000.0).ceil().max(1.0) as i64;
+            format!("Alles erledigt – nächste Wiederholung in {} {}", days, if days == 1 { "Tag" } else { "Tagen" })
+        } else {
+            String::new()
+        };
+        set_text("study-due-info", &info);
+        el("study-streak").set_inner_html(&streak);
         let mut grid = String::new();
         for c in cards.iter() {
             let dots: String = (0..4).map(|i| format!("<i class=\"{}\"></i>", if (i as u8) < c.level { "on" } else { "" })).collect();
@@ -152,12 +175,26 @@ impl App {
         }
     }
 
-    pub fn study_start(&mut self, hard_only: bool) {
+    /// Lernen starten: `mode` = "all", "hard" (Fach 1–2) oder "due" (fällige Karten).
+    pub fn study_start(&mut self, mode: &str) {
         let Some(ed) = &self.ed else { return };
-        // nur Karten, deren Seiten noch existieren
-        let mut cards: Vec<&Card> = ed.nb.study_cards().into_iter().filter(|c| !hard_only || c.level <= 1).collect();
+        let now = wall_clock();
+        let mut cards: Vec<&Card> = ed
+            .nb
+            .study_cards()
+            .into_iter()
+            .filter(|c| match mode {
+                "hard" => c.level <= 1,
+                "due" => c.is_due(now),
+                _ => true,
+            })
+            .collect();
         if cards.is_empty() {
-            self.toast(if hard_only { "Keine schwierigen Karten – super!" } else { "Noch keine Lernkarten – schreibe zuerst Frage und Antwort auf eine Karte" });
+            self.toast(match mode {
+                "hard" => "Keine schwierigen Karten – super!",
+                "due" => "Heute ist nichts mehr fällig – gut gemacht!",
+                _ => "Noch keine Lernkarten – schreibe zuerst Frage und Antwort auf eine Karte",
+            });
             return;
         }
         // nach Fach sortieren, innerhalb des Fachs mischen
@@ -209,13 +246,15 @@ impl App {
         if known {
             s.right += 1;
         }
+        self.record_answer(known);
+        let Some(s) = &mut self.study else { return };
         s.idx += 1;
         s.flipped = false;
         let done = s.idx >= s.queue.len();
         let (right, total) = (s.right, s.queue.len());
         if let Some(ed) = &mut self.ed {
             if let Some(c) = ed.nb.cards.iter_mut().find(|c| c.id == cid) {
-                c.answer(known);
+                c.answer(known, wall_clock());
             }
         }
         self.mark_unsaved();
@@ -224,7 +263,9 @@ impl App {
             show("study-done", true);
             style(&el("study-bar"), "width", "100%");
             set_text("study-done-title", if right as usize == total { "Perfekt – alles gewusst!" } else { "Geschafft!" });
-            set_text("study-done-text", &format!("{} von {} Karten gewusst. Nicht gewusste Karten kommen beim nächsten Mal zuerst.", right, total));
+            let plan = if self.settings.due_mode { " Gewusste Karten kommen nach 1, 3, 7 bzw. 21 Tagen wieder dran." } else { "" };
+            set_text("study-done-text", &format!("{} von {} Karten gewusst. Nicht gewusste Karten kommen beim nächsten Mal zuerst.{}", right, total, plan));
+            el("study-done-streak").set_inner_html(&self.streak_line());
         } else {
             self.show_card();
         }

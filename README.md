@@ -14,6 +14,11 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - Notizbücher mit farbigen Buch-Covern, Suche, Sortierung (zuletzt bearbeitet / Name / erstellt), Favoriten
 - Umbenennen, Cover ändern, Duplizieren, Löschen, Export – alles über das ⋯-Menü der Karte
 - Import von Backups (`.znote`), Bildern und alten Zeichnungen; die bisherige Zeichnung wird automatisch übernommen
+- **PDF importieren**: jede PDF-Seite wird zur Seite, auf der man direkt schreiben kann (auch „⋯ → PDF-Seiten einfügen“)
+- **Jahresplaner** (Neues Notizbuch → „Jahresplaner 2026/2027“): Jahresübersicht, 12 Monate und alle Wochen mit echten
+  Daten; Monats-Reiter, Mini-Monate, Kalenderwochen und ‹ › sind verlinkt – auch im exportierten PDF
+- **Gesperrte Notizbücher**: ⋯ → „Mit PIN sperren“; in der APK auch per Fingerabdruck entsperrbar
+- **Papierkorb**: Gelöschtes bleibt 30 Tage wiederherstellbar, danach wird es automatisch entfernt
 
 **Notizbuch**
 - Mehrere Seiten, vertikal durchscrollen (mit Schwung), Seitenübersicht mit Vorschaubildern, Lesezeichen
@@ -23,6 +28,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
   **Tagesplaner** (Zeitplan, Top 3, To-do, Wasser), **Monatskalender**, **Stundenplan** (mit Hausaufgaben), **Essensplan**
   (mit Einkaufsliste), **Gewohnheiten** (31 Tage) und **Lernkarte** – passen sich an Hoch-/Querformat an
 - **Checkliste**: Kästchen antippen → abgehakt; die Schrift in der Zeile wird automatisch durchgestrichen und ausgegraut
+- **Eigenes Papier**: ein Foto oder Bild als Seitenhintergrund (Vorlage & Papier → „Bild für diese/alle Seiten“)
+- **Links zwischen Seiten**: Bereich mit dem Lasso markieren → Link → Seite oder Notizbuch; antippen springt
 - Papierfarben: Weiß, Creme, Notizgelb, Hellblau, Dunkel, Schwarz, Tafelgrün
 - Formate: A4 hoch/quer, Quadrat, Bildschirm
 
@@ -31,7 +38,10 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - Textmarker (liegt unter der Schrift, optional gerade Linien)
 - Radierer: präzise (schneidet Striche) oder ganze Striche, „nur Textmarker“, automatisch zurück zum Stift
 - Je drei Favoriten-Farben und -Stärken direkt in der Werkzeugleiste (antippen = wechseln, nochmal = bearbeiten)
-- **Formen**: Werkzeug oder Stift am Strichende halten → Linie, Kreis, Ellipse, Dreieck, Rechteck, Vieleck
+- **Formen**: Werkzeug oder Stift am Strichende halten → Linie, Kreis, Ellipse, Dreieck, Rechteck, Vieleck;
+  **Formen füllen** (hell oder voll) beim Zeichnen oder nachträglich per Lasso → Füllen
+- **Pipette**: Farbe von der Seite übernehmen (Werkzeug-Optionen → Pipette)
+- **Zoom-Fenster**: vergrößerter Schreibstreifen unten, der Rahmen rückt am rechten Rand weiter (↵ = neue Zeile)
 - **Lasso**: einkreisen → verschieben, skalieren, umfärben, kopieren, ausschneiden, duplizieren, löschen, einfügen
 - **Text**-Felder (Größe, Farbe, fett), **Bilder** einfügen, **Laserpointer** zum Präsentieren
 - Rückgängig/Wiederholen (auch Zwei-/Drei-Finger-Tipp)
@@ -39,6 +49,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
   entlang zeichnet der Stift exakt gerade Linien, mit cm-Skala, Winkelmesser und Längenanzeige
 - **Lernkarten auf dem Startbildschirm**: „Neues Lernkarten-Set“ legt ein Kartenset an (jede Seite = Karte, oben Frage,
   unten Antwort); „Lernen“ startet direkt vom Startbildschirm, mit Fortschrittsbalken je Set
+- **Lernstatistik & Serie**: Karten pro Tag, Serie (🔥 Tage am Stück), Rekord, Trefferquote, 30-Tage-Verlauf
+- **Fällige Karten (freiwillig)**: Wiederholungsplan einschalten → gewusste Karten kommen nach 1, 3, 7, 21 Tagen wieder
 - **Lernkarten**: Frage und Antwort mit dem Lasso markieren → „Lernkarte“; lernen mit Umdrehen und
   Karteikasten (gewusst → nächstes Fach, sonst zurück); Karten zeigen immer den aktuellen Stand der Seite
 - **Inhaltsverzeichnis**: Seitentitel vergeben (⋯ → „Seitentitel“), Übersicht unter Seiten → „Inhalt“
@@ -98,7 +110,10 @@ src/engine/   Notiz-Engine (reines Rust, getestet)
   paper.rs      Vorlagen als Vektor-Grundformen
   history.rs    Rückgängig/Wiederholen
   format.rs     .znote-Format, Bibliothek, PNG, Import alter Zeichnungen
-  pdf.rs        Vektor-PDF-Export
+  pdf.rs        Vektor-PDF-Export (mit klickbaren Links)
+  planner.rs    Jahresplaner mit echten Daten und Verweisen
+  cal.rs        Kalender-Rechnungen, Lernserie
+  sha.rs        SHA-256 für die PIN-Sperre
 src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   render.rs     Canvas-Rendering mit Seiten-Zwischenspeicher je Zoomstufe
   input.rs      S-Pen, Handballen-Sperre, Gesten mit Schwung, Tastatur
@@ -106,6 +121,12 @@ src/web/      Browser-Anbindung (wasm-bindgen / web-sys)
   ui.rs         Werkzeugleiste, Optionen, Seitenübersicht, Dialoge
   library.rs    Bibliothek
   storage.rs    IndexedDB, Export/Import, Android-Brücke
+  docs.rs       PDF-Import, eigenes Papier
+  links.rs      Verweise zwischen Seiten/Notizbüchern
+  lock.rs       PIN-Sperre, Fingerabdruck, Papierkorb
+  stats.rs      Lernstatistik
+  zoomwin.rs    Zoom-Fenster
 web/          index.html, style.css, Manifest, Icons, Service Worker
+web/vendor/pdfjs/  pdf.js von Mozilla (Apache-2.0, siehe LICENSE) für den PDF-Import
 android/      Android-Hülle (WebView) mit nativem S-Pen-/Handballen-Filter
 ```

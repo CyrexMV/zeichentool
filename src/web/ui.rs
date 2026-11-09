@@ -12,8 +12,8 @@ thread_local! {
 
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
-const POPS: [&str; 5] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder"];
-const MODALS: [&str; 6] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick"];
+const POPS: [&str; 6] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash"];
+const MODALS: [&str; 7] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -129,11 +129,29 @@ impl App {
             "new-nb" => self.open_new_dialog(),
             "import" => set_timeout(0, || input_el("file-import").click()),
             "settings" => self.open_settings(),
-            "card" => self.open_notebook(arg.to_string()),
+            "card" => self.open_guarded(arg.to_string()),
+            "trash-open" => {
+                self.show_trash = true;
+                self.folder = None;
+                self.render_library();
+            }
+            "trash-empty" => self.empty_trash_dialog(),
+            "trash-menu" => {
+                self.ctx_target = Some(arg.to_string());
+                self.open_popover("pop-trash", src);
+            }
+            "trash-restore" | "trash-delete" => {
+                if let Some(id) = self.ctx_target.clone() {
+                    self.trash_action(act, id);
+                }
+            }
+            "dlg-bio" => self.start_bio(),
             "card-menu" => {
                 self.ctx_target = Some(arg.to_string());
                 let fav = self.library.iter().find(|m| m.id == arg).map(|m| m.favorite).unwrap_or(false);
                 set_text("card-fav-label", if fav { "Aus Favoriten entfernen" } else { "Zu Favoriten" });
+                let locked = self.library.iter().find(|m| m.id == arg).map(|m| !m.lock.is_empty()).unwrap_or(false);
+                set_text("card-lock-label", if locked { "PIN-Sperre entfernen …" } else { "Mit PIN sperren …" });
                 self.open_popover("pop-card", src);
             }
             a if a.starts_with("card-") || a == "cover-pick" => self.card_action(a, n),
@@ -185,7 +203,8 @@ impl App {
             }
             "study-close" => self.close_study(),
             "study-home" => self.render_study_home(),
-            "study-start" => self.study_start(arg == "hard"),
+            "study-start" => self.study_start(arg),
+            "stats" => self.open_stats(),
             "study-flip" => self.study_flip(),
             "study-answer" => self.study_answer(arg == "right"),
             "fc-del" => {
@@ -194,6 +213,29 @@ impl App {
                 }
             }
             "sel-card" => self.selection_to_card(),
+            "zoomwin" => self.toggle_zoomwin(),
+            a if a.starts_with("zw-") => self.zw_action(a),
+            "sel-link" => self.open_link_dialog(),
+            "paper-img" => {
+                self.paper_all = arg == "all";
+                set_timeout(0, || input_el("file-paper").click());
+            }
+            "paper-clear" => self.clear_paper(),
+            "pdf-insert" => {
+                self.close_popovers();
+                set_timeout(0, || input_el("file-pdf").click());
+            }
+            "shape-fill" => {
+                self.prefs.shape_fill = (n as u8).min(2);
+                self.refresh_tool_popover();
+                self.save_settings();
+            }
+            "pipette" => {
+                self.close_popovers();
+                self.pipette = true;
+                set_class(&dom().body().unwrap(), "picking", true);
+                self.toast("Pipette: tippe auf die Farbe, die du übernehmen möchtest");
+            }
             "page-title" => {
                 if let Some(ed) = &self.ed {
                     let i = ed.cur_page;
@@ -264,7 +306,7 @@ impl App {
                 }
                 self.after_view_change();
             }
-            "sel-copy" | "sel-cut" | "sel-dup" | "sel-delete" | "sel-color" | "paste" => self.selection_action(act, arg),
+            "sel-copy" | "sel-cut" | "sel-dup" | "sel-delete" | "sel-color" | "sel-fill" | "paste" => self.selection_action(act, arg),
 
             // ----- Mehr-Menü -----
             "export-pdf" => {
@@ -478,6 +520,12 @@ impl App {
             }
             "set-scroll" => self.settings.one_finger_scroll = checked,
             "set-finger" => self.settings.finger_draw = checked,
+            "study-due" => {
+                self.settings.due_mode = checked;
+                self.save_settings();
+                self.render_study_home();
+                return;
+            }
             _ => return,
         }
         if name.starts_with("set-") || name.starts_with("pop-") && kind == "change" {
@@ -599,6 +647,10 @@ impl App {
         }
     }
 
+    pub fn set_active_color_pub(&mut self, c: Color) {
+        self.set_active_color(c);
+    }
+
     fn set_active_color(&mut self, c: Color) {
         let p = &mut self.prefs;
         match self.tool {
@@ -660,7 +712,7 @@ impl App {
                 let active = c.eq_ignore_ascii_case(&hex4(cur));
                 s.push_str(&format!("<button class=\"sw{}\" data-act=\"pop-color\" data-arg=\"{c}\" style=\"background:{c}\"></button>", if active { " active" } else { "" }, c = c));
             }
-            s.push_str(&format!("<label class=\"sw custom\" title=\"Eigene Farbe\"><input type=\"color\" data-input=\"pop-custom\" value=\"{}\"></label></div>", hex4(cur)));
+            s.push_str(&format!("<label class=\"sw custom\" title=\"Eigene Farbe\"><input type=\"color\" data-input=\"pop-custom\" value=\"{}\"></label><button class=\"sw pipette\" data-act=\"pipette\" title=\"Pipette – Farbe von der Seite übernehmen\"><svg><use href=\"#i-pipette\"/></svg></button></div>", hex4(cur)));
             s
         };
         let slider = |min: f32, max: f32, step: f32, v: f32, label: &str| -> String {
@@ -681,8 +733,14 @@ impl App {
                 h.push_str("</div>");
                 h.push_str(&slider(0.3, 8.0, 0.1, p.pen_sizes[p.pen_si], "Stärke"));
                 h.push_str(&swatches(&PEN_COLORS, p.pen_colors[p.pen_ci]));
+                h.push_str(&format!(
+                    "<div class=\"pop-row\"><span>Formen füllen</span><div class=\"seg small\"><button class=\"{}\" data-act=\"shape-fill\" data-arg=\"0\">Aus</button><button class=\"{}\" data-act=\"shape-fill\" data-arg=\"1\">Hell</button><button class=\"{}\" data-act=\"shape-fill\" data-arg=\"2\">Voll</button></div></div>",
+                    if p.shape_fill == 0 { "active" } else { "" },
+                    if p.shape_fill == 1 { "active" } else { "" },
+                    if p.shape_fill == 2 { "active" } else { "" }
+                ));
                 if tool == Tool::Shape {
-                    h.push_str("<p class=\"hint\">Zeichne eine Form – sie wird automatisch zu Linie, Kreis, Ellipse, Dreieck, Rechteck oder Vieleck.</p>");
+                    h.push_str("<p class=\"hint\">Zeichne eine Form – sie wird automatisch zu Linie, Kreis, Ellipse, Dreieck, Rechteck oder Vieleck. Geschlossene Formen werden auf Wunsch gefüllt.</p>");
                 }
             }
             Tool::Highlighter => {
@@ -893,7 +951,7 @@ impl App {
         let (w, h) = if k == TemplateKind::Flashcard { (420.0, 595.0) } else { (595.0, 842.0) };
         let (mut fills, mut lines, mut strong, mut labels) = (String::new(), String::new(), String::new(), String::new());
         let rgba = |c: [u8; 4]| format!("rgba({},{},{},{:.2})", c[0], c[1], c[2], c[3] as f32 / 255.0);
-        for p in (Template { kind: k, spacing: 1 }).primitives(w, h) {
+        for p in (Template::new(k, 1)).primitives(w, h) {
             match p {
                 Prim::Fill { x, y, w, h, r, color } => {
                     let _ = write!(fills, "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" rx=\"{:.1}\" fill=\"{}\"/>", x, y, w, h, r, rgba(color));
@@ -913,7 +971,7 @@ impl App {
                         size,
                         if bold { 700 } else { 500 },
                         color.map(rgba).unwrap_or_else(|| "rgba(95,115,150,.9)".into()),
-                        esc(text)
+                        esc(&text)
                     );
                 }
                 Prim::Dot { .. } => {}
@@ -958,14 +1016,23 @@ impl App {
     fn refresh_new_dialog(&mut self) {
         // Eigene Notizbuchvorlagen
         let templates: Vec<(String, String, u8, u32)> = self.library.iter().filter(|m| m.is_template).map(|m| (m.id.clone(), m.title.clone(), m.cover, m.pages)).collect();
-        show("new-from-wrap", !templates.is_empty());
-        if self.new_from.as_ref().map(|id| !templates.iter().any(|t| &t.0 == id)).unwrap_or(false) {
+        show("new-from-wrap", true);
+        let year = js_sys::Date::new_0().get_full_year() as i32;
+        let planner_year = self.new_from.as_deref().and_then(|f| f.strip_prefix("planner:")).and_then(|y| y.parse::<i32>().ok());
+        if planner_year.is_none() && self.new_from.as_ref().map(|id| !templates.iter().any(|t| &t.0 == id)).unwrap_or(false) {
             self.new_from = None;
         }
         let mut from = format!(
             "<button class=\"from-item{}\" data-act=\"new-from\" data-arg=\"\"><span class=\"mini blank\"><svg><use href=\"#i-plus\"/></svg></span><span>Leer</span></button>",
             if self.new_from.is_none() { " active" } else { "" }
         );
+        for y in [year, year + 1] {
+            from.push_str(&format!(
+                "<button class=\"from-item{}\" data-act=\"new-from\" data-arg=\"planner:{y}\" title=\"Jahresübersicht, 12 Monate und alle Wochen mit verlinkten Reitern\"><span class=\"mini plan\"><svg><use href=\"#i-calendar\"/></svg></span><span>Jahresplaner {y}</span></button>",
+                if planner_year == Some(y) { " active" } else { "" },
+                y = y
+            ));
+        }
         for (id, title, cover, pages) in &templates {
             from.push_str(&format!(
                 "<button class=\"from-item{}\" data-act=\"new-from\" data-arg=\"{id}\" title=\"{title} · {pages} Seiten\"><span class=\"mini\" style=\"{css}\"><svg><use href=\"#i-template\"/></svg></span><span>{title}</span><span class=\"del\" data-act=\"from-del\" data-arg=\"{id}\" title=\"Vorlage löschen\"><svg><use href=\"#i-close\"/></svg></span></button>",
@@ -978,7 +1045,14 @@ impl App {
         }
         el("new-from").set_inner_html(&from);
         set_class(&el("new-paper-section"), "section-off", self.new_from.is_some());
-        set_class(&el("new-format"), "section-off", self.new_from.is_some());
+        set_class(&el("new-format"), "section-off", self.new_from.is_some() && planner_year.is_none());
+        if let Some(y) = planner_year {
+            let t = input_el("new-title");
+            if t.value().trim().is_empty() || t.value().starts_with("Planer ") {
+                t.set_value(&format!("Planer {}", y));
+                set_text("new-cover-title", &format!("Planer {}", y));
+            }
+        }
         let n = &self.new_nb;
         el("new-tpl").set_inner_html(&Self::tpl_tiles("new", n.template.kind));
         el("new-paper").set_inner_html(&Self::paper_dots("new", n.paper));
@@ -1025,6 +1099,13 @@ impl App {
         let folder = self.folder.clone().unwrap_or_default();
         self.close_modals();
         self.save_settings();
+        if let Some(y) = self.new_from.as_deref().and_then(|f| f.strip_prefix("planner:")).and_then(|y| y.parse::<i32>().ok()) {
+            let mut nb = crate::engine::planner::year_planner(super::storage::new_id(), &title, cover, format, y, paper, wall_clock());
+            nb.folder = folder;
+            self.add_notebook(nb, true);
+            self.toast("Jahresplaner erstellt – tippe auf Reiter, Monate und Kalenderwochen, um zu springen");
+            return;
+        }
         if let Some(tid) = self.new_from.clone() {
             self.with_stored(tid, move |a, t| {
                 let mut nb = t.copy_as(super::storage::new_id(), &title, wall_clock());
