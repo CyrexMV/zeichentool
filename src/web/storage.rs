@@ -29,7 +29,7 @@ impl App {
             format!("palm_lock={}", s.palm_lock),
             format!("tpl={},{}", s.last_template.kind.code(), s.last_template.spacing),
             format!("paper={}", s.last_paper.map(|c| c.to_hex()).unwrap_or_else(|| "none".into())),
-            format!("one_finger_pan={}", s.one_finger_pan),
+            format!("one_finger_pan2={}", s.one_finger_pan),
             format!("ignore_large={}", s.ignore_large),
             format!("quickshape={}", s.quickshape),
             format!("hover={}", s.hover_cursor),
@@ -58,6 +58,18 @@ impl App {
         if let Ok(Some(ls)) = window().local_storage() {
             let _ = ls.set_item(SETTINGS_KEY, &out.join("\n"));
         }
+        self.sync_native_settings();
+    }
+
+    /// Teilt der Android-App die Handballen-Sperrzeit mit.
+    pub fn sync_native_settings(&self) {
+        if let Some(bridge) = android_bridge() {
+            if let Ok(f) = js_sys::Reflect::get(&bridge, &"setPalmLock".into()) {
+                if let Some(f) = f.dyn_ref::<js_sys::Function>() {
+                    let _ = f.call1(&bridge, &JsValue::from_f64(self.settings.palm_lock as f64));
+                }
+            }
+        }
     }
 
     pub fn load_settings(&mut self) {
@@ -79,7 +91,7 @@ impl App {
                     s.last_template = crate::engine::Template { kind: crate::engine::TemplateKind::from_code(k), spacing: sp.parse::<u8>().unwrap_or(1).min(2) };
                 }
                 "paper" => s.last_paper = Color::from_hex(v),
-                "one_finger_pan" => s.one_finger_pan = b(v),
+                "one_finger_pan2" => s.one_finger_pan = b(v),
                 "ignore_large" => s.ignore_large = b(v),
                 "quickshape" => s.quickshape = b(v),
                 "hover" => s.hover_cursor = b(v),

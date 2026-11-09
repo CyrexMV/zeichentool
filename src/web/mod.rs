@@ -314,7 +314,7 @@ impl Default for Settings {
             pen_only: true,
             pen_button: PenButton::Select,
             palm_lock: 2.0,
-            one_finger_pan: false,
+            one_finger_pan: true,
             ignore_large: true,
             quickshape: true,
             hover_cursor: true,
@@ -376,6 +376,8 @@ pub struct App {
     pub last_barrel_press: f64,
     pub prev_tool: Tool,
     pub badge_on: bool,
+    pub native_near: bool,
+    pub native_button: bool,
     pub space_down: bool,
     pub mouse_pan: Option<(i32, f64, f64, Affine)>,
 
@@ -462,6 +464,8 @@ impl App {
             last_barrel_press: -1e9,
             prev_tool: Tool::Brush,
             badge_on: false,
+            native_near: false,
+            native_button: false,
             space_down: false,
             mouse_pan: None,
             canvas,
@@ -666,6 +670,7 @@ pub fn start() {
         a.setup_canvas();
         a.fit_view();
         a.refresh_all_ui();
+        a.sync_native_settings();
     });
     storage::init_storage();
     storage::register_service_worker();

@@ -9,8 +9,13 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -27,8 +32,12 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Android-Hülle für das Zeichentool.
@@ -45,6 +54,23 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+
+    // --- S-Pen-Zustand (direkt aus den Android-Rohdaten) ---
+    private static final int PEN_BUTTONS = MotionEvent.BUTTON_STYLUS_PRIMARY
+            | MotionEvent.BUTTON_STYLUS_SECONDARY | MotionEvent.BUTTON_SECONDARY | MotionEvent.BUTTON_TERTIARY;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private boolean penButton = false;
+    private boolean penInRange = false;
+    private boolean penTouching = false;
+    private long penLastSeen = -100000;
+    /** Wie lange nach dem Stift Finger/Handballen gesperrt bleiben (aus den App-Einstellungen). */
+    private volatile long palmLockMs = 2000;
+
+    // --- Handballen-Filter ---
+    /** Zeiger, die die WebView gerade als gedrückt kennt. */
+    private final Set<Integer> forwarded = new HashSet<>();
+    /** Zeiger (Finger/Handballen), die verworfen werden. */
+    private final Set<Integer> blocked = new HashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +104,288 @@ public class MainActivity extends Activity {
         web.loadUrl(START_URL);
 
         hideSystemBars();
+    }
+
+    // ------------------------------------------------------------------
+    // S-Pen: Taste, Schweben, Handballen
+    // ------------------------------------------------------------------
+
+    private static boolean isPen(MotionEvent e, int i) {
+        int t = e.getToolType(i);
+        return t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER;
+    }
+
+    private void js(String code) {
+        if (web != null) {
+            web.evaluateJavascript(code, null);
+        }
+    }
+
+    private void setPenInRange(boolean range) {
+        if (range != penInRange) {
+            penInRange = range;
+            js("window.zeichentoolPenState&&window.zeichentoolPenState(" + range + ")");
+        }
+    }
+
+    private void setPenButton(boolean down) {
+        if (down != penButton) {
+            penButton = down;
+            js("window.zeichentoolPenButton&&window.zeichentoolPenButton(" + down + ")");
+        }
+    }
+
+    private final Runnable hoverExitCheck = () -> {
+        if (!penTouching && SystemClock.uptimeMillis() - penLastSeen >= 120) {
+            setPenInRange(false);
+            setPenButton(false);
+        }
+    };
+
+    /** Liest Stift-Taste und -Nähe aus jedem Ereignis. */
+    private void observePen(MotionEvent e) {
+        int pen = -1;
+        for (int i = 0; i < e.getPointerCount(); i++) {
+            if (isPen(e, i)) {
+                pen = i;
+                break;
+            }
+        }
+        if (pen < 0) {
+            return;
+        }
+        int action = e.getActionMasked();
+        penLastSeen = SystemClock.uptimeMillis();
+        if (action == MotionEvent.ACTION_HOVER_EXIT) {
+            handler.removeCallbacks(hoverExitCheck);
+            handler.postDelayed(hoverExitCheck, 150);
+        } else {
+            setPenInRange(true);
+        }
+        boolean isActionPointer = e.getActionIndex() == pen;
+        if (action == MotionEvent.ACTION_DOWN || (action == MotionEvent.ACTION_POINTER_DOWN && isActionPointer)) {
+            penTouching = true;
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL
+                || (action == MotionEvent.ACTION_POINTER_UP && isActionPointer)) {
+            penTouching = false;
+        }
+        setPenButton((e.getButtonState() & PEN_BUTTONS) != 0);
+    }
+
+    private boolean palmLocked() {
+        return penInRange || penTouching || SystemClock.uptimeMillis() - penLastSeen < palmLockMs;
+    }
+
+    /** Sehr große Auflagefläche = Handballen. */
+    private boolean isPalm(MotionEvent e, int i) {
+        float density = getResources().getDisplayMetrics().density;
+        return e.getTouchMajor(i) > 110 * density;
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent e) {
+        observePen(e);
+        return super.dispatchGenericMotionEvent(e);
+    }
+
+    /** S-Pen-Tasten, die Android als Tasten meldet (z. B. Bluetooth-S-Pen). */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        int k = e.getKeyCode();
+        // KEYCODE_STYLUS_BUTTON_PRIMARY/SECONDARY/TERTIARY/TAIL (Android 14+)
+        if (k >= 308 && k <= 311) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                penButton = false;
+                setPenButton(true);
+            } else if (e.getAction() == KeyEvent.ACTION_UP) {
+                setPenButton(false);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    /**
+     * Handballen-Filter wie in Notiz-Apps: Solange der S-Pen schwebt, schreibt (und kurz danach)
+     * werden Finger-/Handballen-Berührungen gar nicht erst an die Zeichenfläche weitergegeben.
+     * Der Stift selbst wird immer weitergereicht.
+     */
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent e) {
+        observePen(e);
+        int action = e.getActionMasked();
+        int ai = e.getActionIndex();
+        if (action == MotionEvent.ACTION_DOWN) {
+            forwarded.clear();
+            blocked.clear();
+        }
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (isPen(e, ai)) {
+                if (!forwarded.isEmpty() && !anyPenForwarded(e)) {
+                    // Handballen/Finger lagen schon auf → in der WebView abbrechen
+                    cancelForwarded(e, ai);
+                }
+            } else if (palmLocked() || isPalm(e, ai)) {
+                blocked.add(e.getPointerId(ai));
+            }
+        }
+        boolean anyBlocked = false;
+        for (int i = 0; i < e.getPointerCount(); i++) {
+            if (blocked.contains(e.getPointerId(i))) {
+                anyBlocked = true;
+                break;
+            }
+        }
+        boolean result = true;
+        if (!anyBlocked) {
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                forwarded.add(e.getPointerId(ai));
+            }
+            result = super.dispatchTouchEvent(e);
+        } else {
+            MotionEvent out = rebuild(e, action, ai);
+            if (out != null) {
+                result = super.dispatchTouchEvent(out);
+                out.recycle();
+            }
+        }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            forwarded.clear();
+            blocked.clear();
+        } else if (action == MotionEvent.ACTION_POINTER_UP) {
+            int id = e.getPointerId(ai);
+            forwarded.remove(id);
+            blocked.remove(id);
+        }
+        return result;
+    }
+
+    private boolean anyPenForwarded(MotionEvent e) {
+        for (int i = 0; i < e.getPointerCount(); i++) {
+            if (isPen(e, i) && forwarded.contains(e.getPointerId(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void cancelForwarded(MotionEvent e, int except) {
+        List<Integer> idx = new ArrayList<>();
+        for (int i = 0; i < e.getPointerCount(); i++) {
+            if (i != except && forwarded.contains(e.getPointerId(i))) {
+                idx.add(i);
+            }
+        }
+        if (!idx.isEmpty()) {
+            MotionEvent c = build(e, MotionEvent.ACTION_CANCEL, idx);
+            super.dispatchTouchEvent(c);
+            c.recycle();
+        }
+        for (int i : idx) {
+            blocked.add(e.getPointerId(i));
+        }
+        forwarded.clear();
+    }
+
+    /** Baut ein Ereignis nur mit den erlaubten Zeigern. */
+    private MotionEvent rebuild(MotionEvent e, int action, int ai) {
+        List<Integer> idx = new ArrayList<>();
+        for (int i = 0; i < e.getPointerCount(); i++) {
+            if (!blocked.contains(e.getPointerId(i))) {
+                idx.add(i);
+            }
+        }
+        int out;
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                int id = e.getPointerId(ai);
+                if (blocked.contains(id)) {
+                    return null;
+                }
+                forwarded.add(id);
+                int pos = idx.indexOf(ai);
+                out = forwarded.size() == 1 ? MotionEvent.ACTION_DOWN
+                        : (MotionEvent.ACTION_POINTER_DOWN | (pos << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
+                if (forwarded.size() == 1) {
+                    idx.clear();
+                    idx.add(ai);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_POINTER_UP: {
+                int id = e.getPointerId(ai);
+                if (blocked.contains(id) || !forwarded.contains(id)) {
+                    return null;
+                }
+                int pos = idx.indexOf(ai);
+                out = forwarded.size() == 1 ? MotionEvent.ACTION_UP
+                        : (MotionEvent.ACTION_POINTER_UP | (pos << MotionEvent.ACTION_POINTER_INDEX_SHIFT));
+                break;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                if (forwarded.isEmpty()) {
+                    return null;
+                }
+                out = MotionEvent.ACTION_CANCEL;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                out = MotionEvent.ACTION_MOVE;
+                break;
+            default:
+                return null;
+        }
+        // nur Zeiger, die die WebView kennt
+        List<Integer> known = new ArrayList<>();
+        for (int i : idx) {
+            if (forwarded.contains(e.getPointerId(i))) {
+                known.add(i);
+            }
+        }
+        if (known.isEmpty()) {
+            return null;
+        }
+        return build(e, out, known);
+    }
+
+    private static MotionEvent build(MotionEvent e, int action, List<Integer> idx) {
+        int n = idx.size();
+        MotionEvent.PointerProperties[] props = new MotionEvent.PointerProperties[n];
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[n];
+        for (int k = 0; k < n; k++) {
+            props[k] = new MotionEvent.PointerProperties();
+            e.getPointerProperties(idx.get(k), props[k]);
+            coords[k] = new MotionEvent.PointerCoords();
+        }
+        int hs = action == MotionEvent.ACTION_MOVE ? e.getHistorySize() : 0;
+        MotionEvent out;
+        if (hs > 0) {
+            for (int k = 0; k < n; k++) {
+                e.getHistoricalPointerCoords(idx.get(k), 0, coords[k]);
+            }
+            out = MotionEvent.obtain(e.getDownTime(), e.getHistoricalEventTime(0), action, n, props, coords,
+                    e.getMetaState(), e.getButtonState(), e.getXPrecision(), e.getYPrecision(),
+                    e.getDeviceId(), e.getEdgeFlags(), e.getSource(), e.getFlags());
+            for (int h = 1; h < hs; h++) {
+                for (int k = 0; k < n; k++) {
+                    e.getHistoricalPointerCoords(idx.get(k), h, coords[k]);
+                }
+                out.addBatch(e.getHistoricalEventTime(h), coords, e.getMetaState());
+            }
+            for (int k = 0; k < n; k++) {
+                e.getPointerCoords(idx.get(k), coords[k]);
+            }
+            out.addBatch(e.getEventTime(), coords, e.getMetaState());
+        } else {
+            for (int k = 0; k < n; k++) {
+                e.getPointerCoords(idx.get(k), coords[k]);
+            }
+            out = MotionEvent.obtain(e.getDownTime(), e.getEventTime(), action, n, props, coords,
+                    e.getMetaState(), e.getButtonState(), e.getXPrecision(), e.getYPrecision(),
+                    e.getDeviceId(), e.getEdgeFlags(), e.getSource(), e.getFlags());
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------
@@ -317,6 +625,12 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        /** Sperrzeit nach dem Stift in Sekunden (aus den Einstellungen der App). */
+        @JavascriptInterface
+        public void setPalmLock(double seconds) {
+            palmLockMs = (long) Math.max(0, Math.min(10_000, seconds * 1000));
         }
 
         @JavascriptInterface

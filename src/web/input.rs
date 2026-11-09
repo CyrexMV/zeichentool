@@ -64,8 +64,29 @@ pub fn bind_input() {
         e.prevent_default();
         with_app(|a| a.wheel(&e));
     });
-    // S-Pen-Taste und langes Drücken öffnen sonst ein Kontextmenü
-    on(&dom(), "contextmenu", |e: Event| e.prevent_default());
+    // S-Pen-Taste und langes Drücken öffnen sonst ein Kontextmenü.
+    // Manche Browser melden die S-Pen-Taste nur als Kontextmenü-Ereignis → als Tastendruck werten.
+    on(&dom(), "contextmenu", |e: Event| {
+        e.prevent_default();
+        let pen = js_sys::Reflect::get(&e, &"pointerType".into()).ok().and_then(|v| v.as_string()).as_deref() == Some("pen");
+        if pen {
+            with_app(|a| a.native_pen_button(true));
+        }
+    });
+    // Rückrufe der Android-App (MainActivity liest Taste und Stift-Nähe direkt aus Android)
+    let w = window();
+    let btn = Closure::<dyn FnMut(JsValue)>::new(|v: JsValue| {
+        let down = v.as_bool().unwrap_or(false);
+        with_app(|a| a.native_pen_button(down));
+    });
+    let _ = js_sys::Reflect::set(&w, &"zeichentoolPenButton".into(), btn.as_ref());
+    btn.forget();
+    let state = Closure::<dyn FnMut(JsValue)>::new(|v: JsValue| {
+        let near = v.as_bool().unwrap_or(false);
+        with_app(|a| a.native_pen_state(near));
+    });
+    let _ = js_sys::Reflect::set(&w, &"zeichentoolPenState".into(), state.as_ref());
+    state.forget();
     on(&dom(), "gesturestart", |e: Event| e.prevent_default());
     on(&window(), "keydown", |e: KeyboardEvent| {
         with_app(|a| a.key_down(&e));
@@ -262,8 +283,9 @@ impl App {
         self.last_barrel_press = t;
         match self.settings.pen_button {
             PenButton::Select => {
-                if self.stroke.is_some() {
-                    return;
+                // Läuft gerade ein Strich: abschließen, der nächste Kontakt nutzt das neue Werkzeug
+                if self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false) {
+                    self.end_stroke();
                 }
                 if self.tool == Tool::Eraser {
                     let back = if self.prev_tool == Tool::Eraser { Tool::Brush } else { self.prev_tool };
@@ -279,6 +301,59 @@ impl App {
             PenButton::Undo if !contact => self.undo(),
             _ => {}
         }
+    }
+
+    /// S-Pen-Taste, gemeldet von der Android-App (oder Kontextmenü-Fallback).
+    pub fn native_pen_button(&mut self, down: bool) {
+        self.native_status(None, Some(down));
+        self.pen_seen = true;
+        self.last_pen_time = now();
+        if down {
+            if !self.pen_barrel {
+                self.pen_barrel = true;
+                let contact = self.stroke.as_ref().map(|s| !s.touch).unwrap_or(false);
+                self.pen_button_pressed(contact);
+            }
+        } else {
+            self.pen_barrel = false;
+        }
+    }
+
+    /// Stift schwebt über dem Bildschirm (true) bzw. ist weg (false) – von der Android-App.
+    pub fn native_pen_state(&mut self, near: bool) {
+        self.native_status(Some(near), None);
+        if near {
+            self.pen_seen = true;
+            self.pen_in_range = true;
+            self.last_pen_time = now();
+            // eine von der Hand verschobene Ansicht zurücksetzen
+            if let Some(g) = self.gesture.take() {
+                if now() - g.t0 < 2500.0 && self.view != g.origin_view {
+                    self.view = g.origin_view;
+                    self.apply_view();
+                }
+                self.touches.clear();
+            }
+            self.update_pen_badge();
+        } else {
+            self.pen_left();
+        }
+    }
+
+    /// Anzeige im S-Pen-Testfeld (Einstellungen), was Android direkt meldet.
+    fn native_status(&mut self, near: Option<bool>, button: Option<bool>) {
+        if let Some(n) = near {
+            self.native_near = n;
+        }
+        if let Some(b) = button {
+            self.native_button = b;
+        }
+        let text = format!(
+            "Android: Stift {} · Taste {}",
+            if self.native_near { "in der Nähe" } else { "weg" },
+            if self.native_button { "GEDRÜCKT" } else { "losgelassen" }
+        );
+        el("pen-native").set_text_content(Some(&text));
     }
 
     /// Der Stift hat den Erkennungsbereich über dem Bildschirm verlassen.
@@ -302,7 +377,7 @@ impl App {
         }
         let dt = now() - self.last_pen_time;
         // „im Bereich“ verfällt zur Sicherheit, falls das Verlassen nicht gemeldet wurde
-        (self.pen_in_range && dt < 15_000.0) || dt < self.settings.palm_lock as f64 * 1000.0
+        (self.pen_in_range && dt < 4_000.0) || dt < self.settings.palm_lock as f64 * 1000.0
     }
 
     pub fn update_pen_badge(&mut self) {
