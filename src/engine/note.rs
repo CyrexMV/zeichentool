@@ -102,6 +102,8 @@ pub struct Page {
     pub bookmark: bool,
     /// Abgehakte Zeilen der Checkliste (Zeilenindizes)
     pub checks: Vec<u16>,
+    /// Seitentitel für das Inhaltsverzeichnis (leer = kein Eintrag)
+    pub title: String,
     /// nach `order` sortiert
     pub items: Vec<Item>,
     /// Laufzeit-Zähler für Zwischenspeicher (nicht gespeichert)
@@ -110,7 +112,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(id: u32, template: Template, paper: Color) -> Page {
-        Page { id, template, paper, bookmark: false, checks: Vec::new(), items: Vec::new(), version: 0 }
+        Page { id, template, paper, bookmark: false, checks: Vec::new(), title: String::new(), items: Vec::new(), version: 0 }
     }
 
     pub fn touch(&mut self) {
@@ -206,6 +208,37 @@ pub const COVERS: [(&str, &str, &str); 10] = [
     ("Minze", "#38ef7d", "#11998e"),
 ];
 
+/// Bereich auf einer Seite (für Lernkarten).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Region {
+    pub page: u32,
+    pub rect: Rect,
+}
+
+/// Lernkarte: Vorder- und Rückseite verweisen auf Bereiche im Notizbuch (immer aktuell).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Card {
+    pub id: u32,
+    pub front: Region,
+    pub back: Region,
+    /// Fach im Karteikasten (0 = neu/nicht gewusst … 4 = sicher)
+    pub level: u8,
+    pub right: u32,
+    pub wrong: u32,
+}
+
+impl Card {
+    pub fn answer(&mut self, known: bool) {
+        if known {
+            self.level = (self.level + 1).min(4);
+            self.right += 1;
+        } else {
+            self.level = 0;
+            self.wrong += 1;
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notebook {
     pub id: String,
@@ -217,11 +250,16 @@ pub struct Notebook {
     pub format: Format,
     pub pages: Vec<Page>,
     pub next_id: u32,
+    /// Ordner in der Bibliothek (leer = oberste Ebene)
+    pub folder: String,
+    /// Als Notizbuchvorlage gespeichert (erscheint nicht in der Bibliothek)
+    pub is_template: bool,
+    pub cards: Vec<Card>,
 }
 
 impl Notebook {
     pub fn new(id: String, title: &str, cover: u8, format: Format, template: Template, paper: Color, now: f64) -> Notebook {
-        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1 };
+        let mut nb = Notebook { id, title: title.to_string(), cover, favorite: false, created: now, modified: now, format, pages: Vec::new(), next_id: 1, folder: String::new(), is_template: false, cards: Vec::new() };
         let pid = nb.alloc_id();
         nb.pages.push(Page::new(pid, template, paper));
         nb
@@ -249,12 +287,50 @@ impl Notebook {
         Page::new(id, t, p)
     }
 
+    /// Übernimmt eine Seite aus einem anderen Notizbuch (neue IDs, Seitenformat bleibt das dieses Notizbuchs).
+    pub fn adopt_page(&mut self, src: &Page) -> Page {
+        let mut p = src.clone();
+        p.id = self.alloc_id();
+        for it in p.items.iter_mut() {
+            it.id = self.next_id;
+            self.next_id += 1;
+        }
+        p.touch();
+        p
+    }
+
+    /// Kopie dieses Notizbuchs mit neuer ID (für Vorlagen und „Duplizieren“).
+    pub fn copy_as(&self, id: String, title: &str, now: f64) -> Notebook {
+        let mut nb = self.clone();
+        nb.id = id;
+        nb.title = title.to_string();
+        nb.created = now;
+        nb.modified = now;
+        nb.favorite = false;
+        nb.is_template = false;
+        for c in nb.cards.iter_mut() {
+            c.level = 0;
+            c.right = 0;
+            c.wrong = 0;
+        }
+        nb
+    }
+
+    /// Lernkarten entfernen, deren Seite nicht mehr existiert.
+    pub fn prune_cards(&mut self) {
+        let ids: Vec<u32> = self.pages.iter().map(|p| p.id).collect();
+        self.cards.retain(|c| ids.contains(&c.front.page) && ids.contains(&c.back.page));
+    }
+
     /// Kopie einer Seite mit neuen IDs.
     pub fn duplicate_page(&mut self, index: usize) -> Page {
         let mut p = self.pages[index].clone();
         p.id = self.alloc_id();
         p.bookmark = false;
         p.checks.clear();
+        if !p.title.is_empty() {
+            p.title = format!("{} (Kopie)", p.title);
+        }
         for it in p.items.iter_mut() {
             it.id = self.next_id;
             self.next_id += 1;

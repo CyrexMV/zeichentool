@@ -9,6 +9,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 ## Funktionen
 
 **Bibliothek**
+- **Ordner**: anlegen, umbenennen, auflösen; Notizbücher per ⋯ → „In Ordner verschieben“; die Suche findet über alle Ordner
+- **Notizbuchvorlagen**: Notizbuch als Vorlage speichern (⋯ → „Als Vorlage speichern“) und neue Notizbücher daraus erstellen
 - Notizbücher mit farbigen Buch-Covern, Suche, Sortierung (zuletzt bearbeitet / Name / erstellt), Favoriten
 - Umbenennen, Cover ändern, Duplizieren, Löschen, Export – alles über das ⋯-Menü der Karte
 - Import von Backups (`.znote`), Bildern und alten Zeichnungen; die bisherige Zeichnung wird automatisch übernommen
@@ -30,6 +32,12 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Lasso**: einkreisen → verschieben, skalieren, umfärben, kopieren, ausschneiden, duplizieren, löschen, einfügen
 - **Text**-Felder (Größe, Farbe, fett), **Bilder** einfügen, **Laserpointer** zum Präsentieren
 - Rückgängig/Wiederholen (auch Zwei-/Drei-Finger-Tipp)
+- **Lineal & Geodreieck**: mit einem Finger verschieben, mit zwei drehen (rastet bei 0°/45°/90° ein); am Rand
+  entlang zeichnet der Stift exakt gerade Linien, mit cm-Skala, Winkelmesser und Längenanzeige
+- **Lernkarten**: Frage und Antwort mit dem Lasso markieren → „Lernkarte“; lernen mit Umdrehen und
+  Karteikasten (gewusst → nächstes Fach, sonst zurück); Karten zeigen immer den aktuellen Stand der Seite
+- **Inhaltsverzeichnis**: Seitentitel vergeben (⋯ → „Seitentitel“), Übersicht unter Seiten → „Inhalt“
+- **Seiten in andere Notizbücher** kopieren oder verschieben (⋯ → „Seite in anderes Notizbuch“)
 
 **S-Pen**
 - Druckempfindlichkeit, Pinselvorschau beim Schweben, niedrige Latenz (Zwischen- und Vorhersagepunkte)

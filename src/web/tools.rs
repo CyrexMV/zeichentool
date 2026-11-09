@@ -119,11 +119,18 @@ impl App {
                 }
             }
             Tool::Pen | Tool::Highlighter | Tool::Shape => {
+                // Am Lineal/Geodreieck entlang: Startpunkt auf die Kante legen
+                let (pen, color, width) = ink;
+                let half = width as f64 * 0.5 * ed.view.s() + 1.0;
+                let rule = ed.ruler.and_then(|r| r.snap(sx, sy, 34.0, half));
+                let (sx, sy) = match &rule {
+                    Some(seg) => super::ruler::project(seg, sx, sy),
+                    None => (sx, sy),
+                };
                 if let Some((i, x, y)) = ed.hit_page(sx, sy, 30.0) {
                     let page = ed.nb.pages[i].id;
-                    let (pen, color, width) = ink;
                     let p = Pt::new(x, y, pressure);
-                    let mut smoother = Smoother::new(if straight { 0.0 } else { smoothing });
+                    let mut smoother = Smoother::new(if straight || rule.is_some() { 0.0 } else { smoothing });
                     let first = smoother.push(p);
                     ed.op = Some(Op::Ink {
                         page,
@@ -137,6 +144,7 @@ impl App {
                         shape_tool: tool == Tool::Shape,
                         straight,
                         predicted: Vec::new(),
+                        rule,
                     });
                     ed.draw_live(None);
                 }
@@ -152,6 +160,19 @@ impl App {
         let Some(ed) = &mut self.ed else { return };
         let s = ed.view.s();
         let Some(op) = &ed.op else { return };
+        // Strich am Lineal: alle Punkte auf die Kante projizieren
+        type Samples = Vec<(f64, f64, f32)>;
+        let (pts, predicted): (Samples, Samples) = match op {
+            Op::Ink { rule: Some(seg), .. } => {
+                let pr = |v: &[(f64, f64, f32)]| v.iter().map(|&(x, y, p)| {
+                    let (a, b) = super::ruler::project(seg, x, y);
+                    (a, b, p)
+                }).collect();
+                (pr(pts), pr(predicted))
+            }
+            _ => (pts.to_vec(), predicted.to_vec()),
+        };
+        let (pts, predicted) = (&pts[..], &predicted[..]);
         let page_idx = match op {
             Op::Ink { page, .. } | Op::Erase { page, .. } | Op::Lasso { page, .. } => ed.page_index(*page),
             Op::MoveSel { .. } => ed.selection.as_ref().and_then(|sel| ed.page_index(sel.page)),

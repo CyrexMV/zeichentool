@@ -12,8 +12,8 @@ thread_local! {
 
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
-const POPS: [&str; 3] = ["pop-tool", "pop-more", "pop-card"];
-const MODALS: [&str; 5] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm"];
+const POPS: [&str; 5] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder"];
+const MODALS: [&str; 6] = ["modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -144,8 +144,67 @@ impl App {
             "nav-filter" => {
                 if let Some(ed) = &mut self.ed {
                     ed.nav_bookmarks = arg == "bm";
+                    ed.nav_toc = arg == "toc";
                 }
                 self.render_nav();
+            }
+            a if a.starts_with("folder-") => self.folder_action(a, arg, src),
+            "pick" => self.pick(arg),
+            "pick-mode" => {
+                self.pick_copy = arg == "copy";
+                App::mark_pick_mode(self.pick_copy);
+            }
+            "ruler-menu" => self.open_popover("pop-ruler", src),
+            "ruler" => {
+                self.close_popovers();
+                if let Some(ed) = &mut self.ed {
+                    ed.ruler = match arg {
+                        "ruler" => Some(super::ruler::Ruler::new(super::ruler::RulerKind::Ruler, ed.vw, ed.vh)),
+                        "triangle" => Some(super::ruler::Ruler::new(super::ruler::RulerKind::Triangle, ed.vw, ed.vh)),
+                        _ => None,
+                    };
+                    ed.dirty = true;
+                    let on = ed.ruler.is_some();
+                    set_class(&el("btn-ruler"), "active", on);
+                }
+                self.request_frame();
+            }
+            "study" => self.open_study(),
+            "study-close" => self.close_study(),
+            "study-home" => self.render_study_home(),
+            "study-start" => self.study_start(arg == "hard"),
+            "study-flip" => self.study_flip(),
+            "study-answer" => self.study_answer(arg == "right"),
+            "fc-del" => {
+                if let Ok(id) = arg.parse::<u32>() {
+                    self.delete_card(id);
+                }
+            }
+            "sel-card" => self.selection_to_card(),
+            "page-title" => {
+                if let Some(ed) = &self.ed {
+                    let i = ed.cur_page;
+                    let cur = ed.nb.pages[i].title.clone();
+                    let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-toc\"/></svg></div>";
+                    let text = format!("Titel für <b>Seite {}</b> – erscheint im Inhaltsverzeichnis (Seitenübersicht → Inhalt). Leer lassen zum Entfernen.", i + 1);
+                    self.open_dialog(visual, "Seitentitel", &text, "Speichern", false, Some(&cur), Pending::PageTitle(i));
+                }
+            }
+            "page-to" => self.open_page_to(),
+            "save-template" => {
+                let cur = self.ed.as_ref().map(|e| e.nb.title.clone()).unwrap_or_default();
+                let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-template\"/></svg></div>";
+                self.open_dialog(visual, "Als Vorlage speichern", "Neue Notizbücher können dann mit diesen Seiten, Vorlagen und Lernkarten starten. Name der Vorlage:", "Speichern", false, Some(&cur), Pending::SaveTemplate(None));
+            }
+            "new-from" => {
+                self.new_from = if arg.is_empty() { None } else { Some(arg.to_string()) };
+                self.refresh_new_dialog();
+            }
+            "from-del" => {
+                let name = self.library.iter().find(|m| m.id == arg).map(|m| m.title.clone()).unwrap_or_default();
+                let visual = "<div class=\"dlg-icon danger\"><svg><use href=\"#i-template\"/></svg></div>";
+                let text = format!("Die Vorlage <b>„{}“</b> wird gelöscht. Bereits erstellte Notizbücher bleiben erhalten.", esc(&name));
+                self.open_dialog(visual, "Vorlage löschen?", &text, "Löschen", true, None, Pending::DeleteTemplate(arg.to_string()));
             }
             "nav-page" => {
                 if let Some(ed) = &mut self.ed {
@@ -700,7 +759,13 @@ impl App {
 
     pub fn update_pill(&mut self) {
         let Some(ed) = &self.ed else { return };
-        let label = format!("{} / {}", ed.cur_page + 1, ed.nb.pages.len());
+        let title = &ed.nb.pages[ed.cur_page].title;
+        let label = if title.is_empty() {
+            format!("{} / {}", ed.cur_page + 1, ed.nb.pages.len())
+        } else {
+            let short: String = title.chars().take(24).collect();
+            format!("{} / {} · {}", ed.cur_page + 1, ed.nb.pages.len(), short)
+        };
         let zoom = format!("{:.0}%", ed.zoom_percent());
         let key = format!("{}|{}", label, zoom);
         let changed = PILL.with(|p| {
@@ -731,20 +796,42 @@ impl App {
 
     pub fn render_nav(&mut self) {
         let Some(ed) = &mut self.ed else { return };
-        set_class(&el("nav-all"), "active", !ed.nav_bookmarks);
+        set_class(&el("nav-all"), "active", !ed.nav_bookmarks && !ed.nav_toc);
         set_class(&el("nav-bm"), "active", ed.nav_bookmarks);
+        set_class(&el("nav-toc"), "active", ed.nav_toc);
         let mut html = String::new();
+        if ed.nav_toc {
+            for (i, p) in ed.nb.pages.iter().enumerate() {
+                if p.title.is_empty() {
+                    continue;
+                }
+                html.push_str(&format!(
+                    "<button class=\"toc-item{}\" data-act=\"nav-page\" data-arg=\"{}\"><span class=\"toc-num\">{}</span><span class=\"toc-title\">{}</span></button>",
+                    if i == ed.cur_page { " current" } else { "" },
+                    i,
+                    i + 1,
+                    esc(&p.title)
+                ));
+            }
+            if html.is_empty() {
+                html = "<p class=\"muted nav-empty\">Noch kein Inhaltsverzeichnis.<br><br>Gib Seiten einen Titel: ⋯ → „Seitentitel“.</p>".into();
+            }
+            html.push_str("<div class=\"nav-actions\"><button class=\"btn small\" data-act=\"page-title\">Titel für aktuelle Seite …</button></div>");
+            el("nav-list").set_inner_html(&html);
+            return;
+        }
         for (i, p) in ed.nb.pages.iter().enumerate() {
             if ed.nav_bookmarks && !p.bookmark {
                 continue;
             }
             html.push_str(&format!(
-                "<button class=\"nav-item{}\" data-act=\"nav-page\" data-arg=\"{}\"><canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}</span></button>",
+                "<button class=\"nav-item{}\" data-act=\"nav-page\" data-arg=\"{}\"><canvas data-page=\"{}\"></canvas><span class=\"nav-num\">{}{}{}</span></button>",
                 if i == ed.cur_page { " current" } else { "" },
                 i,
                 p.id,
                 i + 1,
-                if p.bookmark { " <svg class=\"bm\"><use href=\"#i-bookmark\"/></svg>" } else { "" }
+                if p.bookmark { " <svg class=\"bm\"><use href=\"#i-bookmark\"/></svg>" } else { "" },
+                if p.title.is_empty() { String::new() } else { format!(" · {}", esc(&p.title)) }
             ));
         }
         if html.is_empty() {
@@ -768,7 +855,7 @@ impl App {
     }
 
     pub fn close_modals(&mut self) {
-        if !el("modal-confirm").class_list().contains("hidden") {
+        if !el("modal-confirm").class_list().contains("hidden") || !el("modal-pick").class_list().contains("hidden") {
             self.pending = None;
         }
         for m in MODALS {
@@ -817,12 +904,36 @@ impl App {
             .map(|(i, (name, a, b))| format!("<button class=\"cover-dot\" data-act=\"new-cover\" data-arg=\"{}\" title=\"{}\" style=\"background:linear-gradient(135deg,{},{})\"></button>", i, name, a, b))
             .collect();
         el("new-covers").set_inner_html(&covers);
+        self.new_from = None;
         self.refresh_new_dialog();
         self.open_modal("modal-new");
         let _ = input_el("new-title").focus();
     }
 
     fn refresh_new_dialog(&mut self) {
+        // Eigene Notizbuchvorlagen
+        let templates: Vec<(String, String, u8, u32)> = self.library.iter().filter(|m| m.is_template).map(|m| (m.id.clone(), m.title.clone(), m.cover, m.pages)).collect();
+        show("new-from-wrap", !templates.is_empty());
+        if self.new_from.as_ref().map(|id| !templates.iter().any(|t| &t.0 == id)).unwrap_or(false) {
+            self.new_from = None;
+        }
+        let mut from = format!(
+            "<button class=\"from-item{}\" data-act=\"new-from\" data-arg=\"\"><span class=\"mini blank\"><svg><use href=\"#i-plus\"/></svg></span><span>Leer</span></button>",
+            if self.new_from.is_none() { " active" } else { "" }
+        );
+        for (id, title, cover, pages) in &templates {
+            from.push_str(&format!(
+                "<button class=\"from-item{}\" data-act=\"new-from\" data-arg=\"{id}\" title=\"{title} · {pages} Seiten\"><span class=\"mini\" style=\"{css}\"><svg><use href=\"#i-template\"/></svg></span><span>{title}</span><span class=\"del\" data-act=\"from-del\" data-arg=\"{id}\" title=\"Vorlage löschen\"><svg><use href=\"#i-close\"/></svg></span></button>",
+                if self.new_from.as_deref() == Some(id.as_str()) { " active" } else { "" },
+                id = esc(id),
+                title = esc(title),
+                pages = pages,
+                css = super::library::cover_css(*cover)
+            ));
+        }
+        el("new-from").set_inner_html(&from);
+        set_class(&el("new-paper-section"), "section-off", self.new_from.is_some());
+        set_class(&el("new-format"), "section-off", self.new_from.is_some());
         let n = &self.new_nb;
         el("new-tpl").set_inner_html(&Self::tpl_tiles("new", n.template.kind));
         el("new-paper").set_inner_html(&Self::paper_dots("new", n.paper));
@@ -865,9 +976,21 @@ impl App {
             }
             _ => Format::A4_PORTRAIT,
         };
-        let nb = Notebook::new(super::storage::new_id(), &title, n.cover, format, n.template, n.paper, wall_clock());
+        let (cover, template, paper) = (n.cover, n.template, n.paper);
+        let folder = self.folder.clone().unwrap_or_default();
         self.close_modals();
         self.save_settings();
+        if let Some(tid) = self.new_from.clone() {
+            self.with_stored(tid, move |a, t| {
+                let mut nb = t.copy_as(super::storage::new_id(), &title, wall_clock());
+                nb.cover = cover;
+                nb.folder = folder;
+                a.add_notebook(nb, true);
+            });
+            return;
+        }
+        let mut nb = Notebook::new(super::storage::new_id(), &title, cover, format, template, paper, wall_clock());
+        nb.folder = folder;
         self.add_notebook(nb, true);
     }
 

@@ -12,6 +12,13 @@ pub struct TouchPt {
     pub sy: f64,
 }
 
+/// Finger, die gerade das Lineal halten.
+pub struct RulerGrab {
+    pub base: super::ruler::Ruler,
+    pub anchors: Vec<(i32, f64, f64)>,
+    pub cur: Vec<(i32, f64, f64)>,
+}
+
 pub struct Gesture {
     pub origin: (f64, f64, f64),
     pub base: (f64, f64, f64),
@@ -192,6 +199,9 @@ impl App {
             }
             "touch" => self.touch_up(e, cancel),
             _ => {
+                if self.ruler_up(id) {
+                    return;
+                }
                 if self.mouse_pan.map(|m| m.0) == Some(id) {
                     self.mouse_pan = None;
                 } else if self.op_pointer() == Some(id) {
@@ -429,11 +439,16 @@ impl App {
 
     fn touch_down(&mut self, e: &PointerEvent) {
         let t = now();
+        let (x, y) = client_xy(e);
+        let id = e.pointer_id();
+        // Lineal anfassen geht immer – auch wenn der Stift gerade in der Nähe ist
+        if self.ruler_down(id, x, y) {
+            let _ = el("editor").set_pointer_capture(id);
+            return;
+        }
         if self.palm_locked() || e.width() > 42 || e.height() > 42 {
             return;
         }
-        let (x, y) = client_xy(e);
-        let id = e.pointer_id();
         let _ = el("editor").set_pointer_capture(id);
         self.momentum = None;
         self.touches.retain(|p| p.id != id);
@@ -478,6 +493,9 @@ impl App {
     fn touch_move(&mut self, e: &PointerEvent) {
         let id = e.pointer_id();
         let (x, y) = client_xy(e);
+        if self.ruler_move(id, x, y) {
+            return;
+        }
         let Some(tp) = self.touches.iter_mut().find(|p| p.id == id) else { return };
         tp.x = x;
         tp.y = y;
@@ -541,6 +559,9 @@ impl App {
 
     fn touch_up(&mut self, e: &PointerEvent, cancel: bool) {
         let id = e.pointer_id();
+        if self.ruler_up(id) {
+            return;
+        }
         let was = self.touches.len();
         self.touches.retain(|p| p.id != id);
         if was == self.touches.len() {
@@ -620,12 +641,88 @@ impl App {
         true
     }
 
+    // ----- Lineal / Geodreieck -----
+
+    fn ruler_down(&mut self, id: i32, x: f64, y: f64) -> bool {
+        let Some(r) = self.ed.as_ref().and_then(|e| e.ruler) else { return false };
+        match &mut self.ruler_grab {
+            Some(g) => {
+                if g.cur.len() >= 2 {
+                    return true;
+                }
+                g.cur.push((id, x, y));
+                g.base = r;
+                g.anchors = g.cur.clone();
+            }
+            None => {
+                if !r.contains(x, y) {
+                    return false;
+                }
+                self.ruler_grab = Some(RulerGrab { base: r, anchors: vec![(id, x, y)], cur: vec![(id, x, y)] });
+            }
+        }
+        self.momentum = None;
+        true
+    }
+
+    fn ruler_move(&mut self, id: i32, x: f64, y: f64) -> bool {
+        let Some(g) = &mut self.ruler_grab else { return false };
+        let Some(c) = g.cur.iter_mut().find(|c| c.0 == id) else { return false };
+        c.1 = x;
+        c.2 = y;
+        let mut r = g.base;
+        if g.anchors.len() == 1 || g.cur.len() == 1 {
+            let (_, ax, ay) = g.anchors[0];
+            let (_, qx, qy) = g.cur[0];
+            r.cx += qx - ax;
+            r.cy += qy - ay;
+        } else {
+            let (p1, p2) = (g.anchors[0], g.anchors[1]);
+            let (q1, q2) = (g.cur[0], g.cur[1]);
+            let d0 = (p2.2 - p1.2).atan2(p2.1 - p1.1);
+            let d1 = (q2.2 - q1.2).atan2(q2.1 - q1.1);
+            let angle = super::ruler::Ruler::snap_angle(g.base.angle + (d1 - d0));
+            let da = angle - g.base.angle;
+            let (pm, qm) = (((p1.1 + p2.1) * 0.5, (p1.2 + p2.2) * 0.5), ((q1.1 + q2.1) * 0.5, (q1.2 + q2.2) * 0.5));
+            let (s, c) = da.sin_cos();
+            let (vx, vy) = (g.base.cx - pm.0, g.base.cy - pm.1);
+            r.cx = qm.0 + vx * c - vy * s;
+            r.cy = qm.1 + vx * s + vy * c;
+            r.angle = angle;
+        }
+        if let Some(ed) = &mut self.ed {
+            ed.ruler = Some(r);
+            ed.dirty = true;
+        }
+        self.request_frame();
+        true
+    }
+
+    fn ruler_up(&mut self, id: i32) -> bool {
+        let Some(g) = &mut self.ruler_grab else { return false };
+        if !g.cur.iter().any(|c| c.0 == id) {
+            return false;
+        }
+        g.cur.retain(|c| c.0 != id);
+        if g.cur.is_empty() {
+            self.ruler_grab = None;
+        } else if let Some(r) = self.ed.as_ref().and_then(|e| e.ruler) {
+            g.base = r;
+            g.anchors = g.cur.clone();
+        }
+        self.sync_ui_rects();
+        true
+    }
+
     // ----- Maus -----
 
     fn mouse_down(&mut self, e: &PointerEvent) {
         let id = e.pointer_id();
         let (x, y) = client_xy(e);
         let _ = el("editor").set_pointer_capture(id);
+        if e.button() == 0 && self.ruler_down(id, x, y) {
+            return;
+        }
         if e.button() == 1 || (e.button() == 0 && self.space_down) {
             self.mouse_pan = Some((id, x, y));
             return;
@@ -637,6 +734,9 @@ impl App {
 
     fn mouse_move(&mut self, e: &PointerEvent) {
         let (x, y) = client_xy(e);
+        if self.ruler_move(e.pointer_id(), x, y) {
+            return;
+        }
         if let Some((id, lx, ly)) = self.mouse_pan {
             if id == e.pointer_id() {
                 if let Some(ed) = &mut self.ed {

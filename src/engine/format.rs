@@ -2,14 +2,15 @@
 
 use super::color::Color;
 use super::ink::{PenKind, Pt, Stroke};
-use super::note::{hash_bytes, Content, Format, ImageItem, Item, Notebook, Page, TextBox};
+use super::geom::Rect;
+use super::note::{hash_bytes, Card, Content, Format, ImageItem, Item, Notebook, Page, Region, TextBox};
 use super::paper::{Template, TemplateKind};
 use miniz_oxide::deflate::compress_to_vec;
 use miniz_oxide::inflate::decompress_to_vec;
 use std::rc::Rc;
 
 const MAGIC: &[u8; 4] = b"ZNB1";
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 struct W(Vec<u8>);
 
@@ -92,6 +93,8 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
     w.f32(nb.format.w);
     w.f32(nb.format.h);
     w.u32(nb.next_id);
+    w.str(&nb.folder);
+    w.u8(nb.is_template as u8);
     w.u32(nb.pages.len() as u32);
     for p in &nb.pages {
         w.u32(p.id);
@@ -104,6 +107,7 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
         for c in &p.checks {
             w.0.extend_from_slice(&c.to_le_bytes());
         }
+        w.str(&p.title);
         w.u32(p.items.len() as u32);
         for it in &p.items {
             match &it.content {
@@ -144,6 +148,20 @@ pub fn save_notebook(nb: &Notebook) -> Vec<u8> {
             }
         }
     }
+    w.u32(nb.cards.len() as u32);
+    for c in &nb.cards {
+        w.u32(c.id);
+        for r in [&c.front, &c.back] {
+            w.u32(r.page);
+            w.f32(r.rect.x0);
+            w.f32(r.rect.y0);
+            w.f32(r.rect.x1);
+            w.f32(r.rect.y1);
+        }
+        w.u8(c.level);
+        w.u32(c.right);
+        w.u32(c.wrong);
+    }
     let mut out = Vec::with_capacity(w.0.len() / 3 + 16);
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&VERSION.to_le_bytes());
@@ -169,6 +187,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
     let modified = r.f64()?;
     let format = Format { w: r.f32()?.clamp(50.0, 5000.0), h: r.f32()?.clamp(50.0, 5000.0) };
     let next_id = r.u32()?;
+    let (folder, is_template) = if version >= 3 { (r.str()?, r.u8()? != 0) } else { (String::new(), false) };
     let np = r.u32()? as usize;
     let mut pages = Vec::with_capacity(np.min(10_000));
     let mut max_id = 0;
@@ -187,6 +206,7 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
                 checks.push(u16::from_le_bytes([b[0], b[1]]));
             }
         }
+        let title = if version >= 3 { r.str()? } else { String::new() };
         let ni = r.u32()? as usize;
         let mut items = Vec::with_capacity(ni.min(100_000));
         for _ in 0..ni {
@@ -218,12 +238,29 @@ pub fn load_notebook(bytes: &[u8]) -> Result<Notebook, String> {
             items.push(Item { id, order, content });
         }
         items.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap_or(std::cmp::Ordering::Equal));
-        pages.push(Page { id: pid, template, paper, bookmark, checks, items, version: 1 });
+        pages.push(Page { id: pid, template, paper, bookmark, checks, title, items, version: 1 });
     }
     if pages.is_empty() {
         return Err("Notizbuch enthält keine Seiten".into());
     }
-    Ok(Notebook { id, title, cover, favorite, created, modified, format, pages, next_id: next_id.max(max_id + 1) })
+    let mut cards = Vec::new();
+    if version >= 3 {
+        let nc = r.u32()? as usize;
+        for _ in 0..nc.min(100_000) {
+            let cid = r.u32()?;
+            max_id = max_id.max(cid);
+            let mut reg = || -> Result<Region, String> {
+                let page = r.u32()?;
+                Ok(Region { page, rect: Rect::new(r.f32()?, r.f32()?, r.f32()?, r.f32()?) })
+            };
+            let front = reg()?;
+            let back = reg()?;
+            cards.push(Card { id: cid, front, back, level: r.u8()?.min(4), right: r.u32()?, wrong: r.u32()? });
+        }
+    }
+    let mut nb = Notebook { id, title, cover, favorite, created, modified, format, pages, next_id: next_id.max(max_id + 1), folder, is_template, cards };
+    nb.prune_cards();
+    Ok(nb)
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +279,8 @@ pub struct NoteMeta {
     pub pages: u32,
     pub w: f32,
     pub h: f32,
+    pub folder: String,
+    pub is_template: bool,
 }
 
 impl NoteMeta {
@@ -256,6 +295,8 @@ impl NoteMeta {
             pages: nb.pages.len() as u32,
             w: nb.format.w,
             h: nb.format.h,
+            folder: nb.folder.clone(),
+            is_template: nb.is_template,
         }
     }
 }
@@ -266,7 +307,7 @@ fn clean(s: &str) -> String {
 
 pub fn save_library(list: &[NoteMeta]) -> String {
     list.iter()
-        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h))
+        .map(|m| format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", clean(&m.id), clean(&m.title), m.cover, m.favorite as u8, m.created, m.modified, m.pages, m.w, m.h, clean(&m.folder), m.is_template as u8))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -288,6 +329,8 @@ pub fn load_library(s: &str) -> Vec<NoteMeta> {
                 pages: f[6].parse().unwrap_or(1),
                 w: f[7].parse().unwrap_or(595.0),
                 h: f[8].parse().unwrap_or(842.0),
+                folder: f.get(9).map(|x| x.to_string()).unwrap_or_default(),
+                is_template: f.get(10) == Some(&"1"),
             })
         })
         .collect()
@@ -411,6 +454,10 @@ mod tests {
         nb.next_id = id + 3;
         nb.pages[0].bookmark = true;
         nb.pages[0].checks = vec![0, 3];
+        nb.pages[0].title = "Kapitel 1".into();
+        nb.folder = "Schule".into();
+        nb.cards.push(Card { id: 99, front: Region { page: nb.pages[0].id, rect: Rect::new(1.0, 2.0, 30.0, 40.0) }, back: Region { page: nb.pages[0].id, rect: Rect::new(5.0, 50.0, 60.0, 90.0) }, level: 2, right: 3, wrong: 1 });
+        nb.next_id = nb.next_id.max(100);
         let bytes = save_notebook(&nb);
         let mut back = load_notebook(&bytes).unwrap();
         back.pages[0].version = nb.pages[0].version;
@@ -420,11 +467,16 @@ mod tests {
 
     #[test]
     fn library_roundtrip() {
-        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0 };
+        let m = NoteMeta { id: "a".into(), title: "Ti\ttel".into(), cover: 2, favorite: true, created: 1.0, modified: 2.0, pages: 3, w: 595.0, h: 842.0, folder: "Schule".into(), is_template: true };
         let back = load_library(&save_library(&[m.clone()]));
         assert_eq!(back[0].title, "Ti tel");
         assert_eq!(back[0].pages, 3);
         assert!(back[0].favorite);
+        assert_eq!(back[0].folder, "Schule");
+        assert!(back[0].is_template);
+        // alte Zeilen ohne Ordner bleiben lesbar
+        let old = load_library("x\tAlt\t0\t0\t1\t2\t1\t595\t842");
+        assert_eq!(old[0].folder, "");
     }
 
     #[test]

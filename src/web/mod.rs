@@ -4,6 +4,8 @@ mod editor;
 mod input;
 mod library;
 mod render;
+mod ruler;
+mod study;
 mod storage;
 mod tools;
 mod ui;
@@ -17,7 +19,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{AddEventListenerOptions, Event, EventTarget, HtmlElement, HtmlImageElement, HtmlInputElement};
 
 pub use editor::Editor;
-pub use input::{Gesture, TouchPt};
+pub use input::{Gesture, RulerGrab, TouchPt};
 
 // ---------------------------------------------------------------------------
 // Globale App und DOM-Helfer
@@ -325,6 +327,15 @@ pub enum Pending {
     DeleteNotebook(String),
     RenameNotebook(String),
     DeletePage(usize),
+    NewFolder,
+    RenameFolder(String),
+    DeleteFolder(String),
+    PageTitle(usize),
+    /// Notizbuch (ID) oder – bei `None` – das geöffnete Notizbuch als Vorlage speichern
+    SaveTemplate(Option<String>),
+    DeleteTemplate(String),
+    MoveToFolder(String),
+    PageTo(usize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -381,6 +392,17 @@ pub struct App {
     pub dark: bool,
     pub last_ui_rects: String,
     pub pending: Option<Pending>,
+    pub ruler_grab: Option<RulerGrab>,
+    /// Lernkarten-Sitzung
+    pub study: Option<study::Session>,
+    /// Ordner, der in der Bibliothek gerade geöffnet ist
+    pub folder: Option<String>,
+    /// Alle Ordnernamen
+    pub folders: Vec<String>,
+    /// Ausgewählte Notizbuchvorlage im Neu-Dialog
+    pub new_from: Option<String>,
+    /// Modus im Auswahldialog: Seite kopieren statt verschieben
+    pub pick_copy: bool,
 }
 
 impl App {
@@ -423,6 +445,12 @@ impl App {
             dark: false,
             last_ui_rects: String::new(),
             pending: None,
+            ruler_grab: None,
+            study: None,
+            folder: None,
+            folders: Vec::new(),
+            new_from: None,
+            pick_copy: true,
         }
     }
 

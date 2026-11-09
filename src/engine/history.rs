@@ -10,11 +10,12 @@ pub struct PageMeta {
     pub paper: Color,
     pub bookmark: bool,
     pub checks: Vec<u16>,
+    pub title: String,
 }
 
 impl PageMeta {
     pub fn of(p: &Page) -> PageMeta {
-        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone() }
+        PageMeta { template: p.template, paper: p.paper, bookmark: p.bookmark, checks: p.checks.clone(), title: p.title.clone() }
     }
 
     fn apply(&self, p: &mut Page) {
@@ -22,6 +23,7 @@ impl PageMeta {
         p.paper = self.paper;
         p.bookmark = self.bookmark;
         p.checks = self.checks.clone();
+        p.title = self.title.clone();
         p.touch();
     }
 }

@@ -416,6 +416,10 @@ impl Editor {
                 ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
             }
         }
+        // Lineal / Geodreieck
+        if let Some(r) = self.ruler {
+            r.draw(&ctx, dpr, 2.8346 * s, dark);
+        }
         // ungenutzte Seitenbilder freigeben
         if self.bmps.len() > 8 {
             let keep: Vec<u32> = (first..=last).filter_map(|i| self.nb.pages.get(i).map(|p| p.id)).collect();
@@ -443,8 +447,22 @@ impl Editor {
         self.clear_live();
         let ctx = &self.lctx;
         match &self.op {
-            Some(Op::Ink { page, stroke, predicted, .. }) => {
+            Some(Op::Ink { page, stroke, predicted, rule, .. }) => {
                 let Some(i) = self.page_index(*page) else { return };
+                // Länge der Linie am Lineal anzeigen
+                if let (Some(_), Some(a), Some(b)) = (rule, stroke.pts.first(), stroke.pts.last()) {
+                    let cm = (((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt() * 0.035278) as f64;
+                    let (lx, ly) = self.page_to_screen(i, b.x, b.y);
+                    ctx.set_transform(self.dpr, 0.0, 0.0, self.dpr, 0.0, 0.0).ok();
+                    let label = format!("{:.1} cm", cm).replace('.', ",");
+                    ctx.set_font("700 13px Inter, system-ui, sans-serif");
+                    ctx.set_fill_style_str("rgba(20,22,32,.88)");
+                    ctx.begin_path();
+                    let _ = ctx.round_rect_with_f64(lx + 14.0, ly - 40.0, 70.0, 26.0, 13.0);
+                    ctx.fill();
+                    ctx.set_fill_style_str("#ffffff");
+                    let _ = ctx.fill_text(&label, lx + 24.0, ly - 22.5);
+                }
                 self.live_xf(i);
                 ctx.save();
                 ctx.begin_path();

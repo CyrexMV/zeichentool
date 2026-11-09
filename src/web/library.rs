@@ -27,7 +27,15 @@ impl App {
     pub fn render_library(&mut self) {
         self.refresh_lib_controls();
         let q = self.lib_query.clone();
-        let mut list: Vec<&NoteMeta> = self.library.iter().filter(|m| (!self.lib_fav || m.favorite) && (q.is_empty() || m.title.to_lowercase().contains(&q))).collect();
+        let searching = !q.is_empty();
+        let folder = self.folder.clone();
+        let mut list: Vec<&NoteMeta> = self
+            .library
+            .iter()
+            .filter(|m| !m.is_template)
+            .filter(|m| !self.lib_fav || m.favorite)
+            .filter(|m| if searching { m.title.to_lowercase().contains(&q) } else { m.folder == folder.clone().unwrap_or_default() })
+            .collect();
         match self.lib_sort.as_str() {
             "title" => list.sort_by_key(|m| m.title.to_lowercase()),
             "created" => list.sort_by(|a, b| b.created.partial_cmp(&a.created).unwrap_or(std::cmp::Ordering::Equal)),
@@ -38,6 +46,11 @@ impl App {
         let mut html = String::new();
         for m in &list {
             let ratio = format!("{} / {}", m.w, m.h);
+            let in_folder = if searching && !m.folder.is_empty() {
+                format!("<span class=\"in-folder\"><svg><use href=\"#i-folder\"/></svg>{}</span>", esc(&m.folder))
+            } else {
+                String::new()
+            };
             html.push_str(&format!(
                 "<div class=\"card\" data-act=\"card\" data-arg=\"{id}\">\
                    <div class=\"cover\" style=\"{css};aspect-ratio:{ratio}\">\
@@ -46,7 +59,7 @@ impl App {
                      {star}\
                      <button class=\"card-more\" data-act=\"card-menu\" data-arg=\"{id}\" title=\"Optionen\"><svg><use href=\"#i-more\"/></svg></button>\
                    </div>\
-                   <div class=\"card-meta\"><b>{title}</b><small>{date}</small></div>\
+                   <div class=\"card-meta\"><b>{title}</b><small>{date}</small>{in_folder}</div>\
                  </div>",
                 id = esc(&m.id),
                 css = cover_css(m.cover),
@@ -56,15 +69,40 @@ impl App {
                 pw = if m.pages == 1 { "Seite" } else { "Seiten" },
                 star = if m.favorite { "<svg class=\"cover-star\"><use href=\"#i-star\"/></svg>" } else { "" },
                 date = date_label(m.modified),
+                in_folder = in_folder,
             ));
         }
+        // Ordner (nur auf oberster Ebene und ohne Suche)
+        let mut fhtml = String::new();
+        if folder.is_none() && !searching {
+            for f in &self.folders {
+                let n = self.library.iter().filter(|m| !m.is_template && &m.folder == f).count();
+                fhtml.push_str(&format!(
+                    "<div class=\"folder-card\" data-act=\"folder-open\" data-arg=\"{f}\"><div class=\"folder-ico\"><svg><use href=\"#i-folder\"/></svg></div><div><b>{f}</b><small>{n} {nw}</small></div><button class=\"folder-more\" data-act=\"folder-menu\" data-arg=\"{f}\" title=\"Ordner-Optionen\"><svg><use href=\"#i-more\"/></svg></button></div>",
+                    f = esc(f),
+                    n = n,
+                    nw = if n == 1 { "Notizbuch" } else { "Notizbücher" }
+                ));
+            }
+        }
+        el("lib-folders").set_inner_html(&fhtml);
+        show("lib-crumb", folder.is_some() && !searching);
+        set_text("lib-crumb-name", folder.as_deref().unwrap_or(""));
         el("lib-grid").set_inner_html(&html);
-        let total = self.library.len();
+        let total = self.library.iter().filter(|m| !m.is_template).count();
         set_text("lib-count", &format!("{} {}", total, if total == 1 { "Notizbuch" } else { "Notizbücher" }));
-        show("lib-empty", total == 0);
-        show("lib-grid", total > 0);
-        if total > 0 && list.is_empty() {
-            el("lib-grid").set_inner_html("<p class=\"muted lib-none\">Keine Treffer</p>");
+        let empty = total == 0 && self.folders.is_empty();
+        show("lib-empty", empty);
+        show("lib-grid", !empty);
+        if !empty && list.is_empty() {
+            let msg = if searching {
+                "Keine Treffer"
+            } else if folder.is_some() {
+                "Dieser Ordner ist leer – lege hier ein Notizbuch an oder verschiebe eines über ⋯ → „In Ordner verschieben“."
+            } else {
+                ""
+            };
+            el("lib-grid").set_inner_html(&format!("<p class=\"muted lib-none\">{}</p>", msg));
         }
     }
 
@@ -144,6 +182,12 @@ impl App {
                 self.modify_stored(id, move |nb| nb.cover = n as u8);
             }
             "card-dup" => self.duplicate_stored(id),
+            "card-folder" => self.pick_folder(id),
+            "card-template" => {
+                let cur = self.library.iter().find(|m| m.id == id).map(|m| m.title.clone()).unwrap_or_default();
+                let visual = self.cover_visual(&id, "accent", "i-template");
+                self.open_dialog(&visual, "Als Vorlage speichern", "Neue Notizbücher können dann mit diesen Seiten, Vorlagen und Lernkarten starten. Name der Vorlage:", "Speichern", false, Some(&cur), Pending::SaveTemplate(Some(id)));
+            }
             "card-pdf" => self.with_stored(id, |a, nb| a.export_notebook_pdf(&nb, None)),
             "card-znote" => self.with_stored(id, |a, nb| a.export_znote(Some(&nb))),
             "card-delete" => {
@@ -222,7 +266,235 @@ impl App {
                 }
                 self.after_pages_change();
             }
+            Some(Pending::NewFolder) => {
+                let name: String = value.trim().chars().take(40).collect();
+                if name.is_empty() {
+                    return;
+                }
+                if !self.folders.contains(&name) {
+                    self.folders.push(name.clone());
+                    self.folders.sort_by_key(|f| f.to_lowercase());
+                    self.persist_folders();
+                }
+                self.folder = Some(name);
+                self.render_library();
+            }
+            Some(Pending::RenameFolder(old)) => {
+                let name: String = value.trim().chars().take(40).collect();
+                if name.is_empty() || name == old {
+                    return;
+                }
+                for f in self.folders.iter_mut() {
+                    if *f == old {
+                        *f = name.clone();
+                    }
+                }
+                self.folders.dedup();
+                self.persist_folders();
+                let ids: Vec<String> = self.library.iter().filter(|m| m.folder == old).map(|m| m.id.clone()).collect();
+                for id in ids {
+                    let n = name.clone();
+                    self.modify_stored(id, move |nb| nb.folder = n);
+                }
+                if self.folder.as_deref() == Some(&old) {
+                    self.folder = Some(name);
+                }
+                self.render_library();
+            }
+            Some(Pending::DeleteFolder(name)) => {
+                self.folders.retain(|f| *f != name);
+                self.persist_folders();
+                let ids: Vec<String> = self.library.iter().filter(|m| m.folder == name).map(|m| m.id.clone()).collect();
+                for id in ids {
+                    self.modify_stored(id, |nb| nb.folder.clear());
+                }
+                if self.folder.as_deref() == Some(&name) {
+                    self.folder = None;
+                }
+                self.render_library();
+                self.toast("Ordner aufgelöst – die Notizbücher liegen jetzt in der Übersicht");
+            }
+            Some(Pending::PageTitle(i)) => {
+                let t: String = value.trim().chars().take(80).collect();
+                if let Some(ed) = &mut self.ed {
+                    ed.set_page_meta(i, |m| m.title = t);
+                }
+                self.after_pages_change();
+            }
+            Some(Pending::SaveTemplate(id)) => {
+                let name: String = value.trim().chars().take(80).collect();
+                let name = if name.is_empty() { "Vorlage".to_string() } else { name };
+                let make = move |a: &mut App, nb: Notebook| {
+                    let mut t = nb.copy_as(super::storage::new_id(), &name, wall_clock());
+                    t.is_template = true;
+                    t.folder.clear();
+                    a.add_notebook(t, false);
+                    a.toast("Als Notizbuchvorlage gespeichert – zu finden unter „Neues Notizbuch“");
+                };
+                match id {
+                    Some(id) => self.with_stored(id, make),
+                    None => {
+                        if let Some(nb) = self.ed.as_ref().map(|e| e.nb.clone()) {
+                            make(self, nb);
+                        }
+                    }
+                }
+            }
+            Some(Pending::DeleteTemplate(id)) => {
+                self.delete_stored(&id);
+                if self.new_from.as_deref() == Some(&id) {
+                    self.new_from = None;
+                }
+                self.toast("Vorlage gelöscht");
+            }
+            Some(Pending::MoveToFolder(_)) | Some(Pending::PageTo(_)) => {}
             None => {}
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Ordner
+    // -----------------------------------------------------------------------
+
+    pub fn folder_action(&mut self, act: &str, arg: &str, src: &web_sys::Element) {
+        match act {
+            "folder-new" => {
+                let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-folder-plus\"/></svg></div>";
+                self.open_dialog(visual, "Neuer Ordner", "Wie soll der Ordner heißen?", "Erstellen", false, Some(""), Pending::NewFolder);
+            }
+            "folder-open" => {
+                self.folder = Some(arg.to_string());
+                self.render_library();
+            }
+            "folder-up" => {
+                self.folder = None;
+                self.render_library();
+            }
+            "folder-menu" => {
+                self.ctx_target = Some(arg.to_string());
+                self.open_popover("pop-folder", src);
+            }
+            "folder-rename" => {
+                let Some(name) = self.ctx_target.clone() else { return };
+                let visual = "<div class=\"dlg-icon accent\"><svg><use href=\"#i-folder\"/></svg></div>";
+                self.open_dialog(visual, "Ordner umbenennen", "Neuer Name für den Ordner:", "Speichern", false, Some(&name), Pending::RenameFolder(name.clone()));
+            }
+            "folder-delete" => {
+                let Some(name) = self.ctx_target.clone() else { return };
+                let n = self.library.iter().filter(|m| !m.is_template && m.folder == name).count();
+                let visual = "<div class=\"dlg-icon danger\"><svg><use href=\"#i-folder\"/></svg></div>";
+                let text = format!("Der Ordner <b>„{}“</b> wird aufgelöst. Die {} {} darin bleiben erhalten und liegen danach in der Übersicht.", esc(&name), n, if n == 1 { "Notizbuch" } else { "Notizbücher" });
+                self.open_dialog(visual, "Ordner auflösen?", &text, "Auflösen", true, None, Pending::DeleteFolder(name));
+            }
+            _ => {}
+        }
+    }
+
+    /// Auswahldialog mit Liste (Ordner bzw. Notizbücher).
+    pub fn open_pick(&mut self, icon: &str, title: &str, text: &str, items: &str, with_mode: bool, pending: Pending) {
+        self.close_popovers();
+        el("pick-icon").set_inner_html(&format!("<svg><use href=\"#{}\"/></svg>", icon));
+        set_text("pick-title", title);
+        el("pick-text").set_inner_html(text);
+        el("pick-list").set_inner_html(items);
+        show("pick-mode", with_mode);
+        self.pick_copy = true;
+        Self::mark_pick_mode(true);
+        self.pending = Some(pending);
+        self.open_modal("modal-pick");
+    }
+
+    pub fn mark_pick_mode(copy: bool) {
+        if let Ok(list) = dom().query_selector_all("#pick-mode button") {
+            for i in 0..list.length() {
+                let b: web_sys::Element = list.get(i).unwrap().unchecked_into();
+                let on = (b.get_attribute("data-arg").as_deref() == Some("copy")) == copy;
+                set_class(&b, "active", on);
+            }
+        }
+    }
+
+    fn pick_folder(&mut self, id: String) {
+        let cur = self.library.iter().find(|m| m.id == id).map(|m| m.folder.clone()).unwrap_or_default();
+        let mut items = format!(
+            "<button class=\"pick-item{}\" data-act=\"pick\" data-arg=\"\"><span class=\"fico root\"><svg><use href=\"#i-pages\"/></svg></span><span>Übersicht<small>kein Ordner</small></span></button>",
+            if cur.is_empty() { " current" } else { "" }
+        );
+        for f in &self.folders {
+            items.push_str(&format!(
+                "<button class=\"pick-item{}\" data-act=\"pick\" data-arg=\"{f}\"><span class=\"fico\"><svg><use href=\"#i-folder\"/></svg></span><span>{f}</span></button>",
+                if *f == cur { " current" } else { "" },
+                f = esc(f)
+            ));
+        }
+        if self.folders.is_empty() {
+            items.push_str("<p class=\"muted\" style=\"text-align:center;font-size:13px\">Noch keine Ordner – lege oben in der Bibliothek mit dem Ordner-Symbol einen an.</p>");
+        }
+        let title = self.library.iter().find(|m| m.id == id).map(|m| m.title.clone()).unwrap_or_default();
+        self.open_pick("i-folder", "In Ordner verschieben", &format!("Wohin soll <b>„{}“</b>?", esc(&title)), &items, false, Pending::MoveToFolder(id));
+    }
+
+    /// Eintrag im Auswahldialog gewählt.
+    pub fn pick(&mut self, value: &str) {
+        let pending = self.pending.take();
+        self.close_modals();
+        match pending {
+            Some(Pending::MoveToFolder(id)) => {
+                let f = value.to_string();
+                let label = if f.is_empty() { "die Übersicht".to_string() } else { format!("„{}“", f) };
+                self.modify_stored(id, move |nb| nb.folder = f);
+                self.toast(&format!("Verschoben nach {}", label));
+            }
+            Some(Pending::PageTo(i)) => self.page_to(i, value.to_string()),
+            _ => {}
+        }
+    }
+
+    /// Seite `i` des geöffneten Notizbuchs in ein anderes kopieren oder verschieben.
+    fn page_to(&mut self, i: usize, target: String) {
+        let copy = self.pick_copy;
+        let Some(page) = self.ed.as_ref().and_then(|e| e.nb.pages.get(i).cloned()) else { return };
+        let title = self.library.iter().find(|m| m.id == target).map(|m| m.title.clone()).unwrap_or_default();
+        self.with_stored(target, move |a, mut nb| {
+            let p = nb.adopt_page(&page);
+            nb.pages.push(p);
+            nb.modified = wall_clock();
+            a.add_notebook(nb, false);
+            if !copy {
+                let done = a.ed.as_mut().map(|ed| ed.delete_page(i)).unwrap_or(false);
+                if !done {
+                    a.toast(&format!("Seite nach „{}“ kopiert (die letzte Seite bleibt hier)", title));
+                    return;
+                }
+                a.after_pages_change();
+            }
+            a.toast(&format!("Seite nach „{}“ {}", title, if copy { "kopiert" } else { "verschoben" }));
+        });
+    }
+
+    pub fn open_page_to(&mut self) {
+        let Some(ed) = &self.ed else { return };
+        let (i, cur_id) = (ed.cur_page, ed.nb.id.clone());
+        let mut list: Vec<&NoteMeta> = self.library.iter().filter(|m| !m.is_template && m.id != cur_id).collect();
+        list.sort_by(|a, b| b.modified.partial_cmp(&a.modified).unwrap_or(std::cmp::Ordering::Equal));
+        if list.is_empty() {
+            self.toast("Lege zuerst ein weiteres Notizbuch an");
+            return;
+        }
+        let items: String = list
+            .iter()
+            .map(|m| {
+                format!(
+                    "<button class=\"pick-item\" data-act=\"pick\" data-arg=\"{}\"><span class=\"mini\" style=\"{}\"></span><span>{}<small>{} {}{}</small></span></button>",
+                    esc(&m.id),
+                    cover_css(m.cover),
+                    esc(&m.title),
+                    m.pages,
+                    if m.pages == 1 { "Seite" } else { "Seiten" },
+                    if m.folder.is_empty() { String::new() } else { format!(" · {}", esc(&m.folder)) }
+                )
+            })
+            .collect();
+        self.open_pick("i-move-page", "Seite in anderes Notizbuch", &format!("<b>Seite {}</b> wird ans Ende des gewählten Notizbuchs angehängt.", i + 1), &items, true, Pending::PageTo(i));
     }
 }

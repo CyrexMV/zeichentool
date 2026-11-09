@@ -177,7 +177,7 @@ impl App {
         let vw = window().inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(4000.0);
         let vh = window().inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(4000.0);
         let full = self.screen != Screen::Editor
-            || dom().query_selector(".modal:not(.hidden), .popover:not(.hidden)").ok().flatten().is_some()
+            || dom().query_selector(".modal:not(.hidden), .popover:not(.hidden), .study:not(.hidden)").ok().flatten().is_some()
             || self.ed.as_ref().map(|e| e.text_edit.is_some()).unwrap_or(false);
         if full {
             parts.push(format!("0,0,{},{}", vw, vh));
@@ -189,6 +189,10 @@ impl App {
                 if r.width() > 0.0 && r.height() > 0.0 {
                     parts.push(format!("{:.0},{:.0},{:.0},{:.0}", r.left() - 6.0, r.top() - 6.0, r.width() + 12.0, r.height() + 12.0));
                 }
+            }
+            if let Some(r) = self.ed.as_ref().and_then(|e| e.ruler) {
+                let (x, y, w, h) = r.bounds();
+                parts.push(format!("{:.0},{:.0},{:.0},{:.0}", x, y, w, h));
             }
         }
         let s = parts.join(";");
@@ -221,6 +225,12 @@ impl App {
         if let Some(db) = &self.db {
             let bytes = save_notebook(nb);
             idb_put(db, NOTEBOOKS, &nb.id, &Uint8Array::from(&bytes[..]).into());
+        }
+    }
+
+    pub fn persist_folders(&self) {
+        if let Some(db) = &self.db {
+            idb_put(db, META, "folders", &JsValue::from_str(&self.folders.join("\n")));
         }
     }
 
@@ -641,11 +651,21 @@ pub fn init_storage() {
         match open_db().await {
             Ok(db) => {
                 let lib = idb_get(&db, META, "library").await.and_then(|v| v.as_string()).map(|s| load_library(&s)).unwrap_or_default();
+                let folders: Vec<String> = idb_get(&db, META, "folders").await.and_then(|v| v.as_string()).map(|s| s.lines().filter(|l| !l.trim().is_empty()).map(|l| l.to_string()).collect()).unwrap_or_default();
                 let migrated = with_app(|a| a.settings.migrated).unwrap_or(true);
                 let legacy = if migrated { None } else { idb_get(&db, LEGACY, "aktuell").await.map(|v| Uint8Array::new(&v).to_vec()) };
                 with_app(|a| {
                     a.db = Some(db);
                     a.library = lib;
+                    // Ordner: gespeicherte Liste + alle, in denen Notizbücher liegen
+                    let mut f = folders;
+                    for m in &a.library {
+                        if !m.folder.is_empty() && !f.contains(&m.folder) {
+                            f.push(m.folder.clone());
+                        }
+                    }
+                    f.sort_by_key(|x| x.to_lowercase());
+                    a.folders = f;
                     if !a.settings.migrated {
                         a.settings.migrated = true;
                         if let Some(bytes) = legacy {

@@ -39,6 +39,8 @@ pub enum Op {
         shape_tool: bool,
         straight: bool,
         predicted: Vec<Pt>,
+        /// Linealkante, an der der Strich entlangläuft (Bildschirmkoordinaten)
+        rule: Option<super::ruler::Seg>,
     },
     Erase {
         page: u32,
@@ -114,11 +116,16 @@ pub struct Editor {
     pub zooming: bool,
     pub nav_open: bool,
     pub nav_bookmarks: bool,
+    /// Seitenübersicht zeigt das Inhaltsverzeichnis
+    pub nav_toc: bool,
     pub thumbs_dirty: bool,
     pub thumb_versions: HashMap<u32, u64>,
     pub live_page: Option<u32>,
     pub cur_page: usize,
     pub paste_at: Option<(u32, f32, f32)>,
+    pub ruler: Option<super::ruler::Ruler>,
+    /// Gemerkte Vorderseite einer neuen Lernkarte
+    pub card_front: Option<crate::engine::Region>,
     /// Platz für die Werkzeugleiste oben (CSS-Pixel)
     pub top_pad: f64,
 }
@@ -167,11 +174,14 @@ impl Editor {
             zooming: false,
             nav_open: false,
             nav_bookmarks: false,
+            nav_toc: false,
             thumbs_dirty: true,
             thumb_versions: HashMap::new(),
             live_page: None,
             cur_page: 0,
             paste_at: None,
+            ruler: None,
+            card_front: None,
             top_pad: 84.0,
         };
         ed.resize();
@@ -362,6 +372,7 @@ impl Editor {
         p.paper = after.paper;
         p.bookmark = after.bookmark;
         p.checks = after.checks.clone();
+        p.title = after.title.clone();
         p.touch();
         let id = p.id;
         self.push(Action::PageMeta { page: id, before, after });
@@ -372,7 +383,7 @@ impl Editor {
         let mut group = Vec::new();
         for p in self.nb.pages.iter_mut() {
             let before = PageMeta::of(p);
-            let after = PageMeta { template, paper, bookmark: before.bookmark, checks: before.checks.clone() };
+            let after = PageMeta { template, paper, bookmark: before.bookmark, checks: before.checks.clone(), title: before.title.clone() };
             if before != after {
                 p.template = template;
                 p.paper = paper;

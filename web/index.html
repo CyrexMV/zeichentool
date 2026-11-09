@@ -45,6 +45,14 @@
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
     <symbol id="i-nib" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.59 7.59"/><circle cx="11" cy="11" r="2"/></symbol>
     <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2"/></symbol>
+    <symbol id="i-triangle" viewBox="0 0 24 24"><path d="M3 20h18L3 4z"/><path d="M3 15a5 5 0 0 1 5 5"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 24 24"><rect x="6" y="3" width="14" height="10" rx="2"/><path d="M4 8v9a2 2 0 0 0 2 2h11"/><path d="M10 8h6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6M9 13h6"/></symbol>
+    <symbol id="i-toc" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-template" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
+    <symbol id="i-move-page" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M13 12l3 3-3 3"/></symbol>
   </defs>
 </svg>
 
@@ -54,7 +62,7 @@
     <div class="lib-brand">
       <div class="logo"><svg><use href="#i-nib"/></svg></div>
       <div>
-        <h1>Notion</h1>
+        <h1 id="lib-h1">Notion</h1>
         <span id="lib-count" class="muted">–</span>
       </div>
     </div>
@@ -66,11 +74,14 @@
         <button data-act="lib-sort" data-arg="created">Erstellt</button>
       </div>
       <button class="chip" id="lib-fav" data-act="lib-fav"><svg><use href="#i-star"/></svg>Favoriten</button>
+      <button class="icon-btn" data-act="folder-new" title="Neuer Ordner"><svg><use href="#i-folder-plus"/></svg></button>
       <button class="icon-btn" data-act="import" title="Importieren (.znote, Bild, alte Zeichnung)"><svg><use href="#i-import"/></svg></button>
       <button class="icon-btn" data-act="settings" title="Einstellungen"><svg><use href="#i-settings"/></svg></button>
       <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Neues Notizbuch</button>
     </div>
   </header>
+  <div id="lib-crumb" class="lib-crumb hidden"><button class="btn small ghost" data-act="folder-up"><svg><use href="#i-back"/></svg>Alle Notizbücher</button><span id="lib-crumb-name"></span></div>
+  <div id="lib-folders" class="lib-folders"></div>
   <div id="lib-grid" class="lib-grid"></div>
   <div id="lib-empty" class="lib-empty hidden">
     <div class="empty-art"><svg><use href="#i-nib"/></svg></div>
@@ -104,11 +115,13 @@
       <button class="tb tool" data-act="tool" data-arg="text" title="Text (T)"><svg><use href="#i-text"/></svg></button>
       <button class="tb" data-act="image" title="Bild einfügen"><svg><use href="#i-image"/></svg></button>
       <button class="tb tool" data-act="tool" data-arg="laser" title="Laserpointer"><svg><use href="#i-laser"/></svg></button>
+      <button class="tb" id="btn-ruler" data-act="ruler-menu" title="Lineal &amp; Geodreieck"><svg><use href="#i-ruler"/></svg></button>
       <span class="sep" id="fav-sep"></span>
       <div id="favs" class="favs"></div>
     </div>
     <div class="ed-right glass">
       <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-nib"/></svg></span>
+      <button class="icon-btn" data-act="study" title="Lernkarten"><svg><use href="#i-cards"/></svg></button>
       <button class="icon-btn" data-act="add-page" title="Seite hinzufügen"><svg><use href="#i-page-plus"/></svg></button>
       <button class="icon-btn" data-act="more" title="Mehr"><svg><use href="#i-more"/></svg></button>
     </div>
@@ -119,6 +132,7 @@
       <div class="seg small">
         <button id="nav-all" data-act="nav-filter" data-arg="all">Alle</button>
         <button id="nav-bm" data-act="nav-filter" data-arg="bm">Lesezeichen</button>
+        <button id="nav-toc" data-act="nav-filter" data-arg="toc">Inhalt</button>
       </div>
       <button class="icon-btn small" data-act="nav" title="Schließen"><svg><use href="#i-close"/></svg></button>
     </div>
@@ -136,6 +150,7 @@
   <div id="sel-menu" class="sel-menu glass hidden">
     <div class="sel-colors" id="sel-colors"></div>
     <span class="sep"></span>
+    <button data-act="sel-card" id="sel-card" title="Als Lernkarte"><svg><use href="#i-cards"/></svg></button>
     <button data-act="sel-copy" title="Kopieren"><svg><use href="#i-copy"/></svg></button>
     <button data-act="sel-cut" title="Ausschneiden"><svg><use href="#i-cut"/></svg></button>
     <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
@@ -155,12 +170,31 @@
   <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
   <button class="mi" data-act="export-znote"><svg><use href="#i-copy"/></svg>Backup speichern (.znote)</button>
   <hr>
+  <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel (Inhaltsverzeichnis) …</button>
   <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier ändern …</button>
   <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
   <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
+  <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>Seite in anderes Notizbuch …</button>
   <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
   <hr>
+  <button class="mi" data-act="study"><svg><use href="#i-cards"/></svg>Lernkarten</button>
+  <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Notizbuchvorlage speichern …</button>
   <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+</div>
+
+<!-- Lineal-Menü -->
+<div id="pop-ruler" class="popover menu glass hidden">
+  <button class="mi" data-act="ruler" data-arg="ruler"><svg><use href="#i-ruler"/></svg>Lineal</button>
+  <button class="mi" data-act="ruler" data-arg="triangle"><svg><use href="#i-triangle"/></svg>Geodreieck</button>
+  <button class="mi" data-act="ruler" data-arg="off"><svg><use href="#i-close"/></svg>Ausblenden</button>
+  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien.</p>
+</div>
+
+<!-- Ordner-Menü -->
+<div id="pop-folder" class="popover menu glass hidden">
+  <button class="mi" data-act="folder-rename"><svg><use href="#i-text"/></svg>Umbenennen</button>
+  <hr>
+  <button class="mi danger" data-act="folder-delete"><svg><use href="#i-trash"/></svg>Ordner auflösen</button>
 </div>
 
 <!-- Kontextmenü Bibliothek -->
@@ -169,7 +203,9 @@
   <button class="mi" data-act="card-rename"><svg><use href="#i-text"/></svg>Umbenennen</button>
   <button class="mi" data-act="card-fav"><svg><use href="#i-star"/></svg><span id="card-fav-label">Favorit</span></button>
   <button class="mi" data-act="card-cover"><svg><use href="#i-palette"/></svg>Cover ändern</button>
+  <button class="mi" data-act="card-folder"><svg><use href="#i-folder"/></svg>In Ordner verschieben …</button>
   <button class="mi" data-act="card-dup"><svg><use href="#i-dup"/></svg>Duplizieren</button>
+  <button class="mi" data-act="card-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
   <button class="mi" data-act="card-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
   <button class="mi" data-act="card-znote"><svg><use href="#i-copy"/></svg>Backup speichern</button>
   <hr>
@@ -186,6 +222,10 @@
       </div>
       <div class="new-opts">
         <label class="field"><span>Titel</span><input id="new-title" data-input="new-title" placeholder="z. B. Mathe, Ideen, Tagebuch" autocomplete="off"></label>
+        <div id="new-from-wrap" class="hidden">
+          <h4>Notizbuchvorlage</h4>
+          <div id="new-from" class="from-row"></div>
+        </div>
         <h4>Cover</h4>
         <div id="new-covers" class="cover-row"></div>
         <h4>Format</h4>
@@ -197,6 +237,7 @@
         </div>
       </div>
     </div>
+    <div id="new-paper-section">
     <h4>Papier</h4>
     <div id="new-tpl" class="tpl-grid"></div>
     <div class="paper-line">
@@ -206,6 +247,7 @@
         <button data-act="new-sp" data-arg="2">Weit</button>
       </div>
       <div id="new-paper" class="paper-sw"></div>
+    </div>
     </div>
     <div class="modal-actions">
       <button class="btn ghost" data-act="modal-close">Abbrechen</button>
@@ -256,6 +298,59 @@
     </div>
   </div>
 </div>
+
+<!-- Auswahl (Ordner / Notizbuch) -->
+<div id="modal-pick" class="modal hidden">
+  <div class="modal-card glass dialog pick">
+    <div class="dlg-visual"><div id="pick-icon" class="dlg-icon accent"></div></div>
+    <h2 id="pick-title"></h2>
+    <p id="pick-text"></p>
+    <div id="pick-mode" class="seg hidden">
+      <button data-act="pick-mode" data-arg="copy">Kopieren</button>
+      <button data-act="pick-mode" data-arg="move">Verschieben</button>
+    </div>
+    <div id="pick-list" class="pick-list"></div>
+    <div class="dlg-actions"><button class="btn ghost" data-act="modal-close">Abbrechen</button></div>
+  </div>
+</div>
+
+<!-- Lernkarten -->
+<section id="study" class="study hidden">
+  <header class="study-head">
+    <button class="icon-btn" data-act="study-close" title="Schließen"><svg><use href="#i-close"/></svg></button>
+    <div><h2>Lernkarten</h2><span id="study-sub" class="muted"></span></div>
+    <span class="study-progress"><span id="study-bar"></span></span>
+  </header>
+  <div id="study-home" class="study-home">
+    <div id="study-boxes" class="study-boxes"></div>
+    <div class="study-start">
+      <button class="btn primary big" data-act="study-start" data-arg="all"><svg><use href="#i-cards"/></svg><span id="study-start-label">Lernen starten</span></button>
+      <button class="btn big" data-act="study-start" data-arg="hard">Nur schwierige</button>
+    </div>
+    <p class="hint center">So erstellst du Karten: Mit dem <b>Lasso</b> die Frage einkreisen → <b>Lernkarte</b> tippen, dann die Antwort einkreisen → nochmal <b>Lernkarte</b>.</p>
+    <div id="study-cards" class="study-cards"></div>
+  </div>
+  <div id="study-run" class="study-run hidden">
+    <div id="flashcard" class="flashcard" data-act="study-flip">
+      <span id="card-side" class="card-side">Frage</span>
+      <canvas id="card-canvas"></canvas>
+      <span class="card-tap">Tippen zum Umdrehen</span>
+    </div>
+    <div id="study-answer" class="study-answer hidden">
+      <button class="btn big wrong" data-act="study-answer" data-arg="wrong">Nochmal</button>
+      <button class="btn big right" data-act="study-answer" data-arg="right">Gewusst</button>
+    </div>
+  </div>
+  <div id="study-done" class="study-done hidden">
+    <div class="done-badge">🎉</div>
+    <h2 id="study-done-title">Geschafft!</h2>
+    <p id="study-done-text" class="muted"></p>
+    <div class="study-start">
+      <button class="btn primary big" data-act="study-start" data-arg="all">Nochmal lernen</button>
+      <button class="btn big" data-act="study-home">Übersicht</button>
+    </div>
+  </div>
+</section>
 
 <!-- Einstellungen -->
 <div id="modal-settings" class="modal hidden">
