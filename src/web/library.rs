@@ -128,13 +128,10 @@ impl App {
             }
         }
         let trash_n = self.trash_count();
-        if folder.is_none() && !searching && trash_n > 0 && !self.show_trash {
-            fhtml.push_str(&format!(
-                "<div class=\"folder-card trash\" data-act=\"trash-open\"><div class=\"folder-ico\"><svg><use href=\"#i-trash\"/></svg></div><div><b>Papierkorb</b><small>{} {}</small></div></div>",
-                trash_n,
-                if trash_n == 1 { "Notizbuch" } else { "Notizbücher" }
-            ));
-        }
+        // Papierkorb: fester Knopf unten links im Startbildschirm
+        let tb = el("lib-trash-btn");
+        set_class(&tb, "active", self.show_trash);
+        set_text("lib-trash-count", &if trash_n > 0 { trash_n.to_string() } else { String::new() });
         if self.show_trash {
             fhtml.clear();
         }

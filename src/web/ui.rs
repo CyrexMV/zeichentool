@@ -131,7 +131,8 @@ impl App {
             "settings" => self.open_settings(),
             "card" => self.open_guarded(arg.to_string()),
             "trash-open" => {
-                self.show_trash = true;
+                // zweites Antippen schließt den Papierkorb wieder
+                self.show_trash = !self.show_trash;
                 self.folder = None;
                 self.render_library();
             }

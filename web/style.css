@@ -692,3 +692,14 @@ b.due { color: #ff7a1a; }
 @media (max-width: 1180px) { #editor.has-tabs .navigator { top: calc(var(--safe-top) + 170px); } }
 #editor.has-tabs .ed-tabs { grid-row: 2; }
 @media (max-width: 1180px) { #editor.has-tabs .ed-tabs { grid-row: 3; } }
+
+/* Papierkorb-Knopf unten links im Startbildschirm */
+.lib-trash-btn { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + var(--safe-bottom)); z-index: 5;
+  display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 12px; border-radius: 14px;
+  background: var(--glass-strong); box-shadow: var(--shadow); color: var(--muted); font-weight: 600; font-size: 14px; transition: color .15s, box-shadow .15s; }
+.lib-trash-btn svg { width: 20px; height: 20px; }
+.lib-trash-btn:hover { color: var(--danger); }
+.lib-trash-btn b { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--danger); color: #fff; font-size: 11.5px; display: grid; place-items: center; }
+.lib-trash-btn b:empty { display: none; }
+.lib-trash-btn.active { color: var(--danger); box-shadow: 0 0 0 2px var(--danger), var(--shadow); }
+#library { padding-bottom: calc(var(--safe-bottom) + 84px); }
