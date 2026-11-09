@@ -13,6 +13,11 @@ thread_local! {
 type FavSpec<'a> = (Option<&'a [[u8; 4]; 3]>, usize, Option<&'a [f32; 3]>, usize, f32);
 
 const POPS: [&str; 10] = ["pop-tool", "pop-more", "pop-card", "pop-ruler", "pop-folder", "pop-trash", "pop-insert", "pop-share", "pop-sets", "pop-align"];
+thread_local! {
+    /// zuletzt in der Seitenleiste markierte Seite (Seite, Seitenzahl, Notizbuch)
+    static NAV_CUR: std::cell::RefCell<Option<(usize, usize, String)>> = const { std::cell::RefCell::new(None) };
+}
+
 const MODALS: [&str; 15] = ["modal-exam", "modal-grades", "modal-symbols", "modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
@@ -367,8 +372,13 @@ impl App {
                         return;
                     }
                     ed.goto_page(n);
+                    // die angetippte Seite ist die aktuelle (auch wenn sie nicht bis zur Mitte reicht)
+                    if n < ed.nb.pages.len() {
+                        ed.cur_page = n;
+                    }
                 }
                 self.after_view_change();
+                self.sync_nav_current();
             }
             "nav-sel" | "nav-sel-all" | "nav-sel-pdf" | "nav-sel-dup" | "nav-sel-rot" | "nav-sel-del" => self.page_sel_action(act),
             "undo" => self.undo(),
@@ -993,8 +1003,46 @@ impl App {
         self.update_pill();
     }
 
+    /// Lila Rahmen in der Seitenleiste auf die aktuelle Seite setzen und sie dort ins Bild holen.
+    pub fn sync_nav_current(&self) {
+        let Some(ed) = &self.ed else { return };
+        if !ed.nav_open {
+            return;
+        }
+        let cur = if ed.nav_sel.is_some() { usize::MAX } else { ed.cur_page };
+        let key = (cur, ed.nb.pages.len(), ed.nb.id.clone());
+        let changed = NAV_CUR.with(|c| {
+            let mut c = c.borrow_mut();
+            let ch = c.as_ref() != Some(&key);
+            *c = Some(key);
+            ch
+        });
+        if !changed {
+            return;
+        }
+        let Ok(items) = dom().query_selector_all("#nav-list .nav-item, #nav-list .toc-item") else { return };
+        for k in 0..items.length() {
+            let Some(node) = items.item(k) else { continue };
+            let Ok(item) = node.dyn_into::<web_sys::Element>() else { continue };
+            let is_cur = item.get_attribute("data-arg").and_then(|a| a.parse::<usize>().ok()) == Some(cur);
+            set_class(&item, "current", is_cur);
+            if is_cur {
+                // sanft ins Bild scrollen, ohne die Liste unnötig zu bewegen
+                let opts = js_sys::Object::new();
+                let _ = js_sys::Reflect::set(&opts, &"block".into(), &"nearest".into());
+                let _ = js_sys::Reflect::set(&opts, &"behavior".into(), &"smooth".into());
+                if let Ok(f) = js_sys::Reflect::get(&item, &"scrollIntoView".into()) {
+                    if let Ok(f) = f.dyn_into::<js_sys::Function>() {
+                        let _ = f.call1(&item, &opts);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn update_pill(&mut self) {
         self.update_scrubber();
+        self.sync_nav_current();
         let Some(ed) = &self.ed else { return };
         let title = &ed.nb.pages[ed.cur_page].title;
         let label = if title.is_empty() {
@@ -1098,6 +1146,7 @@ impl App {
             html.push_str("<div class=\"nav-actions\"><button class=\"btn small\" data-act=\"page-up\">Seite nach oben</button><button class=\"btn small\" data-act=\"page-down\">Seite nach unten</button></div>");
         }
         el("nav-list").set_inner_html(&html);
+        NAV_CUR.with(|c| *c.borrow_mut() = None);
         ed.thumb_versions.clear();
         ed.thumbs_dirty = true;
         self.request_frame();
