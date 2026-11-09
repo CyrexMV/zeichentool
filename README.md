@@ -1,4 +1,4 @@
-# Notizen
+# Notion
 
 Eine moderne, GoodNotes-artige Notiz-App – **komplett in Rust geschrieben** (WebAssembly)
 und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für das

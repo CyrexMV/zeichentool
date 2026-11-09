@@ -403,7 +403,7 @@ fn file_name(title: &str) -> String {
     let s: String = title.chars().map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' }).collect();
     let s = s.trim().to_string();
     if s.is_empty() {
-        "Notizen".into()
+        "Notion".into()
     } else {
         s
     }

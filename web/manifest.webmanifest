@@ -1,6 +1,6 @@
 {
-  "name": "Notizen",
-  "short_name": "Notizen",
+  "name": "Notion",
+  "short_name": "Notion",
   "description": "Moderne Notiz-App mit S-Pen – geschrieben in Rust.",
   "lang": "de",
   "start_url": "./",
