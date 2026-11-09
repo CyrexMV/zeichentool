@@ -92,6 +92,15 @@ impl App {
             x0 += 26.0;
             y0 += 26.0;
         }
+        // Überdeckt es das zuletzt Eingefügte (z. B. mehrere Formeln nacheinander): darunter setzen
+        let pid = ed.nb.pages[i].id;
+        if let Some((lp, r)) = self.last_insert {
+            let target = Rect::new(x0, y0, x0 + w, y0 + h);
+            let still_there = ed.nb.pages[i].items.iter().any(|it| r.intersects(&it.bbox()));
+            if lp == pid && target.intersects(&r) && still_there && r.y1 + 12.0 + h <= ph {
+                y0 = r.y1 + 12.0;
+            }
+        }
         let x0 = x0.clamp(0.0, (pw - w).max(0.0));
         let y0 = y0.clamp(0.0, (ph - h).max(0.0));
         let xf = crate::engine::Xf::translate(x0, y0);
@@ -104,6 +113,7 @@ impl App {
         let page = ed.nb.pages[i].id;
         let ids: Vec<u32> = items.iter().map(|it| it.id).collect();
         let bbox = items.iter().fold(Rect::EMPTY, |r, it| r.union(&it.bbox()));
+        self.last_insert = Some((page, bbox));
         ed.nb.pages[i].insert(items.clone());
         ed.push(Action::Items { page, removed: vec![], added: items });
         ed.selection = Some(super::editor::Selection { page, ids, bbox, poly: Vec::new() });

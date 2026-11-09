@@ -939,6 +939,11 @@ impl App {
                     let id = el.id();
                     let target = match id.as_str() {
                         "exam-name" | "exam-date" => Some(("exam-save", String::new())),
+                        "frac-text" => {
+                            e.prevent_default();
+                            self.fraction_action("frac-insert", "");
+                            return;
+                        }
                         "subject-name" => Some(("subject-add", String::new())),
                         _ => id.strip_prefix("grade-in-").map(|i| ("grade-add", i.to_string())),
                     };

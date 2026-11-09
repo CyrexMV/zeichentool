@@ -170,7 +170,8 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .tb.active { background: var(--grad); color: #fff; box-shadow: 0 6px 16px rgba(109,92,255,.35); }
 .tb.disabled { opacity: .28; pointer-events: none; }
 .sep { width: 1px; height: 26px; background: var(--line2); margin: 0 6px; }
-.favs { display: flex; align-items: center; gap: 2px; }
+.favs { display: flex; align-items: center; justify-content: center; gap: 2px; width: 202px; flex: 0 0 202px; }
+.fav-label { font-size: 13px; font-weight: 650; color: var(--muted); white-space: nowrap; }
 .fav-color, .fav-size { width: 32px; height: 42px; display: grid; place-items: center; border-radius: 10px; }
 .fav-color span { width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line2); transition: transform .15s; }
 .fav-color.active span { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); transform: scale(1.05); }
@@ -868,3 +869,11 @@ b.due { color: #ff7a1a; }
 .sel-menu.region .sel-colors, .sel-menu.region .sep, .sel-menu.region [data-act=sel-align], .sel-menu.region [data-act=sel-pin], .sel-menu.region [data-act=sel-fill], .sel-menu.region [data-act=sel-cut], .sel-menu.region [data-act=sel-delete], .sel-menu.region [data-act=sel-copy-img] { display: none; }
 
 .lasso-modes { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; margin-bottom: 6px; }
+
+/* Bruch / Formel */
+.frac-card { width: min(560px, calc(100vw - 32px)); }
+.frac-card .field input { font-size: 20px; }
+.frac-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+.frac-keys button { min-width: 46px; height: 40px; padding: 0 12px; border-radius: 11px; background: var(--hover); font-size: 17px; font-weight: 600; color: var(--text); }
+.frac-keys button:first-child { background: rgba(109,92,255,.14); color: var(--accent); }
+.frac-preview svg { max-height: 160px; }

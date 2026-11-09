@@ -82,6 +82,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Split-Ansicht** (Symbol oben rechts): zwei Notizbücher nebeneinander, z. B. Skript links und Mitschrift rechts –
   in eine Hälfte tippen, um dort zu schreiben; Werkzeuge, Seitenleiste und Seitenanzeige gelten für die aktive Hälfte
 - **Neon- und Glitzerstift** (Stift-Menü): leuchtender Kern mit Schein bzw. funkelnde Partikel – auch im PDF
+- **Bruch / Formel** (Einfügen-Menü): z. B. `x = (a+b)/(c-d) + 1/2` – „/“ macht einen echten Bruch mit Bruchstrich,
+  Klammern fassen zusammen; Live-Vorschau, als Text und Linie eingefügt (auch im PDF scharf)
 - **Symbol-Palette** (Einfügen-Menü): Mathe (∑ √ ∫ ≤ ≠ π …), Griechisch, Pfeile, Einheiten, Häkchen – zu einem Text
   zusammenstellen und einfügen; der PDF-Export nutzt dafür die Standardschriften Symbol und ZapfDingbats
 - **Mehrere Seiten auswählen** (Seitenübersicht → „Auswählen“): gemeinsam als PDF exportieren, duplizieren, drehen, löschen

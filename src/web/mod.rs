@@ -3,6 +3,7 @@
 mod clip;
 mod colorpick;
 mod docs;
+mod fraction;
 mod editor;
 mod input;
 mod insert;
@@ -423,6 +424,8 @@ pub struct App {
     pub ed: Option<Editor>,
     /// zweiter (inaktiver) Bereich der Split-Ansicht
     pub ed2: Option<Editor>,
+    /// zuletzt eingefügter Bereich (Seite, Rechteck) – Folgendes kommt darunter
+    pub last_insert: Option<(u32, crate::engine::Rect)>,
     /// Zwischenablage für alle Notizbücher
     pub clip: Vec<crate::engine::Item>,
     /// aktiver Bereich ist der linke
@@ -529,6 +532,7 @@ impl App {
             hold_eraser: false,
             ed: None,
             ed2: None,
+            last_insert: None,
             clip: Vec::new(),
             active_left: true,
             nav_pinned: true,

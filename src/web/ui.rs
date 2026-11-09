@@ -18,7 +18,7 @@ thread_local! {
     static NAV_CUR: std::cell::RefCell<Option<(usize, usize, String)>> = const { std::cell::RefCell::new(None) };
 }
 
-const MODALS: [&str; 15] = ["modal-exam", "modal-grades", "modal-symbols", "modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
+const MODALS: [&str; 16] = ["modal-frac", "modal-exam", "modal-grades", "modal-symbols", "modal-stickers", "modal-new", "modal-tpl", "modal-settings", "modal-cover", "modal-confirm", "modal-pick", "modal-stats", "modal-color", "modal-table", "modal-plot", "modal-marks"];
 
 const PEN_COLORS: [&str; 20] = [
     "#18181f", "#4a4b57", "#8e909c", "#ffffff", "#1e3a8a", "#1e5ae6", "#2fb5ff", "#0f9d8f", "#1f9d55", "#7cc242",
@@ -412,6 +412,8 @@ impl App {
             "insert-plot" => self.open_plot_dialog(),
             "sticker-menu" => self.open_sticker_dialog(),
             "symbol-menu" => self.open_symbol_dialog(),
+            "frac-menu" => self.open_fraction_dialog(),
+            "frac-add" | "frac-insert" => self.fraction_action(act, arg),
             "exam-new" | "exam-edit" | "exam-save" | "exam-delete" => self.exam_action(act, arg),
             "grades-open" | "grade-weight" | "subject-add" | "grade-add" | "grade-del" | "subject-del" => self.grades_action(act, arg),
             "sym-add" | "sym-back" | "sym-space" | "sym-insert" => self.symbol_action(act, arg),
@@ -619,6 +621,7 @@ impl App {
     pub fn input(&mut self, name: &str, value: &str, checked: bool, kind: &str) {
         let f = value.parse::<f32>().unwrap_or(0.0);
         match name {
+            "frac-text" => self.update_fraction_preview(),
             "lib-search" => {
                 self.lib_query = value.to_lowercase();
                 self.render_library();
@@ -791,8 +794,12 @@ impl App {
                 ));
             }
         }
+        if html.is_empty() {
+            // Platzhalter mit dem Werkzeugnamen – die Leiste behält immer dieselbe Breite
+            html = format!("<span class=\"fav-label\">{}</span>", tool.name_de());
+        }
         el("favs").set_inner_html(&html);
-        show("fav-sep", !html.is_empty());
+        show("fav-sep", true);
     }
 
     fn fav(&mut self, act: &str, i: usize, src: &web_sys::Element) {

@@ -73,6 +73,7 @@
     <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></symbol>
     <symbol id="i-multi" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M14.5 6.5l2 2 3.5-4M4.5 17.5l2 2 3.5-4"/></symbol>
     <symbol id="i-grades" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 16v-3M12 16V8M17 16v-6"/></symbol>
+    <symbol id="i-frac" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M10 3.5h3v5"/><path d="M9 15.5h4.5a1.8 1.8 0 0 1 0 3.6H10a1.6 1.6 0 0 0 0 3.2h4"/></symbol>
     <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 5V4H6l7 8-7 8h12v-1"/></symbol>
     <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M15 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6a3 3 0 0 0-3-3z"/><path d="M13 21v-5a3 3 0 0 1 3-3h5"/><path d="M8.5 9.5h.01M14.5 9.5h.01"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></symbol>
@@ -335,6 +336,7 @@
   <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten …</button>
   <hr>
   <button class="mi" data-act="symbol-menu"><svg><use href="#i-sigma"/></svg>Symbole …</button>
+  <button class="mi" data-act="frac-menu"><svg><use href="#i-frac"/></svg>Bruch / Formel …</button>
   <button class="mi" data-act="sticker-menu"><svg><use href="#i-sticker"/></svg>Sticker &amp; Stempel …</button>
   <hr>
   <button class="mi" data-act="insert-date" data-arg="long"><svg><use href="#i-calendar"/></svg>Datum</button>
@@ -575,6 +577,26 @@
     <div class="grades-weight"><span class="muted">Neue Noten zählen</span><div class="seg small"><button id="gw-1" data-act="grade-weight" data-arg="1">einfach</button><button id="gw-2" data-act="grade-weight" data-arg="2">doppelt</button></div><span class="muted grades-hint">Noten: 2 · 2,5 · 2+ · 2- · antippen = entfernen</span></div>
     <div id="grades-body" class="grades-body"></div>
     <div class="subject-add"><input id="subject-name" placeholder="Neues Fach, z. B. Mathe oder Lernfeld 3" autocomplete="off"><button class="btn primary small" data-act="subject-add"><svg><use href="#i-plus"/></svg>Fach</button></div>
+  </div>
+</div>
+
+<!-- Bruch / Formel -->
+<div id="modal-frac" class="modal hidden">
+  <div class="modal-card glass frac-card">
+    <div class="modal-head"><h2>Bruch / Formel</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <label class="field"><span>Formel <small class="muted">– „/“ macht einen Bruch, Klammern fassen zusammen: (a+b)/(c-d)</small></span><input id="frac-text" data-input="frac-text" autocomplete="off" spellcheck="false" placeholder="z. B. x = (a+b)/(c-d) + 1/2"></label>
+    <div class="frac-keys">
+      <button data-act="frac-add" data-arg="/">Bruch /</button>
+      <button data-act="frac-add" data-arg="(">(</button><button data-act="frac-add" data-arg=")">)</button>
+      <button data-act="frac-add" data-arg=" = ">=</button><button data-act="frac-add" data-arg=" + ">+</button><button data-act="frac-add" data-arg=" − ">−</button>
+      <button data-act="frac-add" data-arg="·">·</button><button data-act="frac-add" data-arg="²">x²</button><button data-act="frac-add" data-arg="³">x³</button>
+      <button data-act="frac-add" data-arg="√">√</button><button data-act="frac-add" data-arg="π">π</button><button data-act="frac-add" data-arg="Ω">Ω</button>
+    </div>
+    <div id="frac-preview" class="ins-preview frac-preview"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="frac-insert">Einfügen</button>
+    </div>
   </div>
 </div>
 
