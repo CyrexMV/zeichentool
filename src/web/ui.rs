@@ -449,6 +449,12 @@ impl App {
                 set_text("cover-page-label", if cp { "Deckblatt entfernen" } else { "Deckblatt hinzufügen" });
                 self.open_popover("pop-more", src);
             }
+            "more-tab" => {
+                let _ = el("pop-more").set_attribute("data-tab", arg);
+                for t in ["page", "nb", "export"] {
+                    set_class(&el(&format!("more-tab-{t}")), "active", t == arg);
+                }
+            }
             "page-prev" => self.goto_relative(-1),
             "page-next" => self.goto_relative(1),
             "fit" => {

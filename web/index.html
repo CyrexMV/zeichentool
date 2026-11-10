@@ -277,30 +277,41 @@
 <div id="pop-tool" class="popover glass hidden"></div>
 
 <!-- Mehr-Menü -->
-<div id="pop-more" class="popover menu glass hidden">
-  <button class="mi" data-act="share-menu"><svg><use href="#i-share"/></svg>Teilen …</button>
-  <button class="mi" data-act="export-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
-  <button class="mi" data-act="export-page-pdf"><svg><use href="#i-export"/></svg>Diese Seite als PDF</button>
-  <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
-  <button class="mi" data-act="export-znote"><svg><use href="#i-copy"/></svg>Backup speichern (.znote)</button>
-  <hr>
-  <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel (Inhaltsverzeichnis) …</button>
-  <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier ändern …</button>
-  <button class="mi" data-act="ed-cover"><svg><use href="#i-palette"/></svg>Cover ändern …</button>
-  <button class="mi" data-act="cover-page"><svg><use href="#i-template"/></svg><span id="cover-page-label">Deckblatt hinzufügen</span></button>
-  <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
-  <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
-  <button class="mi" data-act="marks"><svg><use href="#i-tag"/></svg>Markierung &amp; Schlagwörter …</button>
-  <button class="mi" data-act="rotate-page"><svg><use href="#i-rot-cw"/></svg>Seite drehen (Hoch/Quer)</button>
-  <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
-  <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>Seite in anderes Notizbuch …</button>
-  <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
-  <hr>
-  <button class="mi" data-act="present"><svg><use href="#i-present"/></svg>Präsentieren</button>
-  <button class="mi" data-act="replay"><svg><use href="#i-replay"/></svg>Zeitraffer abspielen</button>
-  <button class="mi" data-act="study"><svg><use href="#i-cards"/></svg>Lernkarten</button>
-  <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Notizbuchvorlage speichern …</button>
-  <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+<div id="pop-more" class="popover menu glass hidden" data-tab="page">
+  <div class="more-quick">
+    <button data-act="share-menu"><svg><use href="#i-share"/></svg><span>Teilen</span></button>
+    <button data-act="present"><svg><use href="#i-present"/></svg><span>Präsentieren</span></button>
+    <button data-act="replay"><svg><use href="#i-replay"/></svg><span>Zeitraffer</span></button>
+    <button data-act="study"><svg><use href="#i-cards"/></svg><span>Lernkarten</span></button>
+  </div>
+  <div class="seg more-tabs">
+    <button data-act="more-tab" data-arg="page" id="more-tab-page" class="active">Seite</button>
+    <button data-act="more-tab" data-arg="nb" id="more-tab-nb">Notizbuch</button>
+    <button data-act="more-tab" data-arg="export" id="more-tab-export">Export</button>
+  </div>
+  <div class="more-group" data-g="page">
+    <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel …</button>
+    <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
+    <button class="mi" data-act="marks"><svg><use href="#i-tag"/></svg>Markierung &amp; Schlagwörter …</button>
+    <button class="mi" data-act="rotate-page"><svg><use href="#i-rot-cw"/></svg>Seite drehen</button>
+    <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
+    <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>In anderes Notizbuch …</button>
+    <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
+  </div>
+  <div class="more-group" data-g="nb">
+    <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier …</button>
+    <button class="mi" data-act="ed-cover"><svg><use href="#i-palette"/></svg>Cover ändern …</button>
+    <button class="mi" data-act="cover-page"><svg><use href="#i-template"/></svg><span id="cover-page-label">Deckblatt hinzufügen</span></button>
+    <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
+    <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
+    <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+  </div>
+  <div class="more-group" data-g="export">
+    <button class="mi" data-act="export-pdf"><svg><use href="#i-export"/></svg>Notizbuch als PDF</button>
+    <button class="mi" data-act="export-page-pdf"><svg><use href="#i-export"/></svg>Diese Seite als PDF</button>
+    <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
+    <button class="mi" data-act="export-znote"><svg><use href="#i-copy"/></svg>Backup (.znote)</button>
+  </div>
 </div>
 
 <!-- Ausrichten -->
