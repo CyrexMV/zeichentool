@@ -5,7 +5,7 @@ use super::editor::{new_canvas, Editor, Op, PageBmp, GAP};
 use super::*;
 use crate::engine::geom::{Rect, Xf};
 use crate::engine::paper::{line_colors, Prim};
-use crate::engine::{Content, Page, PenKind, Stroke, TemplateKind, TextBox};
+use crate::engine::{Content, Item, Page, PenKind, Stroke, TemplateKind, TextBox};
 use std::fmt::Write as _;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, Path2d};
 
@@ -209,6 +209,8 @@ pub struct DrawOpts<'a> {
     /// Diese Elemente mit Transformation zeichnen (Auswahl wird verschoben)
     pub moving: Option<(&'a [u32], Xf)>,
     pub clip: Rect,
+    /// Zeitraffer: nur die ersten Elemente zeichnen – (Index des wachsenden Elements, Anteil 0..1)
+    pub limit: Option<(usize, f32)>,
 }
 
 /// Zeichnet eine Seite in Seitenkoordinaten (der Aufrufer setzt die Transformation).
@@ -227,7 +229,22 @@ pub fn draw_page(ctx: &CanvasRenderingContext2d, page: &Page, w: f32, h: f32, c:
     }
     draw_template(ctx, page, w, h, c);
     for pass in 0..4 {
-        for it in &page.items {
+        for (idx, it0) in page.items.iter().enumerate() {
+            // Zeitraffer: spätere Elemente weglassen, das aktuelle Strich für Strich wachsen lassen
+            let partial;
+            let it = match o.limit {
+                Some((k, _)) if idx > k => continue,
+                Some((k, f)) if idx == k => match &it0.content {
+                    Content::Stroke(s) if !s.is_area() && s.pts.len() > 2 && f < 0.999 => {
+                        let n = ((s.pts.len() as f32 * f).ceil() as usize).clamp(1, s.pts.len());
+                        partial = Item { content: Content::Stroke(Stroke { pts: s.pts[..n].to_vec(), ..s.clone() }), ..it0.clone() };
+                        &partial
+                    }
+                    _ if f < 0.999 => continue,
+                    _ => it0,
+                },
+                _ => it0,
+            };
             if Some(it.id) == o.skip {
                 continue;
             }
@@ -560,7 +577,8 @@ impl Editor {
             ctx.fill_rect(ox - 1.0, oy + 3.0 * dpr, w as f64 * px_scale + 2.0, h as f64 * px_scale + 2.0);
             let is_live = self.live_page == Some(pid) || moving.map(|m| m.0) == Some(pid) || skip_page == Some(pid);
             let version = self.nb.pages[i].version;
-            if use_bmp && !is_live {
+            let replay_limit = self.replay.filter(|r| r.page == pid).map(|r| super::replay::limit_for(&self.nb.pages[i], r.pos));
+            if use_bmp && !is_live && replay_limit.is_none() {
                 let valid = self.bmps.get(&pid).map(|b| (b.scale - px_scale).abs() < 1e-6 && b.version == version && b.dark == dark && b.canvas.width() == (w as f64 * px_scale).ceil() as u32).unwrap_or(false);
                 // Während des Zoomens ein vorhandenes Bild nur skaliert weiterverwenden, wenn es den
                 // aktuellen Inhalt zeigt – sonst fehlte kurz, was zwischendurch gezeichnet wurde.
@@ -578,7 +596,7 @@ impl Editor {
                     {
                         let page = &self.nb.pages[i];
                         let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-                        draw_page(&bctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h).expand(50.0) });
+                        draw_page(&bctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h).expand(50.0), limit: None });
                     }
                     self.bmps.insert(pid, PageBmp { canvas, ctx: bctx, scale: px_scale, version, dark });
                 }
@@ -596,7 +614,7 @@ impl Editor {
             };
             let page = &self.nb.pages[i];
             let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-            draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip, moving: mv, clip });
+            draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip, moving: mv, clip, limit: replay_limit.flatten() });
             ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).ok();
         }
         // Auswahlrahmen
@@ -881,7 +899,7 @@ impl Editor {
             let ctx: CanvasRenderingContext2d = ctx.unchecked_into();
             ctx.set_transform(scale, 0.0, 0.0, scale, 0.0, 0.0).ok();
             let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-            draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h) });
+            draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h), limit: None });
             self.thumb_versions.insert(page.id, page.version);
         }
     }
@@ -896,7 +914,7 @@ impl Editor {
         ctx.set_transform(scale, 0.0, 0.0, scale, 0.0, 0.0).ok();
         let page = self.nb.pages.get(i)?;
         let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-        draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h) });
+        draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: Rect::new(0.0, 0.0, w, h), limit: None });
         canvas.to_data_url_with_type("image/png").ok()
     }
 }

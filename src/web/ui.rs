@@ -417,6 +417,7 @@ impl App {
             "sticker-menu" => self.open_sticker_dialog(),
             "symbol-menu" => self.open_symbol_dialog(),
             "frac-menu" => self.open_fraction_dialog(),
+            "replay" | "replay-close" | "replay-video" | "replay-share" | "replay-play" | "replay-restart" | "replay-speed" => self.replay_action(act),
             "frac-add" | "frac-insert" => self.fraction_action(act, arg),
             "exam-new" | "exam-edit" | "exam-save" | "exam-delete" => self.exam_action(act, arg),
             "grades-open" | "grade-weight" | "subject-add" | "grade-add" | "grade-del" | "subject-del" => self.grades_action(act, arg),
@@ -626,6 +627,7 @@ impl App {
         let f = value.parse::<f32>().unwrap_or(0.0);
         match name {
             "frac-text" => self.update_fraction_preview(),
+            "replay-pos" => self.replay_seek(value.parse::<f64>().unwrap_or(0.0)),
             "lib-search" => {
                 self.lib_query = value.to_lowercase();
                 self.render_library();

@@ -71,7 +71,7 @@ impl App {
         }
         {
             let mut c = Caches { paths: &mut ed.paths, tpl: &mut ed.tpl_cache, wraps: &mut ed.wraps, images };
-            draw_page(&ctx, page, pw, ph, &mut c, &DrawOpts { skip: None, moving: None, clip: b.expand(2.0) });
+            draw_page(&ctx, page, pw, ph, &mut c, &DrawOpts { skip: None, moving: None, clip: b.expand(2.0), limit: None });
         }
         let Ok(url) = canvas.to_data_url_with_type("image/png") else { return false };
         let Some(b64) = url.split(',').nth(1) else { return false };

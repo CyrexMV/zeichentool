@@ -73,6 +73,11 @@
     <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></symbol>
     <symbol id="i-multi" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M14.5 6.5l2 2 3.5-4M4.5 17.5l2 2 3.5-4"/></symbol>
     <symbol id="i-grades" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 16v-3M12 16V8M17 16v-6"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M10 9l5 3-5 3z"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
     <symbol id="i-frac" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M10 3.5h3v5"/><path d="M9 15.5h4.5a1.8 1.8 0 0 1 0 3.6H10a1.6 1.6 0 0 0 0 3.2h4"/></symbol>
     <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 5V4H6l7 8-7 8h12v-1"/></symbol>
     <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M15 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6a3 3 0 0 0-3-3z"/><path d="M13 21v-5a3 3 0 0 1 3-3h5"/><path d="M8.5 9.5h.01M14.5 9.5h.01"/></symbol>
@@ -207,6 +212,18 @@
     <button id="zoom-label" data-act="fit" title="Seitenbreite">100%</button>
   </div>
 
+  <div id="replay-bar" class="replay-bar glass">
+    <button class="icon-btn small" data-act="replay-restart" title="Von vorn"><svg><use href="#i-restart"/></svg></button>
+    <button class="replay-play" id="replay-play" data-act="replay-play" title="Pause"><svg class="i-pause"><use href="#i-pause"/></svg><svg class="i-play"><use href="#i-play"/></svg></button>
+    <input type="range" id="replay-pos" data-input="replay-pos" min="0" max="1000" value="0">
+    <span id="replay-time" class="replay-time">0:00</span>
+    <button class="replay-speed" id="replay-speed" data-act="replay-speed" title="Tempo">1×</button>
+    <span class="sep"></span>
+    <button class="icon-btn small" data-act="replay-video" title="Als Video speichern"><svg><use href="#i-film"/></svg></button>
+    <button class="icon-btn small" data-act="replay-share" title="Video teilen"><svg><use href="#i-share"/></svg></button>
+    <button class="icon-btn small" data-act="replay-close" title="Beenden"><svg><use href="#i-close"/></svg></button>
+  </div>
+
   <div id="sel-menu" class="sel-menu glass hidden">
     <div class="sel-colors" id="sel-colors"></div>
     <span class="sep"></span>
@@ -280,6 +297,7 @@
   <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
   <hr>
   <button class="mi" data-act="present"><svg><use href="#i-present"/></svg>Präsentieren</button>
+  <button class="mi" data-act="replay"><svg><use href="#i-replay"/></svg>Zeitraffer abspielen</button>
   <button class="mi" data-act="study"><svg><use href="#i-cards"/></svg>Lernkarten</button>
   <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Notizbuchvorlage speichern …</button>
   <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>

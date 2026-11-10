@@ -291,6 +291,7 @@ impl App {
             self.commit_text();
         }
         self.save_now();
+        set_class(&el("editor"), "replaying", false);
         self.ed = None;
         self.ed2 = None;
         self.active_left = true;

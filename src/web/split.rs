@@ -79,6 +79,7 @@ impl App {
         // Seitenanzeige mittig und Schieberegler rechts im aktiven Bereich
         if let Some(ed) = &self.ed {
             style(&el("page-pill"), "left", &format!("{}px", ed.ox + ed.vw * 0.5));
+            style(&el("replay-bar"), "left", &format!("{}px", ed.ox + ed.vw * 0.5));
             style(&el("scrubber"), "right", &format!("{}px", (ww - ed.ox - ed.vw).max(0.0) + 4.0));
         }
         self.position_overlays();

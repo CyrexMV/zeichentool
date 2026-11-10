@@ -93,6 +93,8 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Prüfungs-Countdown** auf dem Startbildschirm: „noch 23 Tage bis …“, farbig nach Dringlichkeit
 - **Notenübersicht** (Startbildschirm → „Noten“): Fächer mit Noten (2, 2,5, 2+, 2-), einfach/doppelt gewichtet,
   Fach- und Gesamtdurchschnitt
+- **Zeitraffer** (⋯ → „Zeitraffer abspielen“): die Seite zeichnet sich Strich für Strich selbst nach – Pause, Spulen,
+  Tempo 1×/2×/4×; als Video (MP4/WebM) speichern oder teilen
 - **Sticker & Stempel** (Einfügen-Menü): 16 Sticker (Stern, Häkchen, Ausrufezeichen, Glühbirne, Pokal …) und 12 Stempel
   („WICHTIG“, „PRÜFUNG“, „ERLEDIGT ✓“, „HAUSAUFGABE“ …) – als Bild eingefügt, frei skalier- und drehbar
 - **Datum einfügen** (Einfügen-Menü): heutiges Datum als Text, lang („Montag, 9. November 2026“) oder kurz („09.11.2026“)

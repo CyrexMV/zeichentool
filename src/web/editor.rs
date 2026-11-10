@@ -155,6 +155,8 @@ pub struct Editor {
     pub mind_hl: Option<(u32, u32)>,
     /// Präsentationsmodus: gezeigte Seite
     pub presenting: Option<usize>,
+    /// Zeitraffer-Wiedergabe
+    pub replay: Option<super::replay::Replay>,
     /// Gemerkte Vorderseite einer neuen Lernkarte
     pub card_front: Option<crate::engine::Region>,
     /// Platz für die Werkzeugleiste oben (CSS-Pixel)
@@ -222,6 +224,7 @@ impl Editor {
             zoomwin: None,
             mind_hl: None,
             presenting: None,
+            replay: None,
             card_front: None,
             top_pad: 84.0,
             ox: 0.0,

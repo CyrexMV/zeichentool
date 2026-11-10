@@ -199,6 +199,10 @@ impl App {
         if self.screen != Screen::Editor {
             return;
         }
+        // Zeitraffer läuft: Stift/Maus schreiben nicht (Finger dürfen verschieben/zoomen)
+        if self.ed.as_ref().is_some_and(|ed| ed.replay.is_some()) && e.pointer_type() != "touch" {
+            return;
+        }
         // Split-Ansicht: Stift oder Finger im anderen Bereich macht ihn aktiv
         if self.is_other_pane(&target_id(e)) {
             let busy = self.ed.as_ref().is_some_and(|ed| ed.op.is_some()) || !self.touches.is_empty();

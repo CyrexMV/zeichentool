@@ -880,3 +880,17 @@ b.due { color: #ff7a1a; }
 
 .mi .mi-sub { display: block; font-size: 11.5px; color: var(--muted); font-weight: 500; margin-top: 1px; }
 .mi > span { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+
+/* Zeitraffer */
+.replay-bar { position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 14px); transform: translateX(-50%); z-index: 12; display: none; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 18px; background: var(--glass-strong); box-shadow: var(--shadow); width: min(640px, calc(100vw - 32px)); }
+#editor.replaying .replay-bar { display: flex; }
+#editor.replaying .page-pill, #editor.replaying #scrubber { display: none; }
+.replay-play { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #fff; flex: 0 0 auto; box-shadow: 0 6px 16px rgba(109,92,255,.35); }
+.replay-play svg { width: 20px; height: 20px; }
+.replay-play .i-play { display: none; }
+.replay-play.paused .i-play { display: block; }
+.replay-play.paused .i-pause { display: none; }
+#replay-pos { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.replay-time { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
+.replay-speed { height: 34px; min-width: 42px; padding: 0 8px; border-radius: 10px; background: var(--hover); font-weight: 750; font-size: 13.5px; color: var(--text); }
+.replay-bar .sep { width: 1px; height: 24px; background: var(--line2); }

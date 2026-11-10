@@ -16,6 +16,7 @@ mod lock;
 mod pagesel;
 mod pensets;
 mod render;
+mod replay;
 mod ruler;
 mod school;
 mod scrubber;
@@ -613,6 +614,9 @@ impl App {
         self.raf_pending = false;
         let t = now();
         let mut again = self.step_momentum(t);
+        if self.screen == Screen::Editor && self.replay_tick(t) {
+            again = true;
+        }
         self.check_quickshape();
         let dark = self.dark;
         let lib_needed = self.screen == Screen::Editor;

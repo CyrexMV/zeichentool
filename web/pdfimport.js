@@ -254,3 +254,32 @@ window.notionShare = async function (b64, mime, name) {
   }
   return false;
 };
+
+// Zeitraffer-Video: Canvas Bild für Bild aufnehmen (MP4, falls möglich, sonst WebM).
+window.notionRec = {
+  start(canvas, fps) {
+    if (!canvas.captureStream || typeof MediaRecorder === 'undefined') return null;
+    const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+    if (!mime) return null;
+    const stream = canvas.captureStream(0);
+    const track = stream.getVideoTracks()[0];
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.start(500);
+    return { rec, track, chunks, mime, fps };
+  },
+  frame(h) {
+    if (h && h.track && h.track.requestFrame) h.track.requestFrame();
+  },
+  stop(h) {
+    return new Promise((resolve) => {
+      h.rec.onstop = async () => {
+        const blob = new Blob(h.chunks, { type: h.mime.split(';')[0] });
+        resolve({ bytes: new Uint8Array(await blob.arrayBuffer()), mime: h.mime.split(';')[0] });
+      };
+      h.rec.stop();
+    });
+  },
+};

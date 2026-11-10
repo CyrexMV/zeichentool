@@ -45,7 +45,7 @@ impl Editor {
         let (w, h) = self.nb.page_size(pi);
         let page = &self.nb.pages[pi];
         let mut c = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-        draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: r });
+        draw_page(&ctx, page, w, h, &mut c, &DrawOpts { skip: None, moving: None, clip: r, limit: None });
         ctx.restore();
     }
 }

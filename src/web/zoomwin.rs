@@ -113,7 +113,7 @@ impl Editor {
         {
             let page = &self.nb.pages[i];
             let mut cc = Caches { paths: &mut self.paths, tpl: &mut self.tpl_cache, wraps: &mut self.wraps, images };
-            draw_page(&ctx, page, w, h, &mut cc, &DrawOpts { skip: None, moving: None, clip: r.expand(2.0) });
+            draw_page(&ctx, page, w, h, &mut cc, &DrawOpts { skip: None, moving: None, clip: r.expand(2.0), limit: None });
         }
         if let Some(Op::Ink { page, stroke, predicted, .. }) = &self.op {
             if *page == z.page {
