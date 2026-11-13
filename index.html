@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f4f8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="Noteflow – moderne Notiz-App mit S-Pen, geschrieben in Rust.">
+<title>Noteflow</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-pages" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><path d="m15 5 3 3"/></symbol>
+    <symbol id="i-highlighter" viewBox="0 0 24 24"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+    <symbol id="i-lasso" viewBox="0 0 24 24"><path d="M7 22a5 5 0 0 1-2-4"/><path d="M3.34 14A6.8 6.8 0 0 1 2 10c0-4.42 4.48-8 10-8s10 3.58 10 8c0 2.2-1.1 4.2-2.9 5.6"/><path d="M7 16.9c1.5.7 3.2 1.1 5 1.1"/><circle cx="5" cy="18" r="2"/></symbol>
+    <symbol id="i-shapes" viewBox="0 0 24 24"><path d="M8.3 10a.7.7 0 0 1-.63-1.08L11.4 3a.7.7 0 0 1 1.2-.04l3.7 5.94a.7.7 0 0 1-.57 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-laser" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-page-plus" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6M9 15h6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.6l-5.8 3 1.1-6.4-4.7-4.6 6.5-.9z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></symbol>
+    <symbol id="i-dup" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/><path d="M14.5 11.5v6M11.5 14.5h6"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-nib" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.59 7.59"/><circle cx="11" cy="11" r="2"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a6 6 0 0 0 6-6c0-4.9-4.5-8.6-10-8.6z"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2"/></symbol>
+    <symbol id="i-triangle" viewBox="0 0 24 24"><path d="M3 20h18L3 4z"/><path d="M3 15a5 5 0 0 1 5 5"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 24 24"><rect x="6" y="3" width="14" height="10" rx="2"/><path d="M4 8v9a2 2 0 0 0 2 2h11"/><path d="M10 8h6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><path d="M12 10v6M9 13h6"/></symbol>
+    <symbol id="i-toc" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-template" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></symbol>
+    <symbol id="i-move-page" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M13 12l3 3-3 3"/></symbol>
+    <symbol id="i-pipette" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></symbol>
+    <symbol id="i-fill" viewBox="0 0 24 24"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-4M12 16V8M17 16v-7"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.3 1.4 1.4 2.8 2.5 2.8Z"/></symbol>
+    <symbol id="i-zoomwin" viewBox="0 0 24 24"><rect x="2" y="13" width="20" height="8" rx="2"/><rect x="6" y="3" width="8" height="5" rx="1"/><path d="M10 8v5"/></symbol>
+    <symbol id="i-paper" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="10" cy="13" r="2"/><path d="m20 17-3-3-6 6"/></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2a1.5 1.5 0 0 1 0 3H8v-5M14 11v5M14 11h2"/></symbol>
+    <symbol id="i-pensets" viewBox="0 0 24 24"><path d="M4 20l3-1 9-9-2-2-9 9z"/><path d="M13 7l2-2 4 4-2 2"/><path d="M15 21h6M18 18v6" transform="translate(0 -3)"/></symbol>
+    <symbol id="i-rot-cw" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+    <symbol id="i-rot-ccw" viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 1 2.3 5.7"/><path d="M4 4v7h7"/></symbol>
+    <symbol id="i-flip-h" viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 6 3 18h6z"/><path d="M15 6l6 12h-6z"/></symbol>
+    <symbol id="i-flip-v" viewBox="0 0 24 24"><path d="M3 12h18" stroke-dasharray="2 2.5"/><path d="M6 9 18 3v6z"/><path d="M6 15l12 6v-6z"/></symbol>
+    <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-multi" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M14.5 6.5l2 2 3.5-4M4.5 17.5l2 2 3.5-4"/></symbol>
+    <symbol id="i-grades" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 16v-3M12 16V8M17 16v-6"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M10 9l5 3-5 3z"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+    <symbol id="i-frac" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M10 3.5h3v5"/><path d="M9 15.5h4.5a1.8 1.8 0 0 1 0 3.6H10a1.6 1.6 0 0 0 0 3.2h4"/></symbol>
+    <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 5V4H6l7 8-7 8h12v-1"/></symbol>
+    <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M15 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6a3 3 0 0 0-3-3z"/><path d="M13 21v-5a3 3 0 0 1 3-3h5"/><path d="M8.5 9.5h.01M14.5 9.5h.01"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/></symbol>
+    <symbol id="i-align" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-left" viewBox="0 0 24 24"><path d="M4 3v18"/><rect x="7" y="5" width="12" height="5" rx="1.5"/><rect x="7" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-hc" viewBox="0 0 24 24"><path d="M12 3v18"/><rect x="5" y="5" width="14" height="5" rx="1.5"/><rect x="8" y="14" width="8" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-right" viewBox="0 0 24 24"><path d="M20 3v18"/><rect x="5" y="5" width="12" height="5" rx="1.5"/><rect x="10" y="14" width="7" height="5" rx="1.5"/></symbol>
+    <symbol id="i-al-top" viewBox="0 0 24 24"><path d="M3 4h18"/><rect x="5" y="7" width="5" height="12" rx="1.5"/><rect x="14" y="7" width="5" height="7" rx="1.5"/></symbol>
+    <symbol id="i-al-vc" viewBox="0 0 24 24"><path d="M3 12h18"/><rect x="5" y="5" width="5" height="14" rx="1.5"/><rect x="14" y="8" width="5" height="8" rx="1.5"/></symbol>
+    <symbol id="i-al-bottom" viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="5" y="5" width="5" height="12" rx="1.5"/><rect x="14" y="10" width="5" height="7" rx="1.5"/></symbol>
+    <symbol id="i-al-dh" viewBox="0 0 24 24"><path d="M3 4v16M21 4v16"/><rect x="7" y="8" width="4" height="8" rx="1.2"/><rect x="13" y="8" width="4" height="8" rx="1.2"/></symbol>
+    <symbol id="i-al-dv" viewBox="0 0 24 24"><path d="M4 3h16M4 21h16"/><rect x="8" y="7" width="8" height="4" rx="1.2"/><rect x="8" y="13" width="8" height="4" rx="1.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
+    <symbol id="i-insert" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14.5h18M9 4v16M15 4v16"/></symbol>
+    <symbol id="i-plot" viewBox="0 0 24 24"><path d="M3 12h18M12 3v18"/><path d="M4 19c4-1 5-13 8-13s4 12 8 13"/></symbol>
+    <symbol id="i-mind" viewBox="0 0 24 24"><rect x="8" y="9.5" width="8" height="5" rx="2.5"/><rect x="2" y="3" width="6" height="4" rx="2"/><rect x="16" y="3" width="6" height="4" rx="2"/><rect x="16" y="17" width="6" height="4" rx="2"/><path d="M8 11c-2 0-2-4-3-4M16 11c2 0 2-4 3-4M16 13c2 0 2 4 3 4"/></symbol>
+    <symbol id="i-present" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M10 8l5 2-5 2z"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1.3"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="m10.8 6.2-5.3 14.3M13.2 6.2l5.3 14.3M7.3 15.5a10 10 0 0 0 9.4 0"/></symbol>
+    <symbol id="i-fingerprint" viewBox="0 0 24 24"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+  </defs>
+</svg>
+
+<!-- ================= Bibliothek ================= -->
+<section id="library" class="screen">
+  <header class="lib-head">
+    <div class="lib-brand">
+      <div class="logo"><svg><use href="#i-nib"/></svg></div>
+      <div>
+        <h1 id="lib-h1">Noteflow</h1>
+        <span id="lib-count" class="muted">–</span>
+      </div>
+    </div>
+    <div class="lib-tools">
+      <label class="search"><svg><use href="#i-search"/></svg><input id="lib-search" data-input="lib-search" placeholder="Notizbücher suchen" autocomplete="off"></label>
+      <div class="seg small" id="lib-sort">
+        <button data-act="lib-sort" data-arg="modified">Zuletzt</button>
+        <button data-act="lib-sort" data-arg="title">Name</button>
+        <button data-act="lib-sort" data-arg="created">Erstellt</button>
+      </div>
+      <button class="chip" id="lib-fav" data-act="lib-fav"><svg><use href="#i-star"/></svg>Favoriten</button>
+      <button class="icon-btn" data-act="folder-new" title="Neuer Ordner"><svg><use href="#i-folder-plus"/></svg></button>
+      <button class="icon-btn" data-act="import-menu" title="Importieren: PDF, Bild, Notizbuch-Datei"><svg><use href="#i-import"/></svg></button>
+      <button class="icon-btn" data-act="settings" title="Einstellungen"><svg><use href="#i-settings"/></svg></button>
+      <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Neues Notizbuch</button>
+    </div>
+  </header>
+  <div id="lib-crumb" class="lib-crumb hidden"><button class="btn small ghost" data-act="folder-up"><svg><use href="#i-back"/></svg>Alle Notizbücher</button><span id="lib-crumb-name"></span><button id="lib-trash-empty" class="btn small hidden" data-act="trash-empty"><svg><use href="#i-trash"/></svg>Papierkorb leeren</button></div>
+  <div id="lib-school" class="lib-school"></div>
+  <div id="lib-decks" class="lib-decks"></div>
+  <div id="lib-folders" class="lib-folders"></div>
+  <div id="lib-grid" class="lib-grid"></div>
+  <button id="lib-trash-btn" class="lib-trash-btn glass" data-act="trash-open" title="Papierkorb"><svg><use href="#i-trash"/></svg><span>Papierkorb</span><b id="lib-trash-count"></b></button>
+  <div id="lib-empty" class="lib-empty hidden">
+    <div class="empty-art"><svg><use href="#i-nib"/></svg></div>
+    <h2>Noch keine Notizbücher</h2>
+    <p class="muted">Lege dein erstes Notizbuch an – liniert, kariert, gepunktet oder blanko.</p>
+    <button class="btn primary" data-act="new-nb"><svg><use href="#i-plus"/></svg>Notizbuch erstellen</button>
+  </div>
+</section>
+
+<!-- ================= Editor ================= -->
+<section id="editor" class="screen hidden">
+  <canvas id="view"></canvas>
+  <canvas id="live"></canvas>
+  <canvas id="view2" class="hidden"></canvas>
+  <canvas id="live2" class="hidden"></canvas>
+  <div id="split-divider" class="split-divider hidden"></div>
+  <div id="pane-focus" class="pane-focus hidden"></div>
+  <div id="pane-other" class="pane-other glass hidden"><span id="pane-other-title"></span><small>antippen zum Bearbeiten</small><button class="icon-btn small" data-act="split-close" title="Split-Ansicht schließen"><svg><use href="#i-close"/></svg></button></div>
+  <textarea id="text-editor" class="text-editor hidden" spellcheck="true" placeholder="Text eingeben …"></textarea>
+
+  <header class="ed-top" id="ed-top">
+    <div class="ed-left glass">
+      <button class="icon-btn" data-act="back" title="Bibliothek"><svg><use href="#i-back"/></svg></button>
+      <button class="icon-btn" id="btn-nav" data-act="nav" title="Seitenübersicht"><svg><use href="#i-pages"/></svg></button>
+      <input id="ed-title" class="title-input" data-input="title" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="toolbar glass" id="toolbar">
+      <button class="tb" id="btn-undo" data-act="undo" title="Rückgängig"><svg><use href="#i-undo"/></svg></button>
+      <button class="tb" id="btn-redo" data-act="redo" title="Wiederholen"><svg><use href="#i-redo"/></svg></button>
+      <span class="sep"></span>
+      <button class="tb tool" data-act="tool" data-arg="pen" title="Stift (P)"><svg><use href="#i-pen"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="highlighter" title="Textmarker (H)"><svg><use href="#i-highlighter"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="eraser" title="Radierer (E)"><svg><use href="#i-eraser"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="lasso" title="Lasso (L)"><svg><use href="#i-lasso"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="shape" title="Formen (S)"><svg><use href="#i-shapes"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="text" title="Text (T)"><svg><use href="#i-text"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="mind" title="Mindmap (M)"><svg><use href="#i-mind"/></svg></button>
+      <button class="tb" id="btn-insert" data-act="insert-menu" title="Einfügen: Bild, Tabelle, Funktionsgraph"><svg><use href="#i-insert"/></svg></button>
+      <button class="tb tool" data-act="tool" data-arg="laser" title="Laserpointer"><svg><use href="#i-laser"/></svg></button>
+      <button class="tb" id="btn-ruler" data-act="ruler-menu" title="Lineal &amp; Geodreieck"><svg><use href="#i-ruler"/></svg></button>
+      <button class="tb" id="btn-zoomwin" data-act="zoomwin" title="Zoom-Fenster"><svg><use href="#i-zoomwin"/></svg></button>
+      <span class="sep" id="fav-sep"></span>
+      <div id="favs" class="favs"></div>
+      <button class="tb" id="btn-sets" data-act="pen-sets" title="Stift-Sets"><svg><use href="#i-pensets"/></svg></button>
+    </div>
+    <div id="ed-tabs" class="ed-tabs hidden"></div>
+    <div class="ed-right glass">
+      <span id="pen-badge" title="S-Pen erkannt – Handballen wird ignoriert"><svg><use href="#i-nib"/></svg></span>
+      <button class="icon-btn" data-act="study" title="Lernkarten"><svg><use href="#i-cards"/></svg></button>
+      <button class="icon-btn" data-act="add-page" title="Seite hinzufügen"><svg><use href="#i-page-plus"/></svg></button>
+      <button class="icon-btn" id="btn-split" data-act="split" title="Split-Ansicht: zweites Notizbuch daneben"><svg><use href="#i-split"/></svg></button>
+      <button class="icon-btn" data-act="more" title="Mehr"><svg><use href="#i-more"/></svg></button>
+    </div>
+  </header>
+
+  <aside id="navigator" class="navigator glass">
+    <div class="nav-top">
+      <b>Seiten</b>
+      <button class="btn small ghost nav-sel-btn" id="nav-sel-btn" data-act="nav-sel" title="Mehrere Seiten auswählen"><svg><use href="#i-multi"/></svg>Auswählen</button>
+      <button class="icon-btn small" data-act="nav" title="Schließen"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="nav-head">
+      <div class="seg small">
+        <button id="nav-all" data-act="nav-filter" data-arg="all">Alle</button>
+        <button id="nav-bm" data-act="nav-filter" data-arg="bm">Lesezeichen</button>
+        <button id="nav-toc" data-act="nav-filter" data-arg="toc">Inhalt</button>
+      </div>
+    </div>
+    <div id="nav-list" class="nav-list"></div>
+  </aside>
+
+  <div class="page-pill glass" id="page-pill">
+    <button data-act="page-prev" title="Vorherige Seite">‹</button>
+    <span id="page-label">1 / 1</span>
+    <button data-act="page-next" title="Nächste Seite">›</button>
+    <span class="dot"></span>
+    <button id="zoom-label" data-act="fit" title="Seitenbreite">100%</button>
+  </div>
+
+  <div id="replay-bar" class="replay-bar glass">
+    <button class="icon-btn small" data-act="replay-restart" title="Von vorn"><svg><use href="#i-restart"/></svg></button>
+    <button class="replay-play" id="replay-play" data-act="replay-play" title="Pause"><svg class="i-pause"><use href="#i-pause"/></svg><svg class="i-play"><use href="#i-play"/></svg></button>
+    <input type="range" id="replay-pos" data-input="replay-pos" min="0" max="1000" value="0">
+    <span id="replay-time" class="replay-time">0:00</span>
+    <button class="replay-speed" id="replay-speed" data-act="replay-speed" title="Tempo">1×</button>
+    <span class="sep"></span>
+    <button class="icon-btn small" data-act="replay-video" title="Als Video speichern"><svg><use href="#i-film"/></svg></button>
+    <button class="icon-btn small" data-act="replay-share" title="Video teilen"><svg><use href="#i-share"/></svg></button>
+    <button class="icon-btn small" data-act="replay-close" title="Beenden"><svg><use href="#i-close"/></svg></button>
+  </div>
+
+  <div id="sel-menu" class="sel-menu glass hidden">
+    <div class="sel-colors" id="sel-colors"></div>
+    <span class="sep"></span>
+    <button data-act="sel-align" title="Ausrichten, drehen &amp; spiegeln"><svg><use href="#i-align"/></svg></button>
+    <button data-act="sel-pin" id="sel-pin" title="Fixieren"><svg><use href="#i-pin"/></svg></button>
+    <button data-act="sel-fill" title="Form füllen (Stiftfarbe)"><svg><use href="#i-fill"/></svg></button>
+    <button data-act="sel-link" id="sel-link" title="Link setzen"><svg><use href="#i-link"/></svg></button>
+    <button data-act="sel-card" id="sel-card" title="Als Lernkarte"><svg><use href="#i-cards"/></svg></button>
+    <button data-act="sel-copy" title="Kopieren"><svg><use href="#i-copy"/></svg></button>
+    <button data-act="sel-copy-img" id="sel-copy-img" title="Als Bild kopieren (mit PDF-Hintergrund)"><svg><use href="#i-crop"/></svg></button>
+    <button data-act="sel-cut" title="Ausschneiden"><svg><use href="#i-cut"/></svg></button>
+    <button data-act="sel-dup" title="Duplizieren"><svg><use href="#i-dup"/></svg></button>
+    <button data-act="sel-delete" class="danger" title="Löschen"><svg><use href="#i-trash"/></svg></button>
+  </div>
+  <div id="scrubber" class="scrubber hidden" title="Ziehen zum Blättern">
+    <div class="scrub-track"></div>
+    <div id="scrub-thumb" class="scrub-thumb"><span id="scrub-label" class="scrub-label"></span></div>
+  </div>
+  <div id="present-bar" class="present-bar">
+    <button data-act="present-prev" title="Vorherige Seite">‹</button>
+    <span id="present-count">1 / 1</span>
+    <button data-act="present-next" title="Nächste Seite">›</button>
+    <button data-act="present-exit" class="exit" title="Präsentation beenden"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div id="zoomwin" class="zoomwin glass hidden">
+    <canvas id="zw-canvas"></canvas>
+    <div class="zw-tools" id="zw-tools">
+      <button data-act="zw-prev" title="Zurück">‹</button>
+      <button data-act="zw-next" title="Weiter">›</button>
+      <button data-act="zw-line" title="Neue Zeile">↵</button>
+      <button data-act="zw-in" title="Stärker vergrößern">+</button>
+      <button data-act="zw-out" title="Weniger vergrößern">−</button>
+      <button data-act="zw-close" title="Zoom-Fenster schließen">✕</button>
+    </div>
+  </div>
+  <div id="mind-menu" class="sel-menu mind-menu glass hidden">
+    <button data-act="mind-child" class="mind-add" title="Ast hinzufügen"><svg><use href="#i-plus"/></svg>Ast</button>
+    <button data-act="mind-text" title="Text ändern"><svg><use href="#i-text"/></svg></button>
+    <span class="sep"></span>
+    <div class="sel-colors">
+      <button data-act="mind-color" data-arg="0" style="background:#6d5cff"></button><button data-act="mind-color" data-arg="1" style="background:#24a0ed"></button><button data-act="mind-color" data-arg="2" style="background:#1fb26e"></button><button data-act="mind-color" data-arg="3" style="background:#f09819"></button><button data-act="mind-color" data-arg="4" style="background:#f05858"></button><button data-act="mind-color" data-arg="5" style="background:#d648ba"></button><button data-act="mind-color" data-arg="6" style="background:#00a89b"></button>
+    </div>
+    <span class="sep"></span>
+    <button data-act="mind-del" class="danger" title="Blase löschen"><svg><use href="#i-trash"/></svg></button>
+  </div>
+  <button id="paste-btn" class="paste-btn glass hidden" data-act="paste"><svg><use href="#i-paste"/></svg>Einfügen</button>
+  <div id="cursor"></div>
+</section>
+
+<!-- Werkzeug-Optionen -->
+<div id="pop-tool" class="popover glass hidden"></div>
+
+<!-- Mehr-Menü -->
+<div id="pop-more" class="popover menu glass hidden" data-tab="page">
+  <div class="more-quick">
+    <button data-act="share-menu"><svg><use href="#i-share"/></svg><span>Teilen</span></button>
+    <button data-act="present"><svg><use href="#i-present"/></svg><span>Präsentieren</span></button>
+    <button data-act="replay"><svg><use href="#i-replay"/></svg><span>Zeitraffer</span></button>
+    <button data-act="study"><svg><use href="#i-cards"/></svg><span>Lernkarten</span></button>
+  </div>
+  <div class="seg more-tabs">
+    <button data-act="more-tab" data-arg="page" id="more-tab-page" class="active">Seite</button>
+    <button data-act="more-tab" data-arg="nb" id="more-tab-nb">Notizbuch</button>
+    <button data-act="more-tab" data-arg="export" id="more-tab-export">Export</button>
+  </div>
+  <div class="more-group" data-g="page">
+    <button class="mi" data-act="page-title"><svg><use href="#i-toc"/></svg>Seitentitel …</button>
+    <button class="mi" data-act="bookmark"><svg><use href="#i-bookmark"/></svg><span id="bm-label">Lesezeichen setzen</span></button>
+    <button class="mi" data-act="marks"><svg><use href="#i-tag"/></svg>Markierung &amp; Schlagwörter …</button>
+    <button class="mi" data-act="rotate-page"><svg><use href="#i-rot-cw"/></svg>Seite drehen</button>
+    <button class="mi" data-act="dup-page"><svg><use href="#i-dup"/></svg>Seite duplizieren</button>
+    <button class="mi" data-act="page-to"><svg><use href="#i-move-page"/></svg>In anderes Notizbuch …</button>
+    <button class="mi danger" data-act="del-page"><svg><use href="#i-trash"/></svg>Seite löschen</button>
+  </div>
+  <div class="more-group" data-g="nb">
+    <button class="mi" data-act="template"><svg><use href="#i-pages"/></svg>Vorlage &amp; Papier …</button>
+    <button class="mi" data-act="ed-cover"><svg><use href="#i-palette"/></svg>Cover ändern …</button>
+    <button class="mi" data-act="cover-page"><svg><use href="#i-template"/></svg><span id="cover-page-label">Deckblatt hinzufügen</span></button>
+    <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten einfügen …</button>
+    <button class="mi" data-act="save-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
+    <button class="mi" data-act="settings"><svg><use href="#i-settings"/></svg>Einstellungen &amp; S-Pen</button>
+  </div>
+  <div class="more-group" data-g="export">
+    <button class="mi" data-act="export-pdf"><svg><use href="#i-export"/></svg>Notizbuch als PDF</button>
+    <button class="mi" data-act="export-page-pdf"><svg><use href="#i-export"/></svg>Diese Seite als PDF</button>
+    <button class="mi" data-act="export-png"><svg><use href="#i-image"/></svg>Seite als Bild (PNG)</button>
+    <button class="mi" data-act="export-znote"><svg><use href="#i-copy"/></svg>Backup (.znote)</button>
+  </div>
+</div>
+
+<!-- Ausrichten -->
+<div id="pop-align" class="popover glass hidden">
+  <div class="pop-title">Ausrichten</div>
+  <div class="align-grid">
+    <button data-act="align-left" title="Links"><svg><use href="#i-al-left"/></svg><span>Links</span></button>
+    <button data-act="align-hcenter" title="Mitte"><svg><use href="#i-al-hc"/></svg><span>Mitte</span></button>
+    <button data-act="align-right" title="Rechts"><svg><use href="#i-al-right"/></svg><span>Rechts</span></button>
+    <button data-act="align-top" title="Oben"><svg><use href="#i-al-top"/></svg><span>Oben</span></button>
+    <button data-act="align-vcenter" title="Mittig"><svg><use href="#i-al-vc"/></svg><span>Mittig</span></button>
+    <button data-act="align-bottom" title="Unten"><svg><use href="#i-al-bottom"/></svg><span>Unten</span></button>
+    <button data-act="align-dist-h" title="Waagerecht verteilen"><svg><use href="#i-al-dh"/></svg><span>Verteilen ↔</span></button>
+    <button data-act="align-dist-v" title="Senkrecht verteilen"><svg><use href="#i-al-dv"/></svg><span>Verteilen ↕</span></button>
+  </div>
+  <p class="hint">Was sich berührt (z. B. ein Wort oder eine Tabelle), bleibt zusammen.</p>
+  <div class="pop-title second">Drehen &amp; Spiegeln</div>
+  <div class="align-grid four">
+    <button data-act="xf-rot-ccw" title="90° nach links"><svg><use href="#i-rot-ccw"/></svg><span>90° links</span></button>
+    <button data-act="xf-rot-cw" title="90° nach rechts"><svg><use href="#i-rot-cw"/></svg><span>90° rechts</span></button>
+    <button data-act="xf-flip-h" title="Waagerecht spiegeln"><svg><use href="#i-flip-h"/></svg><span>Spiegeln</span></button>
+    <button data-act="xf-flip-v" title="Senkrecht spiegeln"><svg><use href="#i-flip-v"/></svg><span>Kippen</span></button>
+  </div>
+</div>
+
+<!-- Stift-Sets -->
+<div id="pop-sets" class="popover glass hidden"></div>
+
+<!-- Import-Menü (Startbildschirm) -->
+<div id="pop-import" class="popover menu glass hidden">
+  <button class="mi" data-act="import-pdf"><svg><use href="#i-pdf"/></svg>PDF als Notizbuch …</button>
+  <button class="mi" data-act="import-ink"><svg><use href="#i-pen"/></svg><span>Handschrift-PDF (z. B. GoodNotes) …<small class="mi-sub">Handschrift einzeln radierbar</small></span></button>
+  <button class="mi" data-act="import-image"><svg><use href="#i-image"/></svg>Bild als Notizbuch …</button>
+  <button class="mi" data-act="import"><svg><use href="#i-import"/></svg>Notizbuch-Datei oder Backup …</button>
+  <p class="hint menu-hint">Ein PDF wird zum eigenen Notizbuch – jede Seite zum Hineinschreiben.</p>
+</div>
+
+<!-- Teilen-Menü -->
+<div id="pop-share" class="popover menu glass hidden">
+  <button class="mi" data-act="share-png"><svg><use href="#i-image"/></svg>Diese Seite als Bild</button>
+  <button class="mi" data-act="share-page-pdf"><svg><use href="#i-pdf"/></svg>Diese Seite als PDF</button>
+  <button class="mi" data-act="share-pdf"><svg><use href="#i-export"/></svg>Ganzes Notizbuch als PDF</button>
+  <button class="mi" data-act="share-znote"><svg><use href="#i-copy"/></svg>Notizbuch-Datei (.znote)</button>
+  <p class="hint menu-hint">Öffnet das Teilen-Menü – z. B. WhatsApp, Mail, Google Drive.</p>
+</div>
+
+<!-- Einfügen-Menü -->
+<div id="pop-insert" class="popover menu glass hidden">
+  <button class="mi" data-act="image"><svg><use href="#i-image"/></svg>Bild</button>
+  <button class="mi" data-act="insert-table"><svg><use href="#i-table"/></svg>Tabelle …</button>
+  <button class="mi" data-act="insert-plot"><svg><use href="#i-plot"/></svg>Funktionsgraph …</button>
+  <button class="mi" data-act="pdf-insert"><svg><use href="#i-pdf"/></svg>PDF-Seiten …</button>
+  <hr>
+  <button class="mi" data-act="symbol-menu"><svg><use href="#i-sigma"/></svg>Symbole …</button>
+  <button class="mi" data-act="frac-menu"><svg><use href="#i-frac"/></svg>Bruch / Formel …</button>
+  <button class="mi" data-act="sticker-menu"><svg><use href="#i-sticker"/></svg>Sticker &amp; Stempel …</button>
+  <hr>
+  <button class="mi" data-act="insert-date" data-arg="long"><svg><use href="#i-calendar"/></svg>Datum</button>
+  <button class="mi" data-act="insert-date" data-arg="short"><svg><use href="#i-calendar"/></svg>Datum kurz (TT.MM.JJJJ)</button>
+</div>
+
+<!-- Lineal-Menü -->
+<div id="pop-ruler" class="popover menu glass hidden">
+  <button class="mi" data-act="ruler" data-arg="ruler"><svg><use href="#i-ruler"/></svg>Lineal</button>
+  <button class="mi" data-act="ruler" data-arg="triangle"><svg><use href="#i-triangle"/></svg>Geodreieck</button>
+  <button class="mi" data-act="ruler" data-arg="compass"><svg><use href="#i-compass"/></svg>Zirkel</button>
+  <button class="mi" data-act="ruler" data-arg="off"><svg><use href="#i-close"/></svg>Ausblenden</button>
+  <p class="hint menu-hint">Mit einem Finger verschieben, mit zwei Fingern drehen. Am Rand entlang zeichnet der Stift gerade Linien. Zirkel: Mitte verschieben, Spitze ziehen = Radius; am Kreis entlang zeichnen. Winkel messen: am Nullpunkt des Geodreiecks ansetzen und zeichnen.</p>
+</div>
+
+<!-- Ordner-Menü -->
+<div id="pop-folder" class="popover menu glass hidden">
+  <button class="mi" data-act="folder-rename"><svg><use href="#i-text"/></svg>Umbenennen</button>
+  <hr>
+  <button class="mi danger" data-act="folder-delete"><svg><use href="#i-trash"/></svg>Ordner auflösen</button>
+</div>
+
+<!-- Kontextmenü Bibliothek -->
+<div id="pop-card" class="popover menu glass hidden">
+  <button class="mi" data-act="card-open"><svg><use href="#i-pen"/></svg>Öffnen</button>
+  <button class="mi" data-act="card-rename"><svg><use href="#i-text"/></svg>Umbenennen</button>
+  <button class="mi" data-act="card-fav"><svg><use href="#i-star"/></svg><span id="card-fav-label">Favorit</span></button>
+  <button class="mi" data-act="card-cover"><svg><use href="#i-palette"/></svg>Cover ändern</button>
+  <button class="mi" data-act="card-folder"><svg><use href="#i-folder"/></svg>In Ordner verschieben …</button>
+  <button class="mi" data-act="card-dup"><svg><use href="#i-dup"/></svg>Duplizieren</button>
+  <button class="mi" data-act="card-lock"><svg><use href="#i-lock"/></svg><span id="card-lock-label">Mit PIN sperren …</span></button>
+  <button class="mi" data-act="card-template"><svg><use href="#i-template"/></svg>Als Vorlage speichern …</button>
+  <button class="mi" data-act="card-share"><svg><use href="#i-share"/></svg>Als PDF teilen …</button>
+  <button class="mi" data-act="card-pdf"><svg><use href="#i-export"/></svg>Als PDF exportieren</button>
+  <button class="mi" data-act="card-znote"><svg><use href="#i-copy"/></svg>Backup speichern</button>
+  <hr>
+  <button class="mi danger" data-act="card-delete"><svg><use href="#i-trash"/></svg><span id="card-delete-label">Löschen</span></button>
+</div>
+
+<!-- Papierkorb-Menü -->
+<div id="pop-trash" class="popover menu glass hidden">
+  <button class="mi" data-act="trash-restore"><svg><use href="#i-restore"/></svg>Wiederherstellen</button>
+  <hr>
+  <button class="mi danger" data-act="trash-delete"><svg><use href="#i-trash"/></svg>Endgültig löschen</button>
+</div>
+
+<!-- Neues Notizbuch -->
+<div id="modal-new" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Neues Notizbuch</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="new-grid">
+      <div class="new-preview">
+        <div id="new-cover" class="cover big"><div id="new-cover-art"></div><span id="new-cover-title">Notizbuch</span></div>
+      </div>
+      <div class="new-opts">
+        <label class="field"><span>Titel</span><input id="new-title" data-input="new-title" placeholder="z. B. Mathe, Ideen, Tagebuch" autocomplete="off"></label>
+        <div id="new-from-wrap" class="hidden">
+          <h4>Vorlage &amp; Planer</h4>
+          <div id="new-from" class="from-row"></div>
+        </div>
+        <h4>Cover</h4>
+        <div id="new-covers" class="cover-row"></div>
+        <label class="row toggle cover-page-toggle"><span>Deckblatt als erste Seite<br><small>Das Cover erscheint auch beim Öffnen des Notizbuchs</small></span><span class="switch"><input type="checkbox" id="new-cover-page" data-input="new-cover-page" checked><span></span></span></label>
+        <h4>Format</h4>
+        <div class="seg" id="new-format">
+          <button data-act="new-format" data-arg="0">A4 Hoch</button>
+          <button data-act="new-format" data-arg="1">A4 Quer</button>
+          <button data-act="new-format" data-arg="2">Quadrat</button>
+          <button data-act="new-format" data-arg="3">Bildschirm</button>
+        </div>
+      </div>
+    </div>
+    <div id="new-paper-section">
+    <h4>Papier</h4>
+    <div id="new-tpl" class="tpl-grid"></div>
+    <div class="paper-line">
+      <div class="seg small" id="new-sp">
+        <button data-act="new-sp" data-arg="0">Eng</button>
+        <button data-act="new-sp" data-arg="1">Mittel</button>
+        <button data-act="new-sp" data-arg="2">Weit</button>
+      </div>
+      <div id="new-paper" class="paper-sw"></div>
+    </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="new-create">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Vorlage ändern -->
+<div id="modal-tpl" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Vorlage &amp; Papier</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <div id="tpl-tpl" class="tpl-grid"></div>
+    <div class="paper-line">
+      <div class="seg small" id="tpl-sp">
+        <button data-act="tpl-sp" data-arg="0">Eng</button>
+        <button data-act="tpl-sp" data-arg="1">Mittel</button>
+        <button data-act="tpl-sp" data-arg="2">Weit</button>
+      </div>
+      <div id="tpl-paper" class="paper-sw"></div>
+    </div>
+    <h4>Eigenes Papier</h4>
+    <div class="paper-own">
+      <button class="btn small" data-act="paper-img" data-arg="page"><svg><use href="#i-paper"/></svg>Bild für diese Seite</button>
+      <button class="btn small" data-act="paper-img" data-arg="all"><svg><use href="#i-paper"/></svg>Bild für alle Seiten</button>
+      <button class="btn small ghost" data-act="paper-clear"><svg><use href="#i-close"/></svg>Hintergrund entfernen</button>
+    </div>
+    <p class="hint">Ein Foto, gescanntes Papier oder eine eigene Vorlage wird zum Seitenhintergrund – neue Seiten übernehmen es automatisch.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn" data-act="tpl-apply" data-arg="all">Alle Seiten</button>
+      <button class="btn primary" data-act="tpl-apply" data-arg="page">Diese Seite</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cover ändern -->
+<div id="modal-cover" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><h2>Cover ändern</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <div id="cover-pick" class="cover-row wrap"></div>
+  </div>
+</div>
+
+<!-- Bestätigen / Umbenennen -->
+<div id="modal-confirm" class="modal hidden">
+  <div class="modal-card glass dialog">
+    <div id="dlg-visual" class="dlg-visual"></div>
+    <h2 id="dlg-title"></h2>
+    <p id="dlg-text"></p>
+    <input id="dlg-input" class="dlg-input hidden" maxlength="80" autocomplete="off" spellcheck="false">
+    <button id="dlg-bio" class="btn small ghost bio hidden" data-act="dlg-bio"><svg><use href="#i-fingerprint"/></svg>Fingerabdruck verwenden</button>
+    <div class="dlg-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button id="dlg-ok" class="btn" data-act="dlg-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Auswahl (Ordner / Notizbuch) -->
+<div id="modal-pick" class="modal hidden">
+  <div class="modal-card glass dialog pick">
+    <div class="dlg-visual"><div id="pick-icon" class="dlg-icon accent"></div></div>
+    <h2 id="pick-title"></h2>
+    <p id="pick-text"></p>
+    <div id="pick-mode" class="seg hidden">
+      <button data-act="pick-mode" data-arg="copy">Kopieren</button>
+      <button data-act="pick-mode" data-arg="move">Verschieben</button>
+    </div>
+    <div id="pick-list" class="pick-list"></div>
+    <div class="dlg-actions"><button class="btn ghost" data-act="modal-close">Abbrechen</button></div>
+  </div>
+</div>
+
+<!-- Lernkarten -->
+<section id="study" class="study hidden">
+  <header class="study-head">
+    <button class="icon-btn" data-act="study-close" title="Schließen"><svg><use href="#i-close"/></svg></button>
+    <div><h2>Lernkarten</h2><span id="study-sub" class="muted"></span></div>
+    <span class="study-progress"><span id="study-bar"></span></span>
+  </header>
+  <div id="study-home" class="study-home">
+    <div id="study-boxes" class="study-boxes"></div>
+    <div class="study-meta"><div id="study-streak" class="study-streak"></div><button class="btn small ghost" data-act="stats"><svg><use href="#i-chart"/></svg>Statistik</button></div>
+    <div class="study-start">
+      <button class="btn big hidden" id="study-due-btn" data-act="study-start" data-arg="due"><svg><use href="#i-calendar"/></svg><span id="study-due-label">Fällige lernen</span></button>
+      <button class="btn primary big" data-act="study-start" data-arg="all"><svg><use href="#i-cards"/></svg><span id="study-start-label">Lernen starten</span></button>
+      <button class="btn big" data-act="study-start" data-arg="hard">Nur schwierige</button>
+    </div>
+    <label class="row toggle due-toggle" id="study-due-toggle"><span>Wiederholungsplan (freiwillig)<br><small>Gewusste Karten werden erst nach 1, 3, 7 und 21 Tagen wieder fällig</small></span><span class="switch"><input type="checkbox" data-input="study-due"><span></span></span></label>
+    <p id="study-due-info" class="hint center due-info"></p>
+    <p class="hint center">So erstellst du Karten: Mit dem <b>Lasso</b> die Frage einkreisen → <b>Lernkarte</b> tippen, dann die Antwort einkreisen → nochmal <b>Lernkarte</b>.</p>
+    <div id="study-cards" class="study-cards"></div>
+  </div>
+  <div id="study-run" class="study-run hidden">
+    <div id="flashcard" class="flashcard" data-act="study-flip">
+      <span id="card-side" class="card-side">Frage</span>
+      <canvas id="card-canvas"></canvas>
+      <span class="card-tap">Tippen zum Umdrehen</span>
+    </div>
+    <div id="study-answer" class="study-answer hidden">
+      <button class="btn big wrong" data-act="study-answer" data-arg="wrong">Nochmal</button>
+      <button class="btn big right" data-act="study-answer" data-arg="right">Gewusst</button>
+    </div>
+  </div>
+  <div id="study-done" class="study-done hidden">
+    <div class="done-badge">🎉</div>
+    <h2 id="study-done-title">Geschafft!</h2>
+    <div id="study-done-streak" class="study-streak center"></div>
+    <p id="study-done-text" class="muted"></p>
+    <div class="study-start">
+      <button class="btn primary big" data-act="study-start" data-arg="all">Nochmal lernen</button>
+      <button class="btn big" data-act="study-home">Übersicht</button>
+    </div>
+  </div>
+</section>
+
+<!-- Tabelle -->
+<div id="modal-table" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><h2>Tabelle einfügen</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="stepper-row">
+      <div class="stepper"><span>Spalten</span><button data-act="tbl-cols" data-arg="-1">−</button><b id="tbl-cols">3</b><button data-act="tbl-cols" data-arg="1">+</button></div>
+      <div class="stepper"><span>Zeilen</span><button data-act="tbl-rows" data-arg="-1">−</button><b id="tbl-rows">5</b><button data-act="tbl-rows" data-arg="1">+</button></div>
+    </div>
+    <h4>Kopfzeile</h4>
+    <div id="tbl-heads" class="tbl-heads"></div>
+    <div id="tbl-preview" class="ins-preview"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="tbl-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prüfung -->
+<div id="modal-exam" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><h2 id="exam-title">Neue Prüfung</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <label class="field"><span>Name</span><input id="exam-name" placeholder="z. B. Zwischenprüfung, Klausur Lernfeld 4" autocomplete="off"></label>
+    <label class="field"><span>Datum</span><input id="exam-date" type="date"></label>
+    <div class="modal-actions">
+      <button class="btn ghost danger-text" id="exam-delete" data-act="exam-delete">Löschen</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="exam-save">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notenübersicht -->
+<div id="modal-grades" class="modal hidden">
+  <div class="modal-card glass grades-card-modal">
+    <div class="modal-head"><h2>Noten</h2><span id="grades-total" class="grades-total">–</span><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="grades-weight"><span class="muted">Neue Noten zählen</span><div class="seg small"><button id="gw-1" data-act="grade-weight" data-arg="1">einfach</button><button id="gw-2" data-act="grade-weight" data-arg="2">doppelt</button></div><span class="muted grades-hint">Noten: 2 · 2,5 · 2+ · 2- · antippen = entfernen</span></div>
+    <div id="grades-body" class="grades-body"></div>
+    <div class="subject-add"><input id="subject-name" placeholder="Neues Fach, z. B. Mathe oder Lernfeld 3" autocomplete="off"><button class="btn primary small" data-act="subject-add"><svg><use href="#i-plus"/></svg>Fach</button></div>
+  </div>
+</div>
+
+<!-- Bruch / Formel -->
+<div id="modal-frac" class="modal hidden">
+  <div class="modal-card glass frac-card">
+    <div class="modal-head"><h2>Bruch / Formel</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <label class="field"><span>Formel <small class="muted">– „/“ macht einen Bruch, Klammern fassen zusammen: (a+b)/(c-d)</small></span><input id="frac-text" data-input="frac-text" autocomplete="off" spellcheck="false" placeholder="z. B. x = (a+b)/(c-d) + 1/2"></label>
+    <div class="frac-keys">
+      <button data-act="frac-add" data-arg="/">Bruch /</button>
+      <button data-act="frac-add" data-arg="(">(</button><button data-act="frac-add" data-arg=")">)</button>
+      <button data-act="frac-add" data-arg=" = ">=</button><button data-act="frac-add" data-arg=" + ">+</button><button data-act="frac-add" data-arg=" − ">−</button>
+      <button data-act="frac-add" data-arg="·">·</button><button data-act="frac-add" data-arg="²">x²</button><button data-act="frac-add" data-arg="³">x³</button>
+      <button data-act="frac-add" data-arg="√">√</button><button data-act="frac-add" data-arg="π">π</button><button data-act="frac-add" data-arg="Ω">Ω</button>
+    </div>
+    <div id="frac-preview" class="ins-preview frac-preview"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="frac-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Symbol-Palette -->
+<div id="modal-symbols" class="modal hidden">
+  <div class="modal-card glass sym-card">
+    <div class="modal-head"><h2>Symbole</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div class="sym-compose">
+      <input id="sym-text" autocomplete="off" spellcheck="false" placeholder="Zeichen antippen oder tippen, z. B. x² + y² = r²">
+      <button class="icon-btn small" data-act="sym-space" title="Leerzeichen">␣</button>
+      <button class="icon-btn small" data-act="sym-back" title="Löschen">⌫</button>
+    </div>
+    <div id="sym-groups" class="sym-groups"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="sym-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sticker & Stempel -->
+<div id="modal-stickers" class="modal hidden">
+  <div class="modal-card glass sticker-card">
+    <div class="modal-head"><h2>Sticker &amp; Stempel</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <h4>Sticker</h4>
+    <div id="sticker-grid" class="sticker-grid"></div>
+    <h4>Stempel</h4>
+    <div id="stamp-grid" class="stamp-grid"></div>
+    <p class="hint">Antippen zum Einfügen – danach mit dem Lasso verschieben, vergrößern oder drehen.</p>
+  </div>
+</div>
+
+<!-- Funktionsgraph -->
+<div id="modal-plot" class="modal hidden">
+  <div class="modal-card glass plot-card">
+    <div class="modal-head"><h2>Funktionsgraph</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <label class="field"><span>f(x) = <small class="muted">mehrere mit ; trennen, z. B. x^2 - 2; 2sin(x)</small></span><input id="plot-f" data-input="plot-f" autocomplete="off" spellcheck="false" placeholder="x^2 - 2"></label>
+    <div class="plot-range">
+      <label class="field"><span>x von</span><input id="plot-x0" data-input="plot-x0" value="-5" inputmode="decimal"></label>
+      <label class="field"><span>x bis</span><input id="plot-x1" data-input="plot-x1" value="5" inputmode="decimal"></label>
+    </div>
+    <label class="row toggle"><span>y-Bereich automatisch</span><span class="switch"><input type="checkbox" id="plot-yauto" data-input="plot-yauto" checked><span></span></span></label>
+    <div class="plot-range" id="plot-yrow">
+      <label class="field"><span>y von</span><input id="plot-y0" data-input="plot-y0" value="-5" inputmode="decimal"></label>
+      <label class="field"><span>y bis</span><input id="plot-y1" data-input="plot-y1" value="5" inputmode="decimal"></label>
+    </div>
+    <label class="row toggle"><span>Gitternetz</span><span class="switch"><input type="checkbox" id="plot-grid" data-input="plot-grid" checked><span></span></span></label>
+    <p id="plot-err" class="plot-err"></p>
+    <div id="plot-preview" class="ins-preview plot"></div>
+    <p class="hint">Erlaubt: + − · / ^, Klammern, sin cos tan sqrt abs ln log exp, pi, e – auch „2x“ oder „0,5x²“.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" id="plot-insert" data-act="plot-insert">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Markierung & Schlagwörter -->
+<div id="modal-marks" class="modal hidden">
+  <div class="modal-card glass narrow">
+    <div class="modal-head"><div><h2>Markierung &amp; Schlagwörter</h2><span id="marks-page" class="muted"></span></div><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <h4>Farbe</h4>
+    <div id="marks-colors" class="marks-colors"></div>
+    <h4>Schlagwörter</h4>
+    <div id="marks-tags" class="tag-row"></div>
+    <div class="tag-input"><span>#</span><input id="marks-input" placeholder="z. B. Prüfung, Wichtig" autocomplete="off" spellcheck="false" maxlength="60" enterkeyhint="done"><button class="btn small primary" data-act="tag-new">Hinzufügen</button></div>
+    <div id="marks-sugg-wrap" class="hidden"><h4>Im Notizbuch verwendet</h4><div id="marks-sugg" class="tag-row"></div></div>
+    <p class="hint">In der Seitenübersicht kannst du nach Farbe oder Schlagwort filtern.</p>
+    <div class="modal-actions"><button class="btn primary" data-act="modal-close">Fertig</button></div>
+  </div>
+</div>
+
+<!-- Farbwähler -->
+<div id="modal-color" class="modal hidden">
+  <div class="modal-card glass color-card">
+    <div class="modal-head"><h2>Eigene Farbe</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div id="cp-sv" class="cp-sv"><span id="cp-sv-knob" class="cp-knob"></span></div>
+    <div id="cp-hue" class="cp-hue"><span id="cp-hue-knob" class="cp-knob"></span></div>
+    <div class="cp-row">
+      <button class="cp-preview" data-act="cp-reset" title="Zurück zur bisherigen Farbe"><i id="cp-old"></i><i id="cp-new"></i></button>
+      <label class="cp-hex"><span>#</span><input id="cp-hex" data-input="cp-hex" maxlength="7" autocomplete="off" spellcheck="false" inputmode="text"></label>
+    </div>
+    <div id="cp-recent-wrap"><h4>Zuletzt verwendet</h4><div id="cp-recent" class="cp-recent"></div></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-act="modal-close">Abbrechen</button>
+      <button class="btn primary" data-act="cp-ok">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Statistik -->
+<div id="modal-stats" class="modal hidden">
+  <div class="modal-card glass narrow stats">
+    <div class="modal-head"><h2>Lernstatistik</h2><button class="icon-btn small" data-act="modal-close" title="Schließen"><svg><use href="#i-close"/></svg></button></div>
+    <div id="stats-body"></div>
+  </div>
+</div>
+
+<!-- Einstellungen -->
+<div id="modal-settings" class="modal hidden">
+  <div class="modal-card glass">
+    <div class="modal-head"><h2>Einstellungen</h2><button class="icon-btn small" data-act="modal-close"><svg><use href="#i-close"/></svg></button></div>
+    <h4>Darstellung</h4>
+    <div class="seg" id="set-theme">
+      <button data-act="set-theme" data-arg="system">System</button>
+      <button data-act="set-theme" data-arg="light">Hell</button>
+      <button data-act="set-theme" data-arg="dark">Dunkel</button>
+    </div>
+    <h4>Schreiben</h4>
+    <label class="row toggle"><span>Druckempfindlichkeit<br><small>Strichstärke folgt dem Druck des S-Pens</small></span><span class="switch"><input type="checkbox" id="set-pressure" data-input="set-pressure"><span></span></span></label>
+    <label class="row"><span>Stabilisierung<br><small>ruhigere, glattere Linien</small></span><input type="range" id="set-smooth" data-input="set-smooth" min="0" max="90"><output id="set-smooth-v"></output></label>
+    <label class="row toggle"><span>Formen erkennen<br><small>Stift am Strichende kurz halten → Linie, Kreis, Rechteck …</small></span><span class="switch"><input type="checkbox" id="set-quick" data-input="set-quick"><span></span></span></label>
+    <h4>S-Pen &amp; Handballen</h4>
+    <label class="row"><span>S-Pen-Taste</span>
+      <select id="set-button" data-input="set-button">
+        <option value="select">Drücken: Radierer ↔ Stift</option>
+        <option value="hold">Halten: Radierer</option>
+        <option value="undo">Drücken: Rückgängig</option>
+      </select>
+    </label>
+    <label class="row"><span>Handballen-Sperre<br><small>Hand und Finger bewegen nichts, solange der Stift in der Nähe ist – und so lange danach</small></span><input type="range" id="set-palm" data-input="set-palm" min="0" max="50"><output id="set-palm-v"></output></label>
+    <label class="row toggle"><span>Mit einem Finger scrollen</span><span class="switch"><input type="checkbox" id="set-scroll" data-input="set-scroll"><span></span></span></label>
+    <label class="row toggle"><span>Mit dem Finger schreiben<br><small>Aus: nur der S-Pen schreibt (empfohlen)</small></span><span class="switch"><input type="checkbox" id="set-finger" data-input="set-finger"><span></span></span></label>
+    <div id="pen-test" class="pen-test"><div id="pen-meter"><div id="pen-meter-fill"></div></div><div id="pen-info">S-Pen über dieses Feld halten oder darauf schreiben …</div><div id="pen-native"></div></div>
+    <h4>Daten &amp; Backup</h4>
+    <div class="backup-row">
+      <button class="btn small" data-act="backup-save"><svg><use href="#i-export"/></svg>Komplett-Backup speichern</button>
+      <button class="btn small" data-act="backup-share"><svg><use href="#i-share"/></svg>Backup teilen (z. B. Google Drive)</button>
+      <button class="btn small" data-act="backup-restore"><svg><use href="#i-restore"/></svg>Backup wiederherstellen</button>
+    </div>
+    <p class="hint">Sichert alle Notizbücher, Lernkarten-Sets, Vorlagen, Ordner, Lernstatistik und Einstellungen in einer Datei (.zbackup). Beim Wiederherstellen geht nichts verloren – es wird ergänzt.</p>
+    <h4>Gesten</h4>
+    <ul class="help">
+      <li><b>Zwei Finger</b>: zoomen und verschieben · <b>Zwei-Finger-Tipp</b>: rückgängig · <b>Drei-Finger-Tipp</b>: wiederholen · <b>Doppeltipp</b> mit einem Finger: Seite einpassen</li>
+      <li><b>Lasso</b>: einkreisen → verschieben, Ecke ziehen zum Skalieren, Farbe ändern, kopieren · leerer Tipp → Einfügen</li>
+      <li><b>Tastatur</b>: P Stift · H Textmarker · E Radierer · L Lasso · S Formen · T Text · Strg+Z/Y · Entf</li>
+    </ul>
+    <p class="muted small-print">Noteflow · Rust + WebAssembly · <span id="save-state">gespeichert</span></p>
+    <p class="muted small-print">Version <b id="set-version">–</b></p>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><span>Noteflow wird geladen …</span></div>
+<div id="toast"></div>
+<div id="busy" class="busy hidden"><div class="busy-card glass"><div class="spinner"></div><span id="busy-text">Bitte warten …</span></div></div>
+<input type="file" id="file-image" accept="image/*" hidden>
+<input type="file" id="file-import-pdf" accept="application/pdf,.pdf" hidden>
+<input type="file" id="file-import-image" accept="image/*" hidden>
+<input type="file" id="file-import-ink" accept="application/pdf,.pdf" hidden>
+<input type="file" id="file-import" accept=".znote,.zbackup,.zeichen,.pdf,application/pdf,image/*,application/octet-stream" hidden>
+<input type="file" id="file-paper" accept="image/*" hidden>
+<input type="file" id="file-pdf" accept=".pdf,application/pdf" hidden>
+<script src="pdfimport.js"></script>
+
+<script type="module">
+  import init from './pkg/zeichentool.js';
+  init().catch((e) => {
+    document.getElementById('loading').innerHTML = '<span>Fehler beim Laden: ' + e + '</span>';
+  });
+</script>
+</body>
+</html>
