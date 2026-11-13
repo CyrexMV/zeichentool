@@ -435,7 +435,7 @@ impl App {
             let b = crate::engine::format::Backup { created: wall_clock(), notebooks, folders, stats: stats.join("\n"), settings };
             let bytes = crate::engine::format::save_backup(&b);
             let d = js_sys::Date::new_0();
-            let name = format!("Notion-Backup-{}-{:02}-{:02}.zbackup", d.get_full_year(), d.get_month() + 1, d.get_date());
+            let name = format!("Noteflow-Backup-{}-{:02}-{:02}.zbackup", d.get_full_year(), d.get_month() + 1, d.get_date());
             show("busy", false);
             if share {
                 share_next();
@@ -557,7 +557,7 @@ pub fn file_name(title: &str) -> String {
     let s: String = title.chars().map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' }).collect();
     let s = s.trim().to_string();
     if s.is_empty() {
-        "Notion".into()
+        "Noteflow".into()
     } else {
         s
     }

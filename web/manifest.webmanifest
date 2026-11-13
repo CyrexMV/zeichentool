@@ -1,6 +1,6 @@
 {
-  "name": "Notion",
-  "short_name": "Notion",
+  "name": "Noteflow",
+  "short_name": "Noteflow",
   "description": "Moderne Notiz-App mit S-Pen – geschrieben in Rust.",
   "lang": "de",
   "start_url": "./",
