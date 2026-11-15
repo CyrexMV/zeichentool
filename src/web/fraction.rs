@@ -11,13 +11,13 @@ fn formula_input() -> HtmlInputElement {
 }
 
 /// Ein platziertes Teil der Formel (Seitenkoordinaten relativ zur Formel).
-enum Part {
+pub(super) enum Part {
     Text { x: f32, y: f32, size: f32, text: String, w: f32 },
     Bar { x0: f32, x1: f32, y: f32, width: f32 },
 }
 
 /// Formel setzen; liefert Teile und Gesamtgröße.
-fn layout(src: &str, size: f32) -> (Vec<Part>, f32, f32) {
+pub(super) fn layout(src: &str, size: f32) -> (Vec<Part>, f32, f32) {
     let (_, ctx) = super::editor::new_canvas();
     let measure = |t: &str, s: f32| -> f32 {
         let tb = TextBox { x: 0.0, y: 0.0, w: 0.0, size: s, color: [0; 4], bold: false, text: String::new() };
@@ -122,4 +122,19 @@ impl App {
             _ => {}
         }
     }
+}
+
+/// Formel als Elemente an Position (x, y) (oben links); liefert Inhalte, Breite und Höhe.
+pub(super) fn formula_contents(src: &str, size: f32, x0: f32, y0: f32, color: [u8; 4]) -> (Vec<Content>, f32, f32) {
+    let (parts, w, h) = layout(src, size);
+    let contents = parts
+        .into_iter()
+        .filter_map(|p| match p {
+            Part::Text { x, y, size, text, w } => {
+                (!text.trim().is_empty()).then_some(Content::Text(TextBox { x: x0 + x, y: y0 + y, w: w + size * 0.3, size, color, bold: false, text }))
+            }
+            Part::Bar { x0: a, x1: b, y, width } => Some(Content::Stroke(Stroke { pen: PenKind::Ball, color, width, pts: vec![Pt::new(x0 + a, y0 + y, 1.0), Pt::new(x0 + b, y0 + y, 1.0)] })),
+        })
+        .collect();
+    (contents, w, h)
 }

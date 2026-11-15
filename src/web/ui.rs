@@ -417,6 +417,7 @@ impl App {
             "sticker-menu" => self.open_sticker_dialog(),
             "symbol-menu" => self.open_symbol_dialog(),
             "frac-menu" => self.open_fraction_dialog(),
+            "insert-bkf" => self.insert_bkf(),
             "replay" | "replay-close" | "replay-video" | "replay-share" | "replay-play" | "replay-restart" | "replay-speed" => self.replay_action(act),
             "frac-add" | "frac-insert" => self.fraction_action(act, arg),
             "exam-new" | "exam-edit" | "exam-save" | "exam-delete" => self.exam_action(act, arg),

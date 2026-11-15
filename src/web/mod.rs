@@ -1,5 +1,6 @@
 //! Browser-Anbindung: Bibliothek, Editor, S-Pen/Touch-Eingabe, Rendering, Speicherung.
 
+mod bkf;
 mod clip;
 mod colorpick;
 mod docs;
