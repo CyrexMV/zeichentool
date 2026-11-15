@@ -93,9 +93,10 @@ und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für 
 - **Prüfungs-Countdown** auf dem Startbildschirm: „noch 23 Tage bis …“, farbig nach Dringlichkeit
 - **Notenübersicht** (Startbildschirm → „Noten“): Fächer mit Noten (2, 2,5, 2+, 2-), einfach/doppelt gewichtet,
   Fach- und Gesamtdurchschnitt
-- **Formelsammlung Berufskraftfahrer** (Einfügen-Menü): 5 fertige Seiten – Fahrphysik (Anhalteweg, Abstand, Rechenbeispiel),
-  Physik & Technik, Kosten & Fahrzeug, Laden & Ladungssicherung, Recht (Lenk-/Ruhezeiten, Maße, Gefahrgut);
-  alles als bearbeitbarer Text mit echten Brüchen
+- **Formelsammlung Berufskraftfahrer** (Einfügen-Menü): 11 fertige Seiten – Fahrphysik (Anhalteweg, Abstand, Rechenbeispiel),
+  Physik & Technik, Kosten & Fahrzeug, Laden & Ladungssicherung, Recht (Lenk-/Ruhezeiten, Maße, Gefahrgut),
+  Führerschein & Fahrzeuge, Bremsen & Abfahrtkontrolle, Gefahrgut (ADR), Papiere/Maut/Zoll, Unfall & Sicherheit
+  und Übungsaufgaben mit Lösungen; alles als bearbeitbarer Text mit echten Brüchen
 - **Zeitraffer** (⋯ → „Zeitraffer abspielen“): die Seite zeichnet sich Strich für Strich selbst nach – Pause, Spulen,
   Tempo 1×/2×/4×; als Video (MP4/WebM) speichern oder teilen
 - **Sticker & Stempel** (Einfügen-Menü): 16 Sticker (Stern, Häkchen, Ausrufezeichen, Glühbirne, Pokal …) und 12 Stempel
